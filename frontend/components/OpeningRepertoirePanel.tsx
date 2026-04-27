@@ -12,6 +12,8 @@ type OpeningRepertoirePanelProps = {
   title?: string;
   intro?: string;
   emptyMessage?: string;
+  mode?: "opening" | "black-reply";
+  firstMoveLabel?: string | null;
 };
 
 export function OpeningRepertoirePanel({
@@ -20,7 +22,9 @@ export function OpeningRepertoirePanel({
   onSelect,
   title = "Choisis ton plan",
   intro = "Clique une ouverture pour commencer. Ouvre le detail seulement si tu veux comprendre le plan avant de jouer.",
-  emptyMessage = "Aucun plan disponible pour cette situation."
+  emptyMessage = "Aucun plan disponible pour cette situation.",
+  mode = "opening",
+  firstMoveLabel
 }: OpeningRepertoirePanelProps) {
   const [expandedPlanId, setExpandedPlanId] = useState<string | null>(null);
   const sortedPlans = [...plans].sort((a, b) => difficultyOrder(a.difficulty) - difficultyOrder(b.difficulty));
@@ -38,6 +42,18 @@ export function OpeningRepertoirePanel({
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {sortedPlans.map((plan) => {
           const expanded = expandedPlanId === plan.id;
+          if (mode === "black-reply") {
+            return (
+              <BlackReplyCard
+                key={plan.id}
+                plan={plan}
+                selected={selectedPlanId === plan.id}
+                firstMoveLabel={firstMoveLabel}
+                onSelect={onSelect}
+              />
+            );
+          }
+
           return (
             <article
               key={plan.id}
@@ -76,6 +92,37 @@ export function OpeningRepertoirePanel({
 
       {sortedPlans.length === 0 ? <div className="panel text-sm text-neutral-700">{emptyMessage}</div> : null}
     </section>
+  );
+}
+
+function BlackReplyCard({
+  plan,
+  selected,
+  firstMoveLabel,
+  onSelect
+}: {
+  plan: StrategyPlan;
+  selected: boolean;
+  firstMoveLabel?: string | null;
+  onSelect: (planId: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(plan.id)}
+      className={clsx(
+        "grid min-h-56 content-between rounded-lg border bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-night hover:shadow-soft",
+        selected ? "border-clay" : "border-line"
+      )}
+    >
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-clay">Reponse noire</p>
+        <h3 className="mt-2 text-2xl font-semibold text-night">{plan.nameFr}</h3>
+        <p className="mt-4 text-sm font-semibold text-neutral-500">Pourquoi cette option est coherente{firstMoveLabel ? ` apres ${firstMoveLabel}` : ""}</p>
+        <p className="mt-2 text-sm leading-6 text-neutral-700">{blackReplyReason(plan, firstMoveLabel)}</p>
+      </div>
+      <p className="mt-5 text-sm font-semibold text-night">Choisir ce plan</p>
+    </button>
   );
 }
 
@@ -156,4 +203,27 @@ function difficultyOrder(difficulty: StrategyPlan["difficulty"]) {
     medium: 2,
     hard: 3
   }[difficulty];
+}
+
+function blackReplyReason(plan: StrategyPlan, firstMoveLabel?: string | null) {
+  const firstMoveContext = firstMoveLabel ? `Les blancs commencent par ${firstMoveLabel}. ` : "";
+  const known: Record<string, string> = {
+    black_e5_classical:
+      "Tu reponds directement au centre avec le pion e. C'est le choix le plus classique pour apprendre les positions ouvertes : les cavaliers sortent vite, les pieces se developpent naturellement et le roi peut roquer assez tot.",
+    caro_kann_beginner:
+      "Tu construis une position solide avant d'attaquer le centre avec le pion d. C'est une bonne option si tu veux un milieu de partie clair, avec moins de tactiques immediates que certaines defenses plus agressives.",
+    french_defense_beginner:
+      "Tu prepares ...d5 avec une structure compacte. Ce plan est utile si tu veux apprendre les centres fermes : les blancs prennent souvent de l'espace, puis tu attaques leur chaine de pions.",
+    scandinavian_simple:
+      "Tu attaques tout de suite le centre. C'est simple a comprendre : les noirs refusent de laisser les blancs installer e4 tranquillement, mais il faudra developper vite ensuite.",
+    sicilian_dragon_simplified:
+      "Tu choisis une reponse active avec le pion c. Le plan vise a contester le centre depuis le cote et a placer le fou en g7, mais il demande plus de precision.",
+    qgd_simplified:
+      "Tu reponds au pion dame par une structure tres stable. Ce plan garde le centre solide, developpe les pieces sans urgence et donne un milieu de partie facile a lire.",
+    slav_beginner:
+      "Tu soutiens le pion d avec le pion c. L'idee est de garder le centre solide tout en laissant le fou c8 respirer, ce qui rend la suite plus naturelle.",
+    kings_indian_setup:
+      "Tu acceptes que les blancs prennent le centre au debut, puis tu prepares une contre-attaque apres le roque. C'est flexible, mais plus strategique."
+  };
+  return `${firstMoveContext}${known[plan.id] ?? plan.learningGoal ?? plan.beginnerGoal}`;
 }

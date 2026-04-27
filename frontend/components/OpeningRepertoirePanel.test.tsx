@@ -30,4 +30,12 @@ describe("OpeningRepertoirePanel", () => {
     expect(screen.getByText("Intermediaire")).toBeTruthy();
     expect(screen.getByText("Comprendre ce plan")).toBeTruthy();
   });
+
+  it("shows black reply cards as concise reasons", () => {
+    render(<OpeningRepertoirePanel plans={[plan]} selectedPlanId={null} onSelect={() => undefined} mode="black-reply" firstMoveLabel="Nf3" />);
+    expect(screen.getByText("Caro-Kann")).toBeTruthy();
+    expect(screen.getByText(/Pourquoi cette option est coherente/)).toBeTruthy();
+    expect(screen.getByText(/milieu de partie clair/)).toBeTruthy();
+    expect(screen.queryByText("Comprendre ce plan")).toBeNull();
+  });
 });

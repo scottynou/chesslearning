@@ -101,6 +101,8 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 - The app starts with a clear choice: play White, play Black, or use free mode.
 - White chooses an opening plan before the game starts.
 - Black enters White's first move first, then receives adapted black plans.
+- After choosing a plan, a short intro screen explains what the plan is before the board opens.
+- Black reply cards explain why each response is coherent against White's first move.
 - Browser back/forward navigation works between the main learning steps.
 - The selected plan stays locked for the game; deviations adapt the next move instead of replacing the plan.
 - The main UI shows one recommended plan move plus adapted alternatives only when useful.

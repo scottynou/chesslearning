@@ -40,7 +40,7 @@ type LastMoveForReview = {
   source: "manual" | "bot";
 };
 
-type AppStage = "side-selection" | "white-plan-selection" | "black-first-move" | "black-plan-selection" | "coach";
+type AppStage = "side-selection" | "white-plan-selection" | "black-first-move" | "black-plan-selection" | "plan-intro" | "coach";
 type UserSide = "white" | "black" | "both";
 type NavigationSnapshot = {
   key: "chess-learning-navigation";
@@ -102,6 +102,16 @@ function snapshotFromLocation(): NavigationSnapshot {
       historyUci: first ? [first] : []
     });
   }
+  if (view === "plan-intro") {
+    return createNavigationSnapshot({
+      appStage: "plan-intro",
+      userSide,
+      orientation: userSide === "black" ? "black" : "white",
+      selectedPlanId: plan,
+      firstOpponentMove: first,
+      historyUci: first ? [first] : []
+    });
+  }
   if (view === "coach") {
     return createNavigationSnapshot({
       appStage: "coach",
@@ -137,6 +147,11 @@ function urlForSnapshot(snapshot: NavigationSnapshot) {
     params.set("view", "black-first-move");
   } else if (snapshot.appStage === "black-plan-selection") {
     params.set("view", "black-plans");
+    if (snapshot.firstOpponentMove) params.set("first", snapshot.firstOpponentMove);
+  } else if (snapshot.appStage === "plan-intro") {
+    params.set("view", "plan-intro");
+    params.set("side", snapshot.userSide);
+    if (snapshot.selectedPlanId) params.set("plan", snapshot.selectedPlanId);
     if (snapshot.firstOpponentMove) params.set("first", snapshot.firstOpponentMove);
   } else if (snapshot.appStage === "coach") {
     params.set("view", "coach");
@@ -188,7 +203,8 @@ export default function HomePage() {
   const selectedPlan = useMemo(() => {
     return plans.find((plan) => plan.id === selectedPlanId) ?? (planRecommendations?.selectedPlan as StrategyPlan | null) ?? null;
   }, [plans, planRecommendations?.selectedPlan, selectedPlanId]);
-  const boardLocked = appStage === "black-plan-selection" || appStage === "white-plan-selection" || appStage === "side-selection";
+  const boardLocked = appStage === "black-plan-selection" || appStage === "white-plan-selection" || appStage === "plan-intro" || appStage === "side-selection";
+  const firstMoveLabel = firstOpponentMove ? history[0]?.san ?? firstOpponentMove : null;
 
   const makeNavigationSnapshot = useCallback(
     (overrides: Partial<NavigationSnapshot> = {}) =>
@@ -298,12 +314,12 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    if (appStage !== "white-plan-selection" && appStage !== "black-plan-selection") {
+    if (appStage !== "white-plan-selection" && appStage !== "black-plan-selection" && appStage !== "plan-intro") {
       return;
     }
 
-    const side = appStage === "white-plan-selection" ? "white" : "black";
-    const firstMove = appStage === "black-plan-selection" ? firstOpponentMove ?? undefined : undefined;
+    const side = appStage === "white-plan-selection" || (appStage === "plan-intro" && userSide === "white") ? "white" : "black";
+    const firstMove = side === "black" ? firstOpponentMove ?? undefined : undefined;
     let active = true;
     setPlansLoading(true);
     setPlansError(null);
@@ -325,7 +341,7 @@ export default function HomePage() {
     return () => {
       active = false;
     };
-  }, [appStage, firstOpponentMove]);
+  }, [appStage, firstOpponentMove, userSide]);
 
   useEffect(() => {
     if (appStage !== "coach") {
@@ -557,7 +573,7 @@ export default function HomePage() {
       const planOrientation: Orientation = plan?.side === "black" ? "black" : "white";
       navigateToSnapshot(
         makeNavigationSnapshot({
-          appStage: "coach",
+          appStage: "plan-intro",
           userSide,
           orientation: planOrientation,
           selectedPlanId: planId,
@@ -568,6 +584,37 @@ export default function HomePage() {
     },
     [firstOpponentMove, historyUci, makeNavigationSnapshot, navigateToSnapshot, plans, userSide]
   );
+
+  const startSelectedPlan = useCallback(() => {
+    navigateToSnapshot(
+      makeNavigationSnapshot({
+        appStage: "coach",
+        historyUci: userSide === "black" ? historyUci : [],
+        firstOpponentMove: userSide === "black" ? firstOpponentMove : null
+      })
+    );
+  }, [firstOpponentMove, historyUci, makeNavigationSnapshot, navigateToSnapshot, userSide]);
+
+  const returnToPlanChoices = useCallback(() => {
+    if (userSide === "black") {
+      navigateToSnapshot(
+        makeNavigationSnapshot({
+          appStage: firstOpponentMove ? "black-plan-selection" : "black-first-move",
+          selectedPlanId: null,
+          historyUci: firstOpponentMove ? historyUci : [],
+          firstOpponentMove
+        })
+      );
+      return;
+    }
+    navigateToSnapshot(
+      createNavigationSnapshot({
+        appStage: "white-plan-selection",
+        userSide: "white",
+        orientation: "white"
+      })
+    );
+  }, [firstOpponentMove, historyUci, makeNavigationSnapshot, navigateToSnapshot, userSide]);
 
   const handlePlanRecommendationToggle = useCallback((recommendation: PlanRecommendation) => {
     if (highlightedRecommendationUci === recommendation.moveUci) {
@@ -739,8 +786,26 @@ export default function HomePage() {
             onSelect={handlePlanSelect}
             title={isBlack ? "Choisis ta reponse avec les noirs" : "Choisis ton ouverture avec les blancs"}
             intro={isBlack ? "Ces plans sont filtres selon le premier coup blanc. Le plan choisi restera verrouille, puis le coach adaptera seulement les prochains coups." : "Choisis une ouverture blanche. Ensuite, le coach t'aide a atteindre le milieu de partie avec un plan clair."}
+            mode={isBlack ? "black-reply" : "opening"}
+            firstMoveLabel={firstMoveLabel}
           />
         </section>
+      </main>
+    );
+  }
+
+  if (appStage === "plan-intro") {
+    return (
+      <main className="mx-auto grid min-h-screen w-full max-w-[1600px] place-items-center px-4 py-8 md:px-8">
+        <PlanIntroScreen
+          plan={selectedPlan}
+          loading={plansLoading}
+          error={plansError}
+          userSide={userSide}
+          firstMoveLabel={firstMoveLabel}
+          onBack={returnToPlanChoices}
+          onStart={startSelectedPlan}
+        />
       </main>
     );
   }
@@ -862,6 +927,131 @@ function Header({
       </div>
     </header>
   );
+}
+
+function PlanIntroScreen({
+  plan,
+  loading,
+  error,
+  userSide,
+  firstMoveLabel,
+  onBack,
+  onStart
+}: {
+  plan: StrategyPlan | null;
+  loading: boolean;
+  error: string | null;
+  userSide: UserSide;
+  firstMoveLabel: string | null;
+  onBack: () => void;
+  onStart: () => void;
+}) {
+  if (loading && !plan) {
+    return <section className="panel w-full max-w-3xl text-sm text-neutral-700">Chargement du plan...</section>;
+  }
+  if (error) {
+    return <section className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</section>;
+  }
+  if (!plan) {
+    return (
+      <section className="panel w-full max-w-3xl">
+        <h1 className="text-2xl font-semibold text-night">Plan introuvable</h1>
+        <button type="button" onClick={onBack} className="control-button mt-4">
+          Retour
+        </button>
+      </section>
+    );
+  }
+
+  const isBlackReply = userSide === "black";
+  const ideas = (plan.whatYouWillLearn ?? plan.coreIdeas).slice(0, 4);
+
+  return (
+    <section className="grid w-full max-w-5xl gap-5">
+      <button type="button" onClick={onBack} className="w-fit rounded border border-line bg-white px-3 py-2 text-sm font-semibold text-night">
+        Retour aux options
+      </button>
+
+      <article className="overflow-hidden rounded-xl border border-line bg-white shadow-soft">
+        <div className="grid gap-5 p-6 md:p-8">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-clay">{isBlackReply ? "Reponse choisie" : "Ouverture choisie"}</p>
+            <h1 className="mt-2 text-4xl font-semibold text-night md:text-6xl">{plan.nameFr}</h1>
+            {isBlackReply && firstMoveLabel ? (
+              <p className="mt-3 text-base leading-7 text-neutral-600">Les blancs ont commence par {firstMoveLabel}. Ce plan explique comment les noirs peuvent repondre sans changer d&apos;idee a chaque coup.</p>
+            ) : null}
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr]">
+            <section className="rounded-lg border border-line bg-stone-50 p-5">
+              <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-clay">{isBlackReply ? "Pourquoi cette reponse" : "But du plan"}</h2>
+              <p className="mt-3 text-base leading-7 text-neutral-700">{introReasonForPlan(plan, isBlackReply, firstMoveLabel)}</p>
+            </section>
+
+            <section className="rounded-lg border border-line bg-stone-50 p-5">
+              <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-clay">Objectif</h2>
+              <p className="mt-3 text-base leading-7 text-neutral-700">{plan.learningGoal ?? plan.beginnerGoal}</p>
+            </section>
+          </div>
+
+          <section className="rounded-lg border border-line bg-white">
+            <div className="border-b border-line px-5 py-4">
+              <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-clay">Ce qu&apos;on cherche a obtenir</h2>
+            </div>
+            <div className="grid gap-2 p-5 md:grid-cols-2">
+              {ideas.map((idea) => (
+                <p key={idea} className="rounded border border-line bg-stone-50 px-3 py-2 text-sm leading-6 text-neutral-700">
+                  {idea}
+                </p>
+              ))}
+            </div>
+          </section>
+
+          {plan.middlegamePlan?.length ? (
+            <section className="rounded-lg border border-line bg-white p-5">
+              <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-clay">Apres l&apos;ouverture</h2>
+              <p className="mt-3 text-base leading-7 text-neutral-700">{plan.middlegamePlan.slice(0, 3).join(" - ")}</p>
+            </section>
+          ) : null}
+
+          <div className="flex flex-wrap justify-end gap-3">
+            <button type="button" onClick={onBack} className="control-button">
+              Changer d&apos;option
+            </button>
+            <button type="button" onClick={onStart} className="rounded bg-night px-5 py-3 text-sm font-semibold text-white hover:bg-ink">
+              OK, commencer
+            </button>
+          </div>
+        </div>
+      </article>
+    </section>
+  );
+}
+
+function introReasonForPlan(plan: StrategyPlan, isBlackReply: boolean, firstMoveLabel: string | null) {
+  if (!isBlackReply) {
+    return plan.shortHistory ?? plan.learningGoal ?? plan.beginnerGoal;
+  }
+  const prefix = firstMoveLabel ? `Apres ${firstMoveLabel}, ` : "";
+  const reasons: Record<string, string> = {
+    black_e5_classical:
+      "la defense classique e5 remet immediatement un pion au centre. Elle donne une partie ouverte, facile a comprendre : les cavaliers sortent vite, le pion e5 devient le point a defendre, puis le roque arrive naturellement.",
+    caro_kann_beginner:
+      "la Caro-Kann construit une reponse solide avant de frapper le centre avec ...d5. Elle convient si tu veux un plan calme, une structure claire et moins de tactique immediate.",
+    french_defense_beginner:
+      "la Francaise prepare ...d5 avec une structure compacte. Elle laisse parfois les blancs avancer, puis le plan noir devient clair : attaquer la chaine de pions blanche.",
+    scandinavian_simple:
+      "la Scandinave attaque le centre tout de suite avec ...d5. Elle est directe et facile a comprendre, mais il faudra eviter de perdre trop de temps avec la dame.",
+    sicilian_dragon_simplified:
+      "la Sicilienne conteste le centre depuis le cote avec ...c5. C'est actif et ambitieux, mais plus complexe : le fou en g7 et la pression sur le centre deviennent essentiels.",
+    qgd_simplified:
+      "la defense dame-pion garde une structure tres stable contre les debuts au pion dame. Elle t'apprend a tenir le centre, developper tranquillement et chercher un bon milieu de partie.",
+    slav_beginner:
+      "la Slave soutient le pion d5 avec ...c6. Elle garde le centre solide et laisse souvent le fou c8 sortir plus facilement.",
+    kings_indian_setup:
+      "l'Indienne du roi accepte que les blancs prennent le centre au debut. Les noirs roquent vite, placent le fou en g7, puis attaquent le centre avec ...e5 ou ...c5."
+  };
+  return `${prefix}${reasons[plan.id] ?? plan.learningGoal ?? plan.beginnerGoal}`;
 }
 
 function CoachUtilityMenu({
