@@ -26,78 +26,111 @@ export function PlanFirstPanel({
   const progress = recommendations?.planProgress;
   const planName = recommendations?.selectedPlan?.nameFr ?? selectedPlan?.nameFr ?? "Plan general";
   const moves = [primary, ...alternatives].filter(Boolean) as PlanRecommendation[];
+  const hasStaleRecommendations = Boolean(loading && recommendations);
 
   return (
-    <section className="panel">
-      <div className="grid gap-4">
+    <section className="live-coach-panel">
+      <div className="live-coach-header">
         <div>
-          <p className="text-xs font-semibold uppercase text-clay">Plan actuel</p>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <h2 className="text-2xl font-semibold text-night">{planName}</h2>
-            {recommendations ? <span className="rounded bg-night px-2 py-1 text-xs font-semibold text-white">{phaseLabel(recommendations.phase)}</span> : null}
+          <p className="live-coach-kicker">Coach en direct</p>
+          <div className="live-coach-title-row">
+            <h2>{planName}</h2>
+            {recommendations ? <span>{phaseLabel(recommendations.phase)}</span> : null}
           </div>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-700">
+          <p className="live-coach-message">
             {recommendations?.coachMessage ?? selectedPlan?.learningGoal ?? selectedPlan?.beginnerGoal ?? "Le coach relie les coups au plan choisi."}
           </p>
         </div>
+        {typeof progress?.percent === "number" ? (
+          <div className="live-progress-orb" aria-label={`Progression du plan ${progress.percent}%`}>
+            <strong>{progress.percent}%</strong>
+            <span>plan</span>
+          </div>
+        ) : null}
+      </div>
 
-        {loading ? <p className="text-sm text-clay">Mise a jour du plan...</p> : null}
-        {error ? <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
+      {loading ? <CoachUpdatingBanner stale={hasStaleRecommendations} /> : null}
+      {error ? <div className="live-error">{error}</div> : null}
 
-        {recommendations ? (
-          <>
-            <div className="grid gap-3 rounded-lg border border-line bg-stone-50 p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded bg-white px-2 py-1 text-xs font-semibold text-night">{phaseStatusLabel(recommendations.phaseStatus)}</span>
-                {typeof progress?.percent === "number" ? <span className="ml-auto text-sm font-semibold text-sage">{progress.percent}%</span> : null}
-              </div>
-              <div className="h-2 overflow-hidden rounded bg-white">
-                <div className="h-full rounded bg-sage" style={{ width: `${progress?.percent ?? 0}%` }} />
-              </div>
-              <CoachFact title="Position" value={recommendations.lastEvent || "La partie est prete."} />
-              <CoachFact title="Lecture du plan" value={recommendations.whatChanged || recommendations.coachMessage} />
-              <CoachFact title="Objectif maintenant" value={recommendations.nextObjective || recommendations.currentObjective} />
+      {recommendations ? (
+        <>
+          <div className="live-status-card">
+            <div className="live-status-top">
+              <span>{phaseStatusLabel(recommendations.phaseStatus)}</span>
+              <span>{typeof progress?.percent === "number" ? `${progress.percent}%` : "En cours"}</span>
+            </div>
+            <div className="live-progress-track">
+              <div style={{ width: `${progress?.percent ?? 0}%` }} />
+            </div>
+            <div className="live-fact-grid">
+              <CoachFact title="Ce qui vient de se passer" value={recommendations.lastEvent || "La partie est prete."} />
+              <CoachFact title="Ce que cela change" value={recommendations.whatChanged || recommendations.coachMessage} />
+              <CoachFact title="Prochain objectif" value={recommendations.nextObjective || recommendations.currentObjective} />
               {expectedReplyLabel ? (
                 <CoachFact title="Reponse attendue" value={`Si l'autre camp suit la ligne du plan : ${expectedReplyLabel}. S'il joue autre chose, on garde le plan et on adapte le prochain coup.`} />
               ) : null}
             </div>
+          </div>
 
-            {moves.length > 0 ? (
-              <div className="grid gap-3">
-                <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-clay">Prochain coup du plan</h3>
-                {moves.map((item, index) => (
-                  <RecommendationCard
-                    key={`${item.moveUci}-${index}`}
-                    item={item}
-                    primary={index === 0}
-                    highlighted={highlightedMoveUci === item.moveUci}
-                    onToggle={onToggleRecommendation}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="rounded border border-line bg-white px-3 py-2 text-sm text-neutral-700">
-                Aucun coup de plan clair pour l&apos;instant. Verifie les details techniques ou joue un coup legal simple.
-              </div>
-            )}
+          {moves.length > 0 ? (
+            <div className="live-move-section">
+              <h3>Coups pour suivre ou adapter le plan</h3>
+              {moves.map((item, index) => (
+                <RecommendationCard
+                  key={`${item.moveUci}-${index}`}
+                  item={item}
+                  primary={index === 0}
+                  highlighted={highlightedMoveUci === item.moveUci}
+                  onToggle={onToggleRecommendation}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="live-empty">
+              Aucun coup de plan clair pour l&apos;instant. Verifie les details techniques ou joue un coup legal simple.
+            </div>
+          )}
 
-            {recommendations.blockedExpectedMove ? (
-              <div className="rounded border border-clay bg-orange-50 px-3 py-2 text-sm text-night">
-                Un coup du plan est mis de cote : {recommendations.blockedExpectedMove.reason}
-              </div>
-            ) : null}
-          </>
-        ) : null}
-      </div>
+          {recommendations.blockedExpectedMove ? (
+            <div className="live-warning">
+              Un coup du plan est mis de cote : {recommendations.blockedExpectedMove.reason}
+            </div>
+          ) : null}
+        </>
+      ) : loading ? (
+        <CoachLoadingSkeleton />
+      ) : null}
     </section>
   );
 }
 
 function CoachFact({ title, value }: { title: string; value: string }) {
   return (
-    <div>
-      <p className="text-xs font-semibold uppercase text-clay">{title}</p>
-      <p className="mt-1 text-sm leading-6 text-neutral-700">{value}</p>
+    <div className="live-fact">
+      <p>{title}</p>
+      <span>{value}</span>
+    </div>
+  );
+}
+
+function CoachUpdatingBanner({ stale }: { stale: boolean }) {
+  return (
+    <div className="coach-updating-banner" role="status">
+      <span className="coach-spinner" aria-hidden="true" />
+      <div>
+        <strong>Mise a jour du plan...</strong>
+        <p>{stale ? "Les conseils affiches datent du coup precedent. Le coach recalcule la position actuelle." : "Le coach analyse la position actuelle."}</p>
+      </div>
+    </div>
+  );
+}
+
+function CoachLoadingSkeleton() {
+  return (
+    <div className="coach-skeleton" aria-hidden="true">
+      <span />
+      <span />
+      <span />
     </div>
   );
 }
@@ -114,25 +147,27 @@ function RecommendationCard({
   onToggle: (item: PlanRecommendation) => void;
 }) {
   return (
-    <article className={primary ? "rounded-lg border border-sage bg-white p-4 shadow-sm" : "rounded-lg border border-line bg-white p-4"}>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded bg-night px-2 py-1 text-xs font-semibold text-white">{primary ? "Coup du plan" : "Alternative"}</span>
-        <span className="rounded bg-stone-100 px-2 py-1 text-xs font-semibold text-night">{complexityLabel(item.moveComplexity)}</span>
-        <span className="text-lg font-semibold text-ink">{item.beginnerLabel}</span>
+    <article className={primary ? "live-move-card is-primary" : "live-move-card"}>
+      <div className="live-move-head">
+        <div className="live-move-badges">
+          <span>{primary ? "Coup du plan" : "Alternative"}</span>
+          <span>{complexityLabel(item.moveComplexity)}</span>
+        </div>
+        <strong>{item.beginnerLabel}</strong>
       </div>
-      <p className="mt-3 text-sm leading-6 text-neutral-700">
+      <p className="live-move-explanation">
         {item.pedagogicalExplanation ?? `${item.purpose} ${item.planConnection}`}
       </p>
-      {item.warning ? <p className="mt-2 text-sm font-semibold text-clay">{item.warning}</p> : null}
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => onToggle(item)} className="rounded border border-line bg-white px-3 py-2 text-sm font-semibold text-night hover:border-sage">
+      {item.warning ? <p className="live-move-warning">{item.warning}</p> : null}
+      <div className="live-move-actions">
+        <button type="button" onClick={() => onToggle(item)} className="opening-detail-toggle">
           {highlighted ? "Masquer la fleche" : "Afficher la fleche"}
         </button>
-        <span className="text-sm text-neutral-600">Evaluation : {item.evalLabel}</span>
+        <span>Evaluation : {item.evalLabel}</span>
       </div>
-      <details className="mt-3 rounded border border-line bg-stone-50 p-3">
-        <summary className="cursor-pointer text-sm font-semibold text-night">Details avances</summary>
-        <div className="mt-2 grid gap-1 text-sm text-neutral-700">
+      <details className="live-technical-details">
+        <summary>Details avances</summary>
+        <div>
           <span>SAN : {item.moveSan}</span>
           <span>UCI : {item.moveUci}</span>
           <span>Source : {sourceLabel(item.source)}</span>

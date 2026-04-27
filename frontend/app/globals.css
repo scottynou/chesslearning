@@ -598,4 +598,266 @@ select {
   .plan-start-button {
     @apply inline-flex min-h-11 items-center justify-center rounded bg-night px-5 py-3 text-sm font-semibold text-white transition hover:bg-ink focus:outline-none focus:ring-4 focus:ring-sage/25;
   }
+
+  .coach-live-shell {
+    @apply mx-auto grid min-h-screen w-full max-w-[1800px] gap-5 px-4 py-4 md:px-6 lg:grid-cols-[minmax(0,620px)_minmax(0,1fr)] lg:py-6;
+  }
+
+  .coach-board-column,
+  .coach-panel-column {
+    @apply relative grid content-start gap-4;
+  }
+
+  .coach-board-column::before {
+    content: "";
+    position: absolute;
+    inset: -12px;
+    background-image:
+      linear-gradient(90deg, rgba(22, 22, 22, 0.045) 1px, transparent 1px),
+      linear-gradient(0deg, rgba(22, 22, 22, 0.035) 1px, transparent 1px);
+    background-size: 72px 72px;
+    mask-image: linear-gradient(180deg, #000, transparent 78%);
+    pointer-events: none;
+  }
+
+  .coach-board-frame {
+    @apply relative z-10 mx-auto w-[92vw] max-w-[580px] touch-none rounded-lg border border-line bg-[#ebe4d6]/90 p-3 shadow-soft;
+  }
+
+  .coach-board-frame-top {
+    @apply mb-3 flex items-center justify-between gap-3 px-1 text-xs font-semibold uppercase text-neutral-600;
+  }
+
+  .coach-board-frame-top span:first-child {
+    @apply text-clay;
+  }
+
+  .coach-board-canvas {
+    @apply overflow-hidden rounded-lg;
+  }
+
+  .coach-board-controls {
+    @apply relative z-10 grid grid-cols-3 gap-2;
+  }
+
+  .coach-board-note {
+    @apply relative z-10 rounded border border-line bg-white/90 px-3 py-2 text-sm font-semibold text-night shadow-sm;
+  }
+
+  .coach-board-error {
+    @apply relative z-10 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700;
+  }
+
+  .live-coach-panel {
+    @apply relative overflow-hidden rounded-lg border border-line bg-white shadow-soft;
+  }
+
+  .live-coach-panel::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(90deg, rgba(22, 22, 22, 0.035) 1px, transparent 1px),
+      linear-gradient(0deg, rgba(22, 22, 22, 0.03) 1px, transparent 1px);
+    background-size: 54px 54px;
+    mask-image: linear-gradient(180deg, #000, transparent 70%);
+    pointer-events: none;
+  }
+
+  .live-coach-header {
+    @apply relative z-10 grid gap-4 border-b border-line bg-[#ebe4d6]/80 p-5 md:grid-cols-[minmax(0,1fr)_auto] md:p-6;
+  }
+
+  .live-coach-kicker {
+    @apply text-xs font-semibold uppercase text-clay;
+  }
+
+  .live-coach-title-row {
+    @apply mt-2 flex flex-wrap items-center gap-2;
+  }
+
+  .live-coach-title-row h2 {
+    @apply text-3xl font-semibold leading-none text-night md:text-4xl;
+  }
+
+  .live-coach-title-row span {
+    @apply rounded bg-night px-2.5 py-1 text-xs font-semibold uppercase text-white;
+  }
+
+  .live-coach-message {
+    @apply mt-4 max-w-4xl text-sm leading-7 text-neutral-700 md:text-base;
+  }
+
+  .live-progress-orb {
+    @apply grid h-20 w-20 place-items-center rounded-lg border border-line bg-white text-center shadow-sm;
+  }
+
+  .live-progress-orb strong {
+    @apply text-xl font-semibold leading-none text-night;
+  }
+
+  .live-progress-orb span {
+    @apply text-xs font-semibold uppercase text-neutral-500;
+  }
+
+  .coach-updating-banner {
+    @apply relative z-10 m-4 mb-0 flex items-center gap-3 rounded-lg border border-clay/40 bg-orange-50 p-4 text-night md:m-5 md:mb-0;
+  }
+
+  .coach-updating-banner strong {
+    @apply text-sm font-semibold;
+  }
+
+  .coach-updating-banner p {
+    @apply mt-1 text-sm leading-6 text-neutral-700;
+  }
+
+  .coach-spinner {
+    @apply h-8 w-8 shrink-0 rounded-full border-2 border-clay/25 border-t-clay;
+    animation: coach-spin 0.85s linear infinite;
+  }
+
+  .live-error,
+  .live-warning,
+  .live-empty {
+    @apply relative z-10 m-5 rounded border px-3 py-2 text-sm;
+  }
+
+  .live-error {
+    @apply border-red-200 bg-red-50 text-red-700;
+  }
+
+  .live-warning {
+    @apply border-clay bg-orange-50 text-night;
+  }
+
+  .live-empty {
+    @apply border-line bg-white text-neutral-700;
+  }
+
+  .live-status-card {
+    @apply relative z-10 m-5 grid gap-4 rounded-lg border border-line bg-stone-50 p-4;
+  }
+
+  .live-status-top {
+    @apply flex flex-wrap items-center justify-between gap-2;
+  }
+
+  .live-status-top span {
+    @apply rounded bg-white px-2.5 py-1 text-xs font-semibold uppercase text-night;
+  }
+
+  .live-progress-track {
+    @apply h-2 overflow-hidden rounded bg-white;
+  }
+
+  .live-progress-track div {
+    @apply h-full rounded bg-sage transition-all duration-500;
+  }
+
+  .live-fact-grid {
+    @apply grid gap-3 md:grid-cols-2;
+  }
+
+  .live-fact {
+    @apply rounded border border-line bg-white p-3;
+  }
+
+  .live-fact p {
+    @apply text-xs font-semibold uppercase text-clay;
+  }
+
+  .live-fact span {
+    @apply mt-1 block text-sm leading-6 text-neutral-700;
+  }
+
+  .live-move-section {
+    @apply relative z-10 m-5 mt-0 grid gap-3;
+  }
+
+  .live-move-section h3 {
+    @apply text-sm font-semibold uppercase text-clay;
+  }
+
+  .live-move-card {
+    @apply rounded-lg border border-line bg-white p-4 shadow-sm;
+  }
+
+  .live-move-card.is-primary {
+    @apply border-sage shadow-soft;
+  }
+
+  .live-move-head {
+    @apply grid gap-2;
+  }
+
+  .live-move-head strong {
+    @apply text-xl font-semibold leading-tight text-ink;
+  }
+
+  .live-move-badges {
+    @apply flex flex-wrap gap-2;
+  }
+
+  .live-move-badges span {
+    @apply rounded bg-stone-100 px-2 py-1 text-xs font-semibold uppercase text-night;
+  }
+
+  .live-move-badges span:first-child {
+    @apply bg-night text-white;
+  }
+
+  .live-move-explanation {
+    @apply mt-3 text-sm leading-7 text-neutral-700;
+  }
+
+  .live-move-warning {
+    @apply mt-2 text-sm font-semibold text-clay;
+  }
+
+  .live-move-actions {
+    @apply mt-4 flex flex-wrap items-center gap-2;
+  }
+
+  .live-move-actions span {
+    @apply text-sm text-neutral-600;
+  }
+
+  .live-technical-details {
+    @apply mt-3 rounded border border-line bg-stone-50 p-3;
+  }
+
+  .live-technical-details summary {
+    @apply cursor-pointer text-sm font-semibold text-night;
+  }
+
+  .live-technical-details div {
+    @apply mt-2 grid gap-1 text-sm text-neutral-700;
+  }
+
+  .coach-skeleton {
+    @apply relative z-10 m-5 grid gap-3 rounded-lg border border-line bg-white p-5;
+  }
+
+  .coach-skeleton span {
+    @apply h-4 animate-pulse rounded bg-stone-200;
+  }
+
+  .coach-skeleton span:nth-child(1) {
+    @apply w-2/3;
+  }
+
+  .coach-skeleton span:nth-child(2) {
+    @apply w-full;
+  }
+
+  .coach-skeleton span:nth-child(3) {
+    @apply w-4/5;
+  }
+}
+
+@keyframes coach-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

@@ -874,8 +874,8 @@ export default function HomePage() {
   }
 
   return renderShell(
-    <main className="mx-auto grid min-h-screen w-full max-w-[1800px] gap-5 px-4 py-4 md:px-6 lg:grid-cols-[minmax(0,600px)_minmax(0,1fr)] lg:py-6">
-      <section className="grid content-start gap-4">
+    <main className="coach-live-shell">
+      <section className="coach-board-column">
         <ChessCoachBoard
           fen={fen}
           boardWidth={boardWidth}
@@ -887,14 +887,14 @@ export default function HomePage() {
           onSquareClick={handleSquareClick}
         />
 
-        <div className="grid grid-cols-3 gap-2">
+        <div className="coach-board-controls">
           <button type="button" onClick={undo} className="control-button">Annuler</button>
           <button type="button" onClick={reset} className="control-button">Reset</button>
           <button type="button" onClick={() => setOrientation(orientation === "white" ? "black" : "white")} className="control-button">Tourner</button>
         </div>
 
-        {botThinking ? <div className="rounded border border-line bg-white px-3 py-2 text-sm text-night">Le bot reflechit...</div> : null}
-        {botError ? <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{botError}</div> : null}
+        {botThinking ? <div className="coach-board-note">Le bot reflechit...</div> : null}
+        {botError ? <div className="coach-board-error">{botError}</div> : null}
 
         {pendingPromotion ? (
           <div className="panel">
@@ -919,10 +919,10 @@ export default function HomePage() {
           </div>
         ) : null}
 
-        {lastMessage ? <div className="rounded border border-line bg-white px-3 py-2 text-sm text-night">{lastMessage}</div> : null}
+        {lastMessage ? <div className="coach-board-note">{lastMessage}</div> : null}
       </section>
 
-      <section className="grid content-start gap-4">
+      <section className="coach-panel-column">
         <PlanFirstPanel
           selectedPlan={selectedPlan}
           recommendations={planRecommendations}

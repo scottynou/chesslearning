@@ -29,23 +29,29 @@ export function ChessCoachBoard({
   const customSquareStyles = buildSquareStyles(selectedSquare, legalTargets, highlightedMove);
 
   return (
-    <div className="mx-auto w-[92vw] max-w-[560px] touch-none">
-      <Chessboard
-        id="chess-elo-coach-board"
-        position={fen}
-        boardWidth={boardWidth}
-        boardOrientation={orientation}
-        onPieceDrop={onDrop}
-        onSquareClick={(square) => onSquareClick(square)}
-        customSquareStyles={customSquareStyles}
-        customArrows={highlightedMove ? [[highlightedMove.from as Square, highlightedMove.to as Square, "rgba(185, 103, 69, 0.85)"]] : []}
-        customBoardStyle={{
-          borderRadius: "8px",
-          boxShadow: "0 18px 60px rgba(22, 22, 22, 0.16)"
-        }}
-        customDarkSquareStyle={{ backgroundColor: "#7c9173" }}
-        customLightSquareStyle={{ backgroundColor: "#f0dfc3" }}
-      />
+    <div className="coach-board-frame">
+      <div className="coach-board-frame-top">
+        <span>Echiquier interne</span>
+        <span>{orientation === "white" ? "Blancs en bas" : "Noirs en bas"}</span>
+      </div>
+      <div className="coach-board-canvas">
+        <Chessboard
+          id="chess-elo-coach-board"
+          position={fen}
+          boardWidth={boardWidth}
+          boardOrientation={orientation}
+          onPieceDrop={onDrop}
+          onSquareClick={(square) => onSquareClick(square)}
+          customSquareStyles={customSquareStyles}
+          customArrows={highlightedMove ? [[highlightedMove.from as Square, highlightedMove.to as Square, "rgba(185, 103, 69, 0.88)"]] : []}
+          customBoardStyle={{
+            borderRadius: "10px",
+            boxShadow: "0 20px 70px rgba(22, 22, 22, 0.18)"
+          }}
+          customDarkSquareStyle={{ backgroundColor: "#768b70" }}
+          customLightSquareStyle={{ backgroundColor: "#efe1c8" }}
+        />
+      </div>
     </div>
   );
 }
