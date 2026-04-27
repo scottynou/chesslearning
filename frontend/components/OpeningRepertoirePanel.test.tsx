@@ -46,9 +46,9 @@ describe("OpeningRepertoirePanel", () => {
   it("shows black reply cards as concise reasons", () => {
     render(<OpeningRepertoirePanel plans={[plan]} selectedPlanId={null} onSelect={() => undefined} mode="black-reply" firstMoveLabel="Nf3" />);
     expect(screen.getByText("Caro-Kann")).toBeTruthy();
-    expect(screen.getByText(/Pourquoi cette option est coherente/)).toBeTruthy();
+    expect(screen.getByText("Pourquoi ici")).toBeTruthy();
     expect(screen.getByText(/milieu de partie clair/)).toBeTruthy();
-    expect(screen.queryByText("Comprendre ce plan")).toBeNull();
+    expect(screen.getByText("Comprendre cette reponse")).toBeTruthy();
   });
 
   it("keeps multiple opening explanations expanded until each one is hidden", () => {
@@ -56,8 +56,8 @@ describe("OpeningRepertoirePanel", () => {
     const buttons = screen.getAllByText("Comprendre ce plan");
     fireEvent.click(buttons[0]);
     fireEvent.click(buttons[1]);
-    expect(screen.getAllByText("Objectif")).toHaveLength(2);
+    expect(screen.getAllByText("Ce que tu vas apprendre")).toHaveLength(2);
     fireEvent.click(screen.getAllByText("Masquer")[0]);
-    expect(screen.getAllByText("Objectif")).toHaveLength(1);
+    expect(screen.getAllByText("Ce que tu vas apprendre")).toHaveLength(1);
   });
 });

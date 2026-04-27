@@ -28,64 +28,37 @@ export function OpeningRepertoirePanel({
 }: OpeningRepertoirePanelProps) {
   const [expandedPlanIds, setExpandedPlanIds] = useState<string[]>([]);
   const sortedPlans = [...plans].sort((a, b) => difficultyOrder(a.difficulty) - difficultyOrder(b.difficulty));
+  const isBlackReply = mode === "black-reply";
 
   return (
-    <section className="grid gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+    <section className="repertoire-shell">
+      <div className="repertoire-intro">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-clay">Ouvertures</p>
-          <h2 className="mt-1 text-3xl font-semibold text-night md:text-4xl">{title}</h2>
+          <p className="repertoire-kicker">{isBlackReply ? "Repertoire noir adapte" : "Repertoire blanc"}</p>
+          <h2 className="repertoire-title">{title}</h2>
         </div>
-        <p className="max-w-xl text-sm leading-6 text-neutral-600">{intro}</p>
+        <div className="repertoire-intro-copy">
+          {firstMoveLabel ? <span className="repertoire-context-chip">Premier coup blanc : {firstMoveLabel}</span> : null}
+          <p>{intro}</p>
+        </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="repertoire-grid">
         {sortedPlans.map((plan) => {
           const expanded = expandedPlanIds.includes(plan.id);
-          if (mode === "black-reply") {
-            return (
-              <BlackReplyCard
-                key={plan.id}
-                plan={plan}
-                selected={selectedPlanId === plan.id}
-                firstMoveLabel={firstMoveLabel}
-                onSelect={onSelect}
-              />
-            );
-          }
-
           return (
-            <article
+            <PlanCard
               key={plan.id}
-              className={clsx(
-                "overflow-hidden rounded-lg border bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-night hover:shadow-soft",
-                selectedPlanId === plan.id ? "border-clay" : "border-line"
-              )}
-            >
-              <button type="button" onClick={() => onSelect(plan.id)} className="block w-full text-left">
-                <OpeningVisual plan={plan} />
-                <div className="p-4">
-                  <h3 className="text-2xl font-semibold text-night">{plan.nameFr}</h3>
-                  <p className="mt-1 text-sm text-neutral-500">{difficultyLabel(plan.difficulty)}</p>
-                </div>
-              </button>
-
-              <div className="border-t border-line px-4 py-3">
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setExpandedPlanIds((current) => (expanded ? current.filter((id) => id !== plan.id) : [...current, plan.id]));
-                  }}
-                  className="text-sm font-semibold text-night underline-offset-4 hover:underline"
-                  aria-expanded={expanded}
-                >
-                  {expanded ? "Masquer" : "Comprendre ce plan"}
-                </button>
-              </div>
-
-              {expanded ? <OpeningDetails plan={plan} /> : null}
-            </article>
+              plan={plan}
+              selected={selectedPlanId === plan.id}
+              expanded={expanded}
+              mode={mode}
+              firstMoveLabel={firstMoveLabel}
+              onSelect={onSelect}
+              onToggleDetails={() => {
+                setExpandedPlanIds((current) => (expanded ? current.filter((id) => id !== plan.id) : [...current, plan.id]));
+              }}
+            />
           );
         })}
       </div>
@@ -95,94 +68,126 @@ export function OpeningRepertoirePanel({
   );
 }
 
-function BlackReplyCard({
+function PlanCard({
   plan,
   selected,
+  expanded,
+  mode,
   firstMoveLabel,
-  onSelect
+  onSelect,
+  onToggleDetails
 }: {
   plan: StrategyPlan;
   selected: boolean;
+  expanded: boolean;
+  mode: "opening" | "black-reply";
   firstMoveLabel?: string | null;
   onSelect: (planId: string) => void;
+  onToggleDetails: () => void;
 }) {
+  const isBlackReply = mode === "black-reply";
+  const lead = isBlackReply ? blackReplyReason(plan, firstMoveLabel) : plan.shortHistory ?? plan.learningGoal ?? plan.beginnerGoal;
+  const primaryIdea = plan.learningGoal ?? plan.beginnerGoal;
+
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(plan.id)}
-      className={clsx(
-        "grid min-h-56 content-between rounded-lg border bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-night hover:shadow-soft",
-        selected ? "border-clay" : "border-line"
-      )}
-    >
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-clay">Reponse noire</p>
-        <h3 className="mt-2 text-2xl font-semibold text-night">{plan.nameFr}</h3>
-        <p className="mt-4 text-sm font-semibold text-neutral-500">Pourquoi cette option est coherente{firstMoveLabel ? ` apres ${firstMoveLabel}` : ""}</p>
-        <p className="mt-2 text-sm leading-6 text-neutral-700">{blackReplyReason(plan, firstMoveLabel)}</p>
+    <article className={clsx("opening-card", selected && "is-selected", isBlackReply && "is-black-reply")}>
+      <button type="button" onClick={() => onSelect(plan.id)} className="opening-card-main">
+        <OpeningVisual plan={plan} side={isBlackReply ? "black" : "white"} />
+
+        <div className="opening-card-body">
+          <div className="opening-card-topline">
+            <span>{difficultyLabel(plan.difficulty)}</span>
+            <span>{tierLabel(plan.tier)}</span>
+          </div>
+
+          <h3 className="opening-card-title">{plan.nameFr}</h3>
+
+          <p className="opening-card-summary">{lead}</p>
+
+          <div className="opening-style-row">
+            {plan.style.slice(0, 3).map((style) => (
+              <span key={style}>{style}</span>
+            ))}
+          </div>
+
+          <div className="opening-primary-goal">
+            <strong>{isBlackReply ? "Pourquoi ici" : "Objectif"}</strong>
+            <p>{primaryIdea}</p>
+          </div>
+        </div>
+      </button>
+
+      <div className="opening-card-actions">
+        <button type="button" onClick={onToggleDetails} className="opening-detail-toggle" aria-expanded={expanded}>
+          {expanded ? "Masquer" : isBlackReply ? "Comprendre cette reponse" : "Comprendre ce plan"}
+        </button>
+        <span>{mainLinePreview(plan)}</span>
       </div>
-      <p className="mt-5 text-sm font-semibold text-night">Choisir ce plan</p>
-    </button>
+
+      {expanded ? <OpeningDetails plan={plan} mode={mode} firstMoveLabel={firstMoveLabel} /> : null}
+    </article>
   );
 }
 
-function OpeningVisual({ plan }: { plan: StrategyPlan }) {
+function OpeningVisual({ plan, side }: { plan: StrategyPlan; side: "white" | "black" }) {
   if (plan.heroImage) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={plan.heroImage} alt="" className="aspect-[5/3] w-full object-cover" />;
+    return <img src={plan.heroImage} alt="" className="opening-hero-image" />;
   }
   return (
-    <div className="grid aspect-[5/3] place-items-center bg-[radial-gradient(circle_at_20%_20%,#ffffff_0,#f4efe7_38%,#dfd5c8_100%)] p-6">
-      <div className="w-44 max-w-[52%]">
+    <div className={clsx("opening-visual", side === "black" && "is-black")}>
+      <div className="opening-visual-grid" />
+      <div className="opening-visual-board">
         <OpeningMiniBoard fen={plan.miniBoardFen} />
+      </div>
+      <div className="opening-visual-caption">
+        <span>{side === "black" ? "Reponse" : "Plan"}</span>
+        <strong>{plan.eco.slice(0, 2).join(" / ") || "Guide"}</strong>
       </div>
     </div>
   );
 }
 
-function OpeningDetails({ plan }: { plan: StrategyPlan }) {
-  return (
-    <div className="grid gap-4 border-t border-line bg-stone-50 p-4">
-      {plan.shortHistory ? (
-        <section>
-          <h4 className="text-sm font-semibold uppercase tracking-[0.14em] text-clay">En bref</h4>
-          <p className="mt-2 text-sm leading-6 text-neutral-700">{plan.shortHistory}</p>
-        </section>
-      ) : null}
+function OpeningDetails({ plan, mode, firstMoveLabel }: { plan: StrategyPlan; mode: "opening" | "black-reply"; firstMoveLabel?: string | null }) {
+  const ideas = (plan.whatYouWillLearn ?? plan.coreIdeas).slice(0, 5);
+  const missions = plan.pieceMissions.slice(0, 4);
+  const isBlackReply = mode === "black-reply";
 
-      <section>
-        <h4 className="text-sm font-semibold uppercase tracking-[0.14em] text-clay">Objectif</h4>
-        <p className="mt-2 text-sm leading-6 text-neutral-700">{plan.learningGoal ?? plan.beginnerGoal}</p>
+  return (
+    <div className="opening-details">
+      <section className="opening-detail-block is-wide">
+        <h4>{isBlackReply ? "Pourquoi cette reponse marche" : "En clair"}</h4>
+        <p>{isBlackReply ? blackReplyReason(plan, firstMoveLabel) : plan.shortHistory ?? plan.learningGoal ?? plan.beginnerGoal}</p>
       </section>
 
-      <section>
-        <h4 className="text-sm font-semibold uppercase tracking-[0.14em] text-clay">Ce que tu vas apprendre</h4>
-        <ul className="mt-2 grid gap-2 text-sm leading-6 text-neutral-700">
-          {(plan.whatYouWillLearn ?? plan.coreIdeas).slice(0, 4).map((idea) => (
-            <li key={idea} className="rounded border border-line bg-white px-3 py-2">
-              {idea}
-            </li>
+      <section className="opening-detail-block">
+        <h4>Ce que tu vas apprendre</h4>
+        <ul className="opening-learning-list">
+          {ideas.map((idea) => (
+            <li key={idea}>{idea}</li>
           ))}
         </ul>
       </section>
 
-      {plan.pieceMissions.length > 0 ? (
-        <section>
-          <h4 className="text-sm font-semibold uppercase tracking-[0.14em] text-clay">Pieces importantes</h4>
-          <div className="mt-2 grid gap-2">
-            {plan.pieceMissions.slice(0, 3).map((mission) => (
-              <p key={`${mission.piece}-${mission.mission}`} className="text-sm leading-6 text-neutral-700">
-                <span className="font-semibold text-night">{mission.piece}</span> : {mission.mission}
+      <section className="opening-detail-block">
+        <h4>Pieces importantes</h4>
+        {missions.length > 0 ? (
+          <div className="opening-mission-list">
+            {missions.map((mission) => (
+              <p key={`${mission.piece}-${mission.mission}`}>
+                <strong>{mission.piece}</strong> : {mission.mission}
               </p>
             ))}
           </div>
-        </section>
-      ) : null}
+        ) : (
+          <p>Le plan se concentre surtout sur le centre, le developpement et la securite du roi.</p>
+        )}
+      </section>
 
       {plan.middlegamePlan && plan.middlegamePlan.length > 0 ? (
-        <section>
-          <h4 className="text-sm font-semibold uppercase tracking-[0.14em] text-clay">Apres ouverture</h4>
-          <p className="mt-2 text-sm leading-6 text-neutral-700">{plan.middlegamePlan.slice(0, 3).join(" - ")}</p>
+        <section className="opening-detail-block is-wide">
+          <h4>Apres l&apos;ouverture</h4>
+          <p>{plan.middlegamePlan.slice(0, 3).join(" - ")}</p>
         </section>
       ) : null}
     </div>
@@ -203,6 +208,20 @@ function difficultyOrder(difficulty: StrategyPlan["difficulty"]) {
     medium: 2,
     hard: 3
   }[difficulty];
+}
+
+function tierLabel(tier: StrategyPlan["tier"]) {
+  return {
+    recommended: "Recommande",
+    good: "Bon choix",
+    situational: "Situationnel",
+    hidden: "Labo"
+  }[tier];
+}
+
+function mainLinePreview(plan: StrategyPlan) {
+  if (!plan.mainLineUci.length) return "Plan general";
+  return `${plan.mainLineUci.length} coups guides`;
 }
 
 function blackReplyReason(plan: StrategyPlan, firstMoveLabel?: string | null) {

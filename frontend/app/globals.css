@@ -240,4 +240,197 @@ select {
   .landing-free-button {
     @apply min-h-12 rounded border border-line bg-transparent px-6 py-3 text-sm font-semibold uppercase text-neutral-600 transition hover:border-night hover:bg-white hover:text-night focus:outline-none focus:ring-4 focus:ring-sage/25;
   }
+
+  .repertoire-shell {
+    @apply relative grid gap-6 overflow-hidden;
+  }
+
+  .repertoire-shell::before {
+    content: "";
+    position: absolute;
+    inset: -16px;
+    background-image:
+      linear-gradient(90deg, rgba(22, 22, 22, 0.045) 1px, transparent 1px),
+      linear-gradient(0deg, rgba(22, 22, 22, 0.035) 1px, transparent 1px);
+    background-size: 72px 72px;
+    mask-image: linear-gradient(180deg, #000, transparent 78%);
+    pointer-events: none;
+  }
+
+  .repertoire-intro {
+    @apply relative z-10 grid gap-5 rounded-lg border border-line bg-[#ebe4d6]/85 p-5 shadow-soft md:grid-cols-[minmax(0,0.9fr)_minmax(360px,0.7fr)] md:p-7;
+  }
+
+  .repertoire-kicker {
+    @apply text-sm font-semibold uppercase text-clay;
+  }
+
+  .repertoire-title {
+    @apply mt-2 max-w-4xl text-4xl font-semibold leading-none text-night md:text-6xl;
+  }
+
+  .repertoire-intro-copy {
+    @apply grid content-end gap-3 text-sm leading-6 text-neutral-700 md:text-base md:leading-7;
+  }
+
+  .repertoire-context-chip {
+    @apply w-fit rounded border border-night bg-night px-3 py-2 text-sm font-semibold text-white;
+  }
+
+  .repertoire-grid {
+    @apply relative z-10 grid gap-4 md:grid-cols-2 xl:grid-cols-3;
+  }
+
+  .opening-card {
+    @apply relative overflow-hidden rounded-lg border border-line bg-white shadow-sm transition duration-200 hover:-translate-y-1 hover:border-night hover:shadow-[0_28px_90px_rgba(22,22,22,0.16)];
+  }
+
+  .opening-card::after {
+    content: "";
+    position: absolute;
+    inset: auto -34px -48px auto;
+    width: 180px;
+    height: 180px;
+    background:
+      linear-gradient(45deg, rgba(22, 22, 22, 0.055) 25%, transparent 25% 50%, rgba(22, 22, 22, 0.055) 50% 75%, transparent 75%);
+    background-size: 36px 36px;
+    transform: rotate(-8deg);
+    pointer-events: none;
+  }
+
+  .opening-card.is-selected {
+    @apply border-clay shadow-soft;
+  }
+
+  .opening-card.is-black-reply {
+    @apply bg-[#fbfaf7];
+  }
+
+  .opening-card-main {
+    @apply relative z-10 block w-full text-left;
+  }
+
+  .opening-hero-image {
+    @apply aspect-[5/3] w-full object-cover;
+  }
+
+  .opening-visual {
+    @apply relative aspect-[5/3] overflow-hidden bg-[#eee7da];
+  }
+
+  .opening-visual.is-black {
+    @apply bg-[#dcd7ce];
+  }
+
+  .opening-visual-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(90deg, rgba(22, 22, 22, 0.08) 1px, transparent 1px),
+      linear-gradient(0deg, rgba(22, 22, 22, 0.07) 1px, transparent 1px);
+    background-size: 42px 42px;
+    opacity: 0.55;
+  }
+
+  .opening-visual-board {
+    @apply absolute bottom-4 right-5 w-[46%] max-w-44 rotate-[-7deg] md:w-[50%];
+  }
+
+  .opening-card.is-black-reply .opening-visual-board {
+    @apply rotate-[7deg];
+  }
+
+  .opening-visual-caption {
+    @apply absolute left-5 top-5 grid gap-1;
+  }
+
+  .opening-visual-caption span {
+    @apply text-xs font-semibold uppercase text-clay;
+  }
+
+  .opening-visual-caption strong {
+    @apply text-lg font-semibold text-night;
+  }
+
+  .opening-card-body {
+    @apply relative z-10 grid gap-4 p-5;
+  }
+
+  .opening-card-topline {
+    @apply flex flex-wrap gap-2;
+  }
+
+  .opening-card-topline span,
+  .opening-style-row span {
+    @apply rounded border border-line bg-stone-50 px-2.5 py-1 text-xs font-semibold uppercase text-neutral-600;
+  }
+
+  .opening-card-title {
+    @apply text-3xl font-semibold leading-none text-night;
+  }
+
+  .opening-card-summary {
+    @apply text-sm leading-6 text-neutral-700;
+  }
+
+  .opening-style-row {
+    @apply flex flex-wrap gap-2;
+  }
+
+  .opening-primary-goal {
+    @apply border-t border-line pt-4;
+  }
+
+  .opening-primary-goal strong {
+    @apply text-xs font-semibold uppercase text-clay;
+  }
+
+  .opening-primary-goal p {
+    @apply mt-2 text-sm leading-6 text-neutral-700;
+  }
+
+  .opening-card-actions {
+    @apply relative z-10 flex flex-wrap items-center justify-between gap-3 border-t border-line bg-stone-50/80 px-5 py-4;
+  }
+
+  .opening-card-actions span {
+    @apply text-xs font-semibold uppercase text-neutral-500;
+  }
+
+  .opening-detail-toggle {
+    @apply rounded border border-line bg-white px-3 py-2 text-sm font-semibold text-night transition hover:border-night hover:bg-stone-50 focus:outline-none focus:ring-4 focus:ring-sage/25;
+  }
+
+  .opening-details {
+    @apply relative z-10 grid gap-0 border-t border-line bg-white md:grid-cols-2;
+  }
+
+  .opening-detail-block {
+    @apply border-b border-line p-5 md:border-r;
+  }
+
+  .opening-detail-block.is-wide {
+    @apply md:col-span-2;
+  }
+
+  .opening-detail-block h4 {
+    @apply text-xs font-semibold uppercase text-clay;
+  }
+
+  .opening-detail-block p {
+    @apply mt-2 text-sm leading-6 text-neutral-700;
+  }
+
+  .opening-learning-list,
+  .opening-mission-list {
+    @apply mt-2 grid gap-2 text-sm leading-6 text-neutral-700;
+  }
+
+  .opening-learning-list li {
+    @apply border-l-2 border-sage pl-3;
+  }
+
+  .opening-mission-list strong {
+    @apply text-night;
+  }
 }
