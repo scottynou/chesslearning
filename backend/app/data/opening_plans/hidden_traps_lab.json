@@ -1,0 +1,23 @@
+[
+  {
+    "id": "englund_trap_lab",
+    "nameFr": "Englund Gambit - laboratoire",
+    "nameEn": "Englund Gambit",
+    "side": "black",
+    "against": ["d2d4"],
+    "tier": "hidden",
+    "difficulty": "hard",
+    "style": ["piège", "tactique"],
+    "recommendedElo": [1200, 2200],
+    "mainLineUci": ["d2d4", "e7e5"],
+    "eco": ["A40"],
+    "beginnerGoal": "Étudier un piège, pas construire un répertoire principal.",
+    "coreIdeas": ["Comprendre pourquoi un piège peut être risqué.", "Ne pas le recommander comme plan principal.", "Comparer avec Stockfish."],
+    "pieceMissions": [],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["le piège échoue ou la position se stabilise"],
+      "plans": ["revenir au développement", "sécuriser le roi"]
+    }
+  }
+]

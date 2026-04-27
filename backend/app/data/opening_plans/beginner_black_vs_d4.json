@@ -1,0 +1,74 @@
+[
+  {
+    "id": "qgd_simplified",
+    "nameFr": "Défense dame-pion simple",
+    "nameEn": "Queen's Gambit Declined",
+    "side": "black",
+    "against": ["d2d4"],
+    "tier": "recommended",
+    "difficulty": "medium",
+    "style": ["solide", "centre", "structure"],
+    "recommendedElo": [700, 2200],
+    "mainLineUci": ["d2d4", "d7d5", "c2c4", "e7e6"],
+    "eco": ["D30", "D35"],
+    "beginnerGoal": "Tenir le centre et développer solidement.",
+    "coreIdeas": ["Jouer ...d5.", "Soutenir le centre avec ...e6.", "Développer les cavaliers.", "Roquer."],
+    "pieceMissions": [
+      { "piece": "Pion d7", "mission": "Aller en d5 pour répondre au centre blanc." },
+      { "piece": "Pion e7", "mission": "Soutenir d5 avec ...e6." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["le centre d4/c4 contre d5/e6 est stabilisé"],
+      "plans": ["développer le fou f8", "roquer", "attaquer c4 ou d4"]
+    }
+  },
+  {
+    "id": "slav_beginner",
+    "nameFr": "Slave",
+    "nameEn": "Slav Defense",
+    "side": "black",
+    "against": ["d2d4"],
+    "tier": "recommended",
+    "difficulty": "medium",
+    "style": ["solide", "structure", "fou actif"],
+    "recommendedElo": [800, 2200],
+    "mainLineUci": ["d2d4", "d7d5", "c2c4", "c7c6"],
+    "eco": ["D10", "D15"],
+    "beginnerGoal": "Soutenir d5 avec c6 et garder le fou c8 libre.",
+    "coreIdeas": ["Jouer ...d5.", "Soutenir avec ...c6.", "Développer le fou c8 avant ...e6 si possible.", "Roquer."],
+    "pieceMissions": [
+      { "piece": "Pion c7", "mission": "Aller en c6 pour soutenir d5." },
+      { "piece": "Fou c8", "mission": "Sortir avant d'être bloqué." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["d5 est solidement défendu", "les pièces mineures sortent"],
+      "plans": ["développer le fou", "roquer", "chercher ...c5 plus tard"]
+    }
+  },
+  {
+    "id": "kings_indian_setup",
+    "nameFr": "Indienne du roi simplifiée",
+    "nameEn": "King's Indian Setup",
+    "side": "black",
+    "against": ["d2d4", "c2c4"],
+    "tier": "good",
+    "difficulty": "hard",
+    "style": ["setup", "roi en sécurité", "contre-attaque"],
+    "recommendedElo": [1000, 2400],
+    "mainLineUci": ["d2d4", "g8f6", "c2c4", "g7g6", "b1c3", "f8g7", "e2e4", "d7d6"],
+    "eco": ["E60", "E62"],
+    "beginnerGoal": "Roquer vite puis attaquer le centre blanc avec ...e5 ou ...c5.",
+    "coreIdeas": ["Développer le cavalier g8.", "Mettre le fou en g7.", "Roquer.", "Contester le centre plus tard."],
+    "pieceMissions": [
+      { "piece": "Cavalier g8", "mission": "Aller en f6 pour contrôler e4." },
+      { "piece": "Fou f8", "mission": "Aller en g7 pour viser le centre." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["le roi noir est roqué", "le fou g7 vise le centre"],
+      "plans": ["jouer ...e5", "jouer ...c5", "attaquer si le centre se ferme"]
+    }
+  }
+]

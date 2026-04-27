@@ -1,0 +1,156 @@
+[
+  {
+    "id": "italian_game_beginner",
+    "nameFr": "Partie italienne",
+    "nameEn": "Italian Game",
+    "side": "white",
+    "against": ["e7e5"],
+    "tier": "recommended",
+    "difficulty": "easy",
+    "style": ["classique", "développement", "roi en sécurité"],
+    "recommendedElo": [600, 1800],
+    "mainLineUci": ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4"],
+    "eco": ["C50", "C53", "C54"],
+    "beginnerGoal": "Développer vite les pièces, contrôler le centre et préparer le roque.",
+    "coreIdeas": [
+      "Jouer e4 pour occuper le centre.",
+      "Sortir le cavalier g1 vers f3 pour attaquer e5.",
+      "Développer le fou f1 vers c4 pour viser f7.",
+      "Roquer rapidement."
+    ],
+    "pieceMissions": [
+      { "piece": "Pion e2", "mission": "Occuper e4 et ouvrir le fou f1." },
+      { "piece": "Cavalier g1", "mission": "Aller en f3 pour attaquer e5." },
+      { "piece": "Fou f1", "mission": "Aller en c4 pour viser f7." }
+    ],
+    "branches": [
+      {
+        "name": "Noirs sans ...Nc6",
+        "triggerLineUci": ["e2e4", "e7e5", "g1f3"],
+        "goal": "Continuer le développement sans forcer Bc4 si e5 change.",
+        "recommendedMoves": ["f1c4", "b1c3", "d2d3"],
+        "commonMistakes": ["Attaquer f7 avant d'avoir développé assez de pièces."]
+      }
+    ],
+    "transitionToMiddlegame": {
+      "when": ["le roi blanc est roqué", "les deux cavaliers sont sortis", "le centre est ouvert ou stabilisé"],
+      "plans": ["attaquer le centre", "viser f7 si les noirs sont en retard", "améliorer la pire pièce"]
+    }
+  },
+  {
+    "id": "london_system_beginner",
+    "nameFr": "Système de Londres",
+    "nameEn": "London System",
+    "side": "white",
+    "against": ["any"],
+    "tier": "recommended",
+    "difficulty": "easy",
+    "style": ["système", "stable", "facile à répéter"],
+    "recommendedElo": [600, 2000],
+    "mainLineUci": ["d2d4", "d7d5", "c1f4", "g8f6", "e2e3", "e7e6", "g1f3"],
+    "eco": ["D00", "D02"],
+    "beginnerGoal": "Construire un setup stable, contrôler e5 et obtenir un milieu de jeu clair.",
+    "coreIdeas": [
+      "Jouer d4 pour contrôler le centre.",
+      "Sortir le fou c1 vers f4 avant de jouer e3.",
+      "Développer le cavalier g1 vers f3.",
+      "Roquer et préparer c3 ou Bd3."
+    ],
+    "pieceMissions": [
+      { "piece": "Fou c1", "mission": "Aller en f4 pour rester actif." },
+      { "piece": "Pion e2", "mission": "Soutenir d4 avec e3." },
+      { "piece": "Cavalier g1", "mission": "Aller en f3 pour contrôler e5." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["le setup d4, Bf4, e3, Nf3 est en place", "le roi blanc est en sécurité"],
+      "plans": ["mettre un cavalier en e5", "attaquer le roi si les noirs roquent court", "jouer c3 pour solidifier"]
+    }
+  },
+  {
+    "id": "scotch_game_beginner",
+    "nameFr": "Partie écossaise",
+    "nameEn": "Scotch Game",
+    "side": "white",
+    "against": ["e7e5"],
+    "tier": "good",
+    "difficulty": "medium",
+    "style": ["direct", "centre", "tactique simple"],
+    "recommendedElo": [800, 2000],
+    "mainLineUci": ["e2e4", "e7e5", "g1f3", "b8c6", "d2d4"],
+    "eco": ["C44", "C45"],
+    "beginnerGoal": "Ouvrir le centre rapidement pour apprendre les échanges et le développement actif.",
+    "coreIdeas": [
+      "Occuper e4.",
+      "Attaquer e5 avec le cavalier f3.",
+      "Jouer d4 pour ouvrir le centre.",
+      "Développer vite après les échanges."
+    ],
+    "pieceMissions": [
+      { "piece": "Pion d2", "mission": "Aller en d4 pour attaquer e5." },
+      { "piece": "Cavalier g1", "mission": "Aller en f3 pour mettre la pression." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["le centre est ouvert", "les échanges ont clarifié la structure"],
+      "plans": ["développer avec tempo", "viser le roi noir si son centre est faible"]
+    }
+  },
+  {
+    "id": "queens_gambit_beginner",
+    "nameFr": "Gambit dame simplifié",
+    "nameEn": "Queen's Gambit",
+    "side": "white",
+    "against": ["d7d5"],
+    "tier": "recommended",
+    "difficulty": "medium",
+    "style": ["centre", "structure", "positionnel"],
+    "recommendedElo": [800, 2200],
+    "mainLineUci": ["d2d4", "d7d5", "c2c4"],
+    "eco": ["D06", "D30", "D35"],
+    "beginnerGoal": "Mettre la pression sur le pion d5 et apprendre les structures de pions.",
+    "coreIdeas": [
+      "Jouer d4 pour prendre de l'espace.",
+      "Jouer c4 pour attaquer d5.",
+      "Développer les cavaliers.",
+      "Récupérer le pion c4 si les noirs capturent."
+    ],
+    "pieceMissions": [
+      { "piece": "Pion c2", "mission": "Aller en c4 pour attaquer d5." },
+      { "piece": "Cavalier b1", "mission": "Aller en c3 pour soutenir d5/e4." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["la tension d4-c4 contre d5 est résolue ou stabilisée"],
+      "plans": ["mettre une tour sur la colonne c", "jouer contre le pion isolé si possible"]
+    }
+  },
+  {
+    "id": "ruy_lopez_simplified",
+    "nameFr": "Ruy Lopez simplifiée",
+    "nameEn": "Ruy Lopez",
+    "side": "white",
+    "against": ["e7e5"],
+    "tier": "good",
+    "difficulty": "medium",
+    "style": ["classique", "profond", "développement"],
+    "recommendedElo": [1000, 2400],
+    "mainLineUci": ["e2e4", "e7e5", "g1f3", "b8c6", "f1b5"],
+    "eco": ["C60", "C65"],
+    "beginnerGoal": "Mettre la pression sur le cavalier c6 qui défend e5.",
+    "coreIdeas": [
+      "Occuper e4.",
+      "Attaquer e5 avec le cavalier f3.",
+      "Jouer Bb5 pour mettre la pression sur c6.",
+      "Roquer avant d'attaquer."
+    ],
+    "pieceMissions": [
+      { "piece": "Fou f1", "mission": "Aller en b5 pour viser le cavalier c6." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["les pièces blanches sont sorties", "le roi blanc est roqué"],
+      "plans": ["préparer d4", "attaquer le centre noir", "améliorer la tour e1"]
+    }
+  }
+]

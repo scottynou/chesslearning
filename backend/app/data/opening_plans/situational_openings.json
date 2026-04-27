@@ -1,0 +1,25 @@
+[
+  {
+    "id": "reti_kia_situational",
+    "nameFr": "Réti / Attaque indienne du roi",
+    "nameEn": "Reti / King's Indian Attack",
+    "side": "white",
+    "against": ["any"],
+    "tier": "situational",
+    "difficulty": "medium",
+    "style": ["flexible", "setup", "positionnel"],
+    "recommendedElo": [1000, 2400],
+    "mainLineUci": ["g1f3", "d7d5", "g2g3", "g8f6", "f1g2"],
+    "eco": ["A04", "A07"],
+    "beginnerGoal": "Développer calmement et choisir le centre plus tard.",
+    "coreIdeas": ["Développer le cavalier g1.", "Fianchetter le fou.", "Roquer.", "Attaquer le centre quand la structure est claire."],
+    "pieceMissions": [
+      { "piece": "Fou f1", "mission": "Aller en g2 pour viser le centre." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["le roi est roqué", "le fou g2 vise le centre"],
+      "plans": ["jouer c4 ou e4", "mettre une tour au centre"]
+    }
+  }
+]

@@ -1,0 +1,143 @@
+[
+  {
+    "id": "italian_game",
+    "name": "Partie italienne",
+    "side": "white",
+    "against": "e5",
+    "difficulty": "easy",
+    "typicalMoves": ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4"],
+    "beginnerGoal": "Développer vite les pièces, contrôler le centre et préparer le roque.",
+    "mainIdeas": [
+      "Mettre un pion au centre.",
+      "Sortir le cavalier.",
+      "Développer le fou vers c4.",
+      "Roquer rapidement."
+    ],
+    "whatToAvoid": [
+      "Sortir la dame trop tôt.",
+      "Bouger la même pièce plusieurs fois sans raison.",
+      "Oublier le roque."
+    ]
+  },
+  {
+    "id": "london_system",
+    "name": "Système de Londres",
+    "side": "white",
+    "against": "any",
+    "difficulty": "easy",
+    "typicalMoves": ["d2d4", "d7d5", "c1f4", "g8f6", "e2e3"],
+    "beginnerGoal": "Construire un centre solide et sortir les pièces toujours dans le même ordre.",
+    "mainIdeas": ["Jouer d4.", "Sortir le fou en f4.", "Soutenir le centre avec e3.", "Roquer."],
+    "whatToAvoid": ["Bloquer le fou c1 trop tôt.", "Attaquer avant d'avoir roqué."]
+  },
+  {
+    "id": "simple_queen_pawn",
+    "name": "Setup dame-pion simple",
+    "side": "white",
+    "against": "d5",
+    "difficulty": "easy",
+    "typicalMoves": ["d2d4", "d7d5", "c2c4", "e7e6"],
+    "beginnerGoal": "Occuper le centre avec d4 puis attaquer le pion d5 avec c4.",
+    "mainIdeas": ["Jouer d4.", "Attaquer d5 avec c4.", "Développer les cavaliers.", "Roquer."],
+    "whatToAvoid": ["Pousser trop de pions sans développer les pièces."]
+  },
+  {
+    "id": "simple_e4_nf3_bc4",
+    "name": "Développement simple e4 + Nf3 + Bc4",
+    "side": "white",
+    "against": "any",
+    "difficulty": "easy",
+    "typicalMoves": ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4"],
+    "beginnerGoal": "Contrôler le centre, sortir deux pièces et roquer vite.",
+    "mainIdeas": ["Jouer e4.", "Sortir le cavalier g1.", "Mettre le fou en c4.", "Roquer."],
+    "whatToAvoid": ["Jouer la dame trop tôt.", "Oublier la sécurité du roi."]
+  },
+  {
+    "id": "caro_kann",
+    "name": "Caro-Kann",
+    "side": "black",
+    "against": "e4",
+    "difficulty": "easy",
+    "typicalMoves": ["e2e4", "c7c6", "d2d4", "d7d5"],
+    "beginnerGoal": "Construire un centre solide avec c6 puis d5.",
+    "mainIdeas": ["Préparer d5 avec c6.", "Contester e4.", "Développer le fou c8.", "Roquer."],
+    "whatToAvoid": ["Laisser le roi au centre trop longtemps."]
+  },
+  {
+    "id": "french_defense",
+    "name": "Française",
+    "side": "black",
+    "against": "e4",
+    "difficulty": "easy",
+    "typicalMoves": ["e2e4", "e7e6", "d2d4", "d7d5"],
+    "beginnerGoal": "Attaquer le centre blanc avec d5 après avoir préparé e6.",
+    "mainIdeas": ["Jouer e6.", "Jouer d5.", "Attaquer le centre.", "Développer les pièces."],
+    "whatToAvoid": ["Oublier de libérer le fou c8."]
+  },
+  {
+    "id": "scandinavian",
+    "name": "Scandinave simple",
+    "side": "black",
+    "against": "e4",
+    "difficulty": "easy",
+    "typicalMoves": ["e2e4", "d7d5"],
+    "beginnerGoal": "Attaquer immédiatement le pion e4.",
+    "mainIdeas": ["Jouer d5.", "Reprendre au centre.", "Développer les pièces.", "Roquer."],
+    "whatToAvoid": ["Promener la dame trop longtemps."]
+  },
+  {
+    "id": "classical_e5",
+    "name": "Développement classique e5 + Nf6 + Nc6",
+    "side": "black",
+    "against": "e4",
+    "difficulty": "easy",
+    "typicalMoves": ["e2e4", "e7e5", "g1f3", "b8c6"],
+    "beginnerGoal": "Occuper le centre et développer les cavaliers.",
+    "mainIdeas": ["Répondre e5.", "Développer le cavalier b8.", "Sortir le fou.", "Roquer."],
+    "whatToAvoid": ["Déplacer plusieurs fois le même cavalier sans raison."]
+  },
+  {
+    "id": "simple_d_pawn_defense",
+    "name": "Défense dame-pion simple",
+    "side": "black",
+    "against": "d4",
+    "difficulty": "easy",
+    "typicalMoves": ["d2d4", "d7d5", "c2c4", "e7e6"],
+    "beginnerGoal": "Répondre au centre blanc et construire une structure solide.",
+    "mainIdeas": ["Jouer d5.", "Soutenir avec e6.", "Développer les cavaliers.", "Roquer."],
+    "whatToAvoid": ["Sortir la dame trop tôt."]
+  },
+  {
+    "id": "simple_slav",
+    "name": "Slave simple",
+    "side": "black",
+    "against": "d4",
+    "difficulty": "easy",
+    "typicalMoves": ["d2d4", "d7d5", "c2c4", "c7c6"],
+    "beginnerGoal": "Soutenir d5 avec c6 et garder le fou c8 libre.",
+    "mainIdeas": ["Jouer d5.", "Soutenir avec c6.", "Développer le fou c8.", "Roquer."],
+    "whatToAvoid": ["Bloquer toutes les pièces derrière les pions."]
+  },
+  {
+    "id": "simple_kings_indian",
+    "name": "Indienne du roi simplifiée",
+    "side": "black",
+    "against": "d4",
+    "difficulty": "medium",
+    "typicalMoves": ["d2d4", "g8f6", "c2c4", "g7g6", "b1c3", "f8g7"],
+    "beginnerGoal": "Développer le fou en g7 et roquer avant d'attaquer le centre.",
+    "mainIdeas": ["Sortir le cavalier g8.", "Préparer le fou g7.", "Roquer.", "Attaquer le centre plus tard."],
+    "whatToAvoid": ["Attaquer trop tôt sans avoir roqué."]
+  },
+  {
+    "id": "classical_d4",
+    "name": "Développement classique contre d4",
+    "side": "black",
+    "against": "d4",
+    "difficulty": "easy",
+    "typicalMoves": ["d2d4", "d7d5", "c2c4", "g8f6", "b1c3", "e7e6"],
+    "beginnerGoal": "Contrôler d5, développer les cavaliers et garder une structure saine.",
+    "mainIdeas": ["Jouer d5.", "Développer le cavalier g8.", "Soutenir le centre avec e6.", "Roquer."],
+    "whatToAvoid": ["Pousser les pions de l'aile avant de finir le développement."]
+  }
+]

@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    linear-gradient(135deg, rgba(124, 145, 115, 0.18), transparent 34%),
+    linear-gradient(225deg, rgba(185, 103, 69, 0.14), transparent 32%),
+    #f6f2ea;
+  color: #161616;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.coach-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #b8ad9f transparent;
+}
+
+@layer components {
+  .panel {
+    @apply rounded-lg border border-line bg-panel p-4 shadow-soft;
+  }
+
+  .panel-title {
+    @apply mb-3 text-base font-semibold text-night;
+  }
+
+  .control-button {
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded border border-line bg-white px-3 py-2 text-sm font-semibold text-night transition hover:border-sage hover:bg-stone-50;
+  }
+}

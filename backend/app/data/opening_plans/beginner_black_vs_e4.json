@@ -1,0 +1,118 @@
+[
+  {
+    "id": "caro_kann_beginner",
+    "nameFr": "Caro-Kann",
+    "nameEn": "Caro-Kann Defense",
+    "side": "black",
+    "against": ["e2e4"],
+    "tier": "recommended",
+    "difficulty": "medium",
+    "style": ["solide", "centre", "structure"],
+    "recommendedElo": [600, 2200],
+    "mainLineUci": ["e2e4", "c7c6", "d2d4", "d7d5"],
+    "eco": ["B10", "B12", "B15"],
+    "beginnerGoal": "Laisser les blancs occuper le centre, puis attaquer ce centre avec ...d5 et parfois ...c5.",
+    "coreIdeas": [
+      "Attaquer le centre blanc au lieu de le subir.",
+      "Développer le fou c8 avant qu'il soit bloqué si possible.",
+      "Mettre une pression progressive sur e5 ou d4.",
+      "Obtenir une structure solide pour le milieu de jeu."
+    ],
+    "pieceMissions": [
+      { "piece": "Pion c7", "mission": "Jouer ...c6 pour soutenir ...d5." },
+      { "piece": "Pion d7", "mission": "Jouer ...d5 pour attaquer le centre blanc." },
+      { "piece": "Fou c8", "mission": "Sortir vers f5 ou g4 si la structure le permet." },
+      { "piece": "Cavalier g8", "mission": "Aller vers f6 pour attaquer le centre." }
+    ],
+    "branches": [
+      {
+        "name": "Variante d'avance",
+        "triggerLineUci": ["e2e4", "c7c6", "d2d4", "d7d5", "e4e5"],
+        "goal": "Attaquer la chaîne de pions blanche avec ...c5.",
+        "recommendedMoves": ["c7c5", "c8f5", "e7e6", "b8c6"],
+        "commonMistakes": ["Laisser les blancs garder leur centre sans l'attaquer.", "Enfermer le fou c8 trop tôt sans plan."]
+      },
+      {
+        "name": "Variante d'échange",
+        "triggerLineUci": ["e2e4", "c7c6", "d2d4", "d7d5", "e4d5", "c6d5"],
+        "goal": "Développer simplement les pièces et jouer une position équilibrée.",
+        "recommendedMoves": ["g8f6", "b8c6", "c8f5", "e7e6"]
+      }
+    ],
+    "transitionToMiddlegame": {
+      "when": ["plusieurs pièces sont développées", "le centre est clarifié ou bloqué", "la sécurité du roi devient prioritaire"],
+      "plans": ["attaquer le centre blanc", "jouer sur les colonnes ouvertes", "échanger une mauvaise pièce"]
+    }
+  },
+  {
+    "id": "black_e5_classical",
+    "nameFr": "Défense classique e5",
+    "nameEn": "Open Game with ...e5",
+    "side": "black",
+    "against": ["e2e4"],
+    "tier": "recommended",
+    "difficulty": "easy",
+    "style": ["classique", "centre", "développement"],
+    "recommendedElo": [600, 2000],
+    "mainLineUci": ["e2e4", "e7e5", "g1f3", "b8c6"],
+    "eco": ["C20", "C40"],
+    "beginnerGoal": "Répondre au centre, développer les cavaliers et apprendre les bases ouvertes.",
+    "coreIdeas": ["Jouer ...e5.", "Développer le cavalier b8 vers c6.", "Sortir le fou f8.", "Roquer."],
+    "pieceMissions": [
+      { "piece": "Pion e7", "mission": "Aller en e5 pour occuper le centre." },
+      { "piece": "Cavalier b8", "mission": "Aller en c6 pour défendre e5." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["les cavaliers sont sortis", "le roi est prêt à roquer"],
+      "plans": ["développer le fou", "contester d4", "roquer"]
+    }
+  },
+  {
+    "id": "french_defense_beginner",
+    "nameFr": "Française simplifiée",
+    "nameEn": "French Defense",
+    "side": "black",
+    "against": ["e2e4"],
+    "tier": "good",
+    "difficulty": "medium",
+    "style": ["structure", "centre fermé", "contre-attaque"],
+    "recommendedElo": [900, 2200],
+    "mainLineUci": ["e2e4", "e7e6", "d2d4", "d7d5"],
+    "eco": ["C00", "C02"],
+    "beginnerGoal": "Attaquer la chaîne de pions blanche et apprendre les structures fermées.",
+    "coreIdeas": ["Jouer ...e6.", "Contester e4 avec ...d5.", "Attaquer la base de la chaîne.", "Trouver un plan pour le fou c8."],
+    "pieceMissions": [
+      { "piece": "Pion e7", "mission": "Soutenir ...d5." },
+      { "piece": "Pion d7", "mission": "Attaquer e4 avec ...d5." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["le centre est fermé ou échangé"],
+      "plans": ["attaquer d4", "libérer le fou c8", "jouer ...c5"]
+    }
+  },
+  {
+    "id": "scandinavian_simple",
+    "nameFr": "Scandinave simple",
+    "nameEn": "Scandinavian Defense",
+    "side": "black",
+    "against": ["e2e4"],
+    "tier": "situational",
+    "difficulty": "easy",
+    "style": ["direct", "centre", "simple"],
+    "recommendedElo": [600, 1800],
+    "mainLineUci": ["e2e4", "d7d5"],
+    "eco": ["B01"],
+    "beginnerGoal": "Attaquer immédiatement le pion e4 sans oublier le développement.",
+    "coreIdeas": ["Jouer ...d5.", "Reprendre au centre si les blancs capturent.", "Ne pas perdre trop de tempos avec la dame."],
+    "pieceMissions": [
+      { "piece": "Pion d7", "mission": "Aller en d5 pour attaquer e4." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["la dame noire n'est plus exposée", "les pièces mineures peuvent sortir"],
+      "plans": ["développer vite", "roquer", "attaquer le centre"]
+    }
+  }
+]
