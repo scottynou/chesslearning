@@ -1,26 +1,29 @@
 [
   {
     "id": "qgd_simplified",
-    "nameFr": "Défense dame-pion simple",
+    "nameFr": "Defense dame-pion simple",
     "nameEn": "Queen's Gambit Declined",
     "side": "black",
     "against": ["d2d4"],
     "tier": "recommended",
     "difficulty": "medium",
     "style": ["solide", "centre", "structure"],
-    "recommendedElo": [700, 2200],
+    "recommendedElo": [700, 2300],
     "mainLineUci": ["d2d4", "d7d5", "c2c4", "e7e6"],
     "eco": ["D30", "D35"],
-    "beginnerGoal": "Tenir le centre et développer solidement.",
-    "coreIdeas": ["Jouer ...d5.", "Soutenir le centre avec ...e6.", "Développer les cavaliers.", "Roquer."],
+    "shortHistory": "La defense dame-pion simple tient le centre avec ...d5 puis ...e6. Elle donne une structure fiable et enseigne les plans classiques contre d4.",
+    "learningGoal": "Repondre a 1.d4 par un centre solide, developper les pieces sans urgence et atteindre un milieu de partie comprehensible.",
+    "beginnerGoal": "Tenir le centre et developper solidement.",
+    "coreIdeas": ["Jouer ...d5.", "Soutenir le centre avec ...e6.", "Developper les cavaliers.", "Roquer."],
+    "whatYouWillLearn": ["Tenir un centre solide.", "Jouer une structure dame-pion.", "Developper sans affaiblir le roi.", "Comprendre les plans contre c4."],
     "pieceMissions": [
-      { "piece": "Pion d7", "mission": "Aller en d5 pour répondre au centre blanc." },
-      { "piece": "Pion e7", "mission": "Soutenir d5 avec ...e6." }
+      { "piece": "Pion d7", "mission": "Aller en d5 pour repondre au centre blanc." },
+      { "piece": "Pion e7", "mission": "Aller en e6 pour soutenir d5." }
     ],
     "branches": [],
     "transitionToMiddlegame": {
-      "when": ["le centre d4/c4 contre d5/e6 est stabilisé"],
-      "plans": ["développer le fou f8", "roquer", "attaquer c4 ou d4"]
+      "when": ["le centre d4/c4 contre d5/e6 est stabilise"],
+      "plans": ["developper le fou f8", "roquer", "attaquer c4 ou d4"]
     }
   },
   {
@@ -32,43 +35,211 @@
     "tier": "recommended",
     "difficulty": "medium",
     "style": ["solide", "structure", "fou actif"],
-    "recommendedElo": [800, 2200],
+    "recommendedElo": [800, 2300],
     "mainLineUci": ["d2d4", "d7d5", "c2c4", "c7c6"],
     "eco": ["D10", "D15"],
+    "shortHistory": "La Slave soutient d5 avec ...c6. Elle garde le centre solide tout en laissant souvent le fou c8 sortir avant d'etre bloque.",
+    "learningGoal": "Soutenir d5 avec ...c6, developper proprement et obtenir une structure solide mais moins enfermee qu'une defense trop passive.",
     "beginnerGoal": "Soutenir d5 avec c6 et garder le fou c8 libre.",
-    "coreIdeas": ["Jouer ...d5.", "Soutenir avec ...c6.", "Développer le fou c8 avant ...e6 si possible.", "Roquer."],
+    "coreIdeas": ["Jouer ...d5.", "Soutenir avec ...c6.", "Developper le fou c8 avant ...e6 si possible.", "Roquer."],
+    "whatYouWillLearn": ["Soutenir un pion central.", "Garder le fou c8 actif.", "Comprendre les structures slaves.", "Chercher ...c5 plus tard."],
     "pieceMissions": [
       { "piece": "Pion c7", "mission": "Aller en c6 pour soutenir d5." },
-      { "piece": "Fou c8", "mission": "Sortir avant d'être bloqué." }
+      { "piece": "Fou c8", "mission": "Sortir avant d'etre bloque." }
     ],
     "branches": [],
     "transitionToMiddlegame": {
-      "when": ["d5 est solidement défendu", "les pièces mineures sortent"],
-      "plans": ["développer le fou", "roquer", "chercher ...c5 plus tard"]
+      "when": ["d5 est solidement defendu", "les pieces mineures sortent"],
+      "plans": ["developper le fou", "roquer", "chercher ...c5 plus tard"]
+    }
+  },
+  {
+    "id": "nimzo_indian_simplified",
+    "nameFr": "Nimzo-Indienne simplifiee",
+    "nameEn": "Nimzo-Indian Defense",
+    "side": "black",
+    "against": ["d2d4"],
+    "tier": "good",
+    "difficulty": "hard",
+    "style": ["pression", "structure", "piece active"],
+    "recommendedElo": [1100, 2600],
+    "mainLineUci": ["d2d4", "g8f6", "c2c4", "e7e6", "b1c3", "f8b4"],
+    "eco": ["E20", "E32", "E39"],
+    "shortHistory": "La Nimzo-Indienne met le fou en b4 pour clouer le cavalier c3. Les noirs ne copient pas le centre blanc : ils attaquent sa structure et ses pieces cles.",
+    "learningGoal": "Apprendre a jouer contre les pieces et la structure blanche : ...Nf6, ...e6, ...Bb4, puis pression sur c3, e4 ou les pions doubles.",
+    "beginnerGoal": "Clouer le cavalier c3 et jouer contre la structure blanche.",
+    "coreIdeas": ["Jouer ...Nf6.", "Preparer ...e6.", "Mettre le fou en b4.", "Attaquer la structure blanche plutot que prendre le centre immediatement."],
+    "whatYouWillLearn": ["Utiliser un clouage.", "Jouer contre les pions doubles.", "Mettre la pression sur e4.", "Jouer un plan strategique."],
+    "pieceMissions": [
+      { "piece": "Fou f8", "mission": "Aller en b4 pour clouer le cavalier c3." },
+      { "piece": "Cavalier g8", "mission": "Aller en f6 pour controler e4." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["le fou b4 met la pression", "les blancs ont choisi leur structure"],
+      "plans": ["attaquer les pions doubles", "jouer ...c5 ou ...d5", "echanger une bonne piece blanche"]
+    }
+  },
+  {
+    "id": "queens_indian_simplified",
+    "nameFr": "Indienne de la dame simplifiee",
+    "nameEn": "Queen's Indian Defense",
+    "side": "black",
+    "against": ["d2d4"],
+    "tier": "good",
+    "difficulty": "medium",
+    "style": ["solide", "fianchetto", "controle"],
+    "recommendedElo": [1100, 2500],
+    "mainLineUci": ["d2d4", "g8f6", "c2c4", "e7e6", "g1f3", "b7b6"],
+    "eco": ["E12", "E15", "E19"],
+    "shortHistory": "L'Indienne de la dame place le fou en b7 pour controler le centre a distance. C'est une reponse solide quand les blancs ne jouent pas vite Nc3.",
+    "learningGoal": "Developper ...Nf6, ...e6, ...b6 et ...Bb7 pour mettre une pression calme sur e4 et d5.",
+    "beginnerGoal": "Controler le centre avec les pieces et le fou b7.",
+    "coreIdeas": ["Jouer ...Nf6.", "Preparer ...e6.", "Jouer ...b6.", "Mettre le fou c8 en b7."],
+    "whatYouWillLearn": ["Controler le centre a distance.", "Utiliser un fou en b7.", "Jouer une structure solide.", "Attendre la bonne rupture."],
+    "pieceMissions": [
+      { "piece": "Fou c8", "mission": "Aller en b7 pour viser e4." },
+      { "piece": "Cavalier g8", "mission": "Aller en f6 pour controler e4 et d5." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["le fou b7 vise le centre", "le roi noir est proche du roque"],
+      "plans": ["jouer ...d5 ou ...c5", "attaquer e4", "ameliorer les tours"]
     }
   },
   {
     "id": "kings_indian_setup",
-    "nameFr": "Indienne du roi simplifiée",
+    "nameFr": "Indienne du roi simplifiee",
     "nameEn": "King's Indian Setup",
     "side": "black",
-    "against": ["d2d4", "c2c4"],
+    "against": ["d2d4", "c2c4", "g1f3"],
     "tier": "good",
     "difficulty": "hard",
-    "style": ["setup", "roi en sécurité", "contre-attaque"],
-    "recommendedElo": [1000, 2400],
+    "style": ["setup", "roi en securite", "contre-attaque"],
+    "recommendedElo": [1000, 2500],
     "mainLineUci": ["d2d4", "g8f6", "c2c4", "g7g6", "b1c3", "f8g7", "e2e4", "d7d6"],
     "eco": ["E60", "E62"],
+    "shortHistory": "L'Indienne du roi laisse les blancs prendre de l'espace, puis les noirs roquent vite et attaquent le centre avec ...e5 ou ...c5.",
+    "learningGoal": "Accepter un centre blanc large, placer le fou en g7, roquer et preparer une contre-attaque au bon moment.",
     "beginnerGoal": "Roquer vite puis attaquer le centre blanc avec ...e5 ou ...c5.",
-    "coreIdeas": ["Développer le cavalier g8.", "Mettre le fou en g7.", "Roquer.", "Contester le centre plus tard."],
+    "coreIdeas": ["Developper le cavalier g8.", "Mettre le fou en g7.", "Roquer.", "Contester le centre plus tard."],
+    "whatYouWillLearn": ["Jouer contre un centre large.", "Preparer une rupture.", "Utiliser le fou g7.", "Accepter une position double tranchant."],
     "pieceMissions": [
-      { "piece": "Cavalier g8", "mission": "Aller en f6 pour contrôler e4." },
+      { "piece": "Cavalier g8", "mission": "Aller en f6 pour controler e4." },
       { "piece": "Fou f8", "mission": "Aller en g7 pour viser le centre." }
     ],
     "branches": [],
     "transitionToMiddlegame": {
-      "when": ["le roi noir est roqué", "le fou g7 vise le centre"],
+      "when": ["le roi noir est roque", "le fou g7 vise le centre"],
       "plans": ["jouer ...e5", "jouer ...c5", "attaquer si le centre se ferme"]
+    }
+  },
+  {
+    "id": "grunfeld_simplified",
+    "nameFr": "Grunfeld simplifiee",
+    "nameEn": "Grunfeld Defense",
+    "side": "black",
+    "against": ["d2d4", "c2c4", "g1f3"],
+    "tier": "situational",
+    "difficulty": "hard",
+    "style": ["hypermoderne", "centre", "actif"],
+    "recommendedElo": [1400, 2800],
+    "mainLineUci": ["d2d4", "g8f6", "c2c4", "g7g6", "b1c3", "d7d5"],
+    "eco": ["D70", "D85", "D90"],
+    "shortHistory": "La Grunfeld laisse les blancs construire un centre, puis l'attaque avec ...d5 et le fou g7. Elle est saine mais demande de comprendre les ruptures.",
+    "learningGoal": "Laisser le centre blanc se former, puis le casser avec ...d5, ...c5 ou la pression du fou g7.",
+    "beginnerGoal": "Attaquer le centre blanc avec un plan hypermoderne actif.",
+    "coreIdeas": ["Jouer ...Nf6.", "Fianchetter le fou en g7.", "Jouer ...d5 pour attaquer le centre.", "Ne pas rester passif."],
+    "whatYouWillLearn": ["Attaquer un centre fort.", "Utiliser le fou g7.", "Jouer des ruptures centrales.", "Calculer les echanges au centre."],
+    "pieceMissions": [
+      { "piece": "Fou f8", "mission": "Aller en g7 pour viser le centre." },
+      { "piece": "Pion d7", "mission": "Aller en d5 pour attaquer c4/e4." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["...d5 a conteste le centre", "le fou g7 est actif"],
+      "plans": ["attaquer d4", "jouer ...c5", "activer les pieces sur le centre"]
+    }
+  },
+  {
+    "id": "dutch_defense_learning",
+    "nameFr": "Defense hollandaise",
+    "nameEn": "Dutch Defense",
+    "side": "black",
+    "against": ["d2d4", "g1f3", "c2c4"],
+    "tier": "situational",
+    "difficulty": "hard",
+    "style": ["asymetrique", "aile roi", "combat"],
+    "recommendedElo": [1100, 2400],
+    "mainLineUci": ["d2d4", "f7f5", "g1f3", "g8f6", "g2g3", "e7e6"],
+    "eco": ["A80", "A90"],
+    "shortHistory": "La Hollandaise joue ...f5 contre le pion dame. Les noirs prennent de l'espace sur l'aile roi, mais acceptent aussi des faiblesses autour de leur roi.",
+    "learningGoal": "Comprendre une defense asymetrique : ...f5 donne du jeu actif, mais demande de surveiller la diagonale du roi noir.",
+    "beginnerGoal": "Creer du contre-jeu sur l'aile roi contre 1.d4.",
+    "coreIdeas": ["Jouer ...f5 pour prendre de l'espace.", "Developper ...Nf6.", "Preparer ...e6 ou ...g6.", "Roquer seulement quand le roi est assez sur."],
+    "whatYouWillLearn": ["Jouer une structure asymetrique.", "Attaquer sur l'aile roi.", "Comprendre les faiblesses creees par ...f5.", "Eviter les diagonales dangereuses."],
+    "pieceMissions": [
+      { "piece": "Pion f7", "mission": "Aller en f5 pour controler e4." },
+      { "piece": "Cavalier g8", "mission": "Aller en f6 pour renforcer le centre." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["...f5 est soutenu", "les pieces noires sont developpees"],
+      "plans": ["attaquer e4", "preparer une attaque sur le roi", "surveiller la securite du roi noir"]
+    }
+  },
+  {
+    "id": "benoni_learning",
+    "nameFr": "Benoni moderne",
+    "nameEn": "Modern Benoni",
+    "side": "black",
+    "against": ["d2d4"],
+    "tier": "situational",
+    "difficulty": "hard",
+    "style": ["dynamique", "risque", "contre-jeu"],
+    "recommendedElo": [1300, 2600],
+    "mainLineUci": ["d2d4", "g8f6", "c2c4", "c7c5", "d4d5", "e7e6"],
+    "eco": ["A60", "A65"],
+    "shortHistory": "La Benoni moderne donne aux blancs de l'espace, puis cherche du contre-jeu avec ...c5, ...e6 et souvent ...b5.",
+    "learningGoal": "Apprendre une defense dynamique contre d4 : accepter un centre blanc avance, puis attaquer sa base et jouer sur les colonnes ouvertes.",
+    "beginnerGoal": "Creer du contre-jeu actif contre un centre blanc avance.",
+    "coreIdeas": ["Jouer ...Nf6.", "Attaquer le centre avec ...c5.", "Pousser les blancs a avancer d5.", "Contester ensuite avec ...e6."],
+    "whatYouWillLearn": ["Jouer contre l'espace adverse.", "Creer du contre-jeu.", "Comprendre les ruptures ...b5 et ...e6.", "Accepter une position risquee."],
+    "pieceMissions": [
+      { "piece": "Pion c7", "mission": "Aller en c5 pour attaquer d4." },
+      { "piece": "Pion e7", "mission": "Aller en e6 pour attaquer d5." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["les blancs ont avance d5", "les noirs peuvent attaquer la chaine"],
+      "plans": ["preparer ...b5", "attaquer d5", "creer du jeu actif avant d'etre etouffe"]
+    }
+  },
+  {
+    "id": "tarrasch_defense_learning",
+    "nameFr": "Defense Tarrasch",
+    "nameEn": "Tarrasch Defense",
+    "side": "black",
+    "against": ["d2d4", "c2c4", "g1f3"],
+    "tier": "good",
+    "difficulty": "medium",
+    "style": ["actif", "centre", "piece libre"],
+    "recommendedElo": [900, 2300],
+    "mainLineUci": ["d2d4", "d7d5", "c2c4", "e7e6", "g1f3", "c7c5"],
+    "eco": ["D32", "D34"],
+    "shortHistory": "La Tarrasch accepte parfois un pion dame isole, mais en echange les noirs obtiennent des pieces actives et un developpement naturel.",
+    "learningGoal": "Contester d4 avec ...d5, ...e6 et ...c5 pour obtenir de l'activite au lieu de rester enferme.",
+    "beginnerGoal": "Jouer activement contre le centre dame-pion blanc.",
+    "coreIdeas": ["Jouer ...d5.", "Soutenir avec ...e6.", "Frapper avec ...c5.", "Accepter parfois un pion isole actif."],
+    "whatYouWillLearn": ["Jouer avec un pion isole.", "Activer les pieces.", "Contester le centre vite.", "Ne pas subir les structures fermees."],
+    "pieceMissions": [
+      { "piece": "Pion c7", "mission": "Aller en c5 pour attaquer d4." },
+      { "piece": "Cavalier g8", "mission": "Aller en f6 pour soutenir le centre." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["...c5 a conteste le centre", "les pieces noires sortent vite"],
+      "plans": ["jouer avec les pieces actives", "mettre une tour sur une colonne ouverte", "surveiller le pion isole"]
     }
   }
 ]

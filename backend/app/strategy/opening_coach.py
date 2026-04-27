@@ -13,6 +13,7 @@ MAIN_FILES = [
     "beginner_white.json",
     "beginner_black_vs_e4.json",
     "beginner_black_vs_d4.json",
+    "beginner_black_flexible.json",
 ]
 
 
@@ -26,13 +27,20 @@ def list_available_plans(
     if side:
         plans = [plan for plan in plans if plan["side"] == side or plan["side"] == "universal"]
     if first_move:
-        matching = [
+        direct_matching = [
             plan
             for plan in plans
-            if first_move in plan.get("against", []) or "any" in plan.get("against", [])
+            if first_move in plan.get("against", [])
         ]
-        if matching:
-            plans = matching
+        fallback_matching = [
+            plan
+            for plan in plans
+            if "any" in plan.get("against", [])
+        ]
+        if direct_matching:
+            plans = direct_matching
+        elif fallback_matching:
+            plans = fallback_matching
         elif side == "black":
             plans = [
                 plan

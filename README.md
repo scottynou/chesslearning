@@ -105,6 +105,7 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 - Black reply cards explain why each response is coherent against White's first move.
 - Browser back/forward navigation works between the main learning steps.
 - White repertoire now includes practical plans from easy to hard: Italian, Four Knights, London, Colle, Scotch, Vienna, Queen's Gambit, Ruy Lopez, English, Reti/KIA and Catalan.
+- Black repertoire now covers more families against `1.e4`, `1.d4`, `1.c4`, `1.Nf3` and other flexible first moves.
 - Opening descriptions are plan-specific instead of generated from repeated generic text.
 - The selected plan stays locked for the game; deviations adapt the next move instead of replacing the plan.
 - The main UI shows one recommended plan move plus adapted alternatives only when useful.

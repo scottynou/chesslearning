@@ -1,5 +1,32 @@
 [
   {
+    "id": "black_e5_classical",
+    "nameFr": "Defense classique e5",
+    "nameEn": "Open Game with ...e5",
+    "side": "black",
+    "against": ["e2e4"],
+    "tier": "recommended",
+    "difficulty": "easy",
+    "style": ["classique", "centre", "developpement"],
+    "recommendedElo": [600, 2100],
+    "mainLineUci": ["e2e4", "e7e5", "g1f3", "b8c6"],
+    "eco": ["C20", "C40"],
+    "shortHistory": "La defense classique par ...e5 remet un pion au centre tout de suite. Elle enseigne les parties ouvertes : cavaliers actifs, fous developpes et roque rapide.",
+    "learningGoal": "Repondre a 1.e4 par ...e5, defendre le centre avec les cavaliers et atteindre un milieu de partie ouvert et lisible.",
+    "beginnerGoal": "Repondre au centre, developper les cavaliers et apprendre les bases ouvertes.",
+    "coreIdeas": ["Jouer ...e5 pour occuper le centre.", "Developper le cavalier b8 vers c6.", "Sortir le fou f8.", "Roquer avant de pousser trop de pions."],
+    "whatYouWillLearn": ["Jouer les parties ouvertes.", "Defendre un pion central.", "Developper avec tempo.", "Roquer vite."],
+    "pieceMissions": [
+      { "piece": "Pion e7", "mission": "Aller en e5 pour occuper le centre." },
+      { "piece": "Cavalier b8", "mission": "Aller en c6 pour defendre e5." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["les cavaliers sont sortis", "le roi est pret a roquer"],
+      "plans": ["developper le fou f8", "contester d4", "roquer"]
+    }
+  },
+  {
     "id": "caro_kann_beginner",
     "nameFr": "Caro-Kann",
     "nameEn": "Caro-Kann Defense",
@@ -8,88 +35,59 @@
     "tier": "recommended",
     "difficulty": "medium",
     "style": ["solide", "centre", "structure"],
-    "recommendedElo": [600, 2200],
+    "recommendedElo": [600, 2300],
     "mainLineUci": ["e2e4", "c7c6", "d2d4", "d7d5"],
     "eco": ["B10", "B12", "B15"],
+    "shortHistory": "La Caro-Kann construit une reponse solide a 1.e4 : ...c6 prepare ...d5, puis les noirs attaquent le centre blanc sans trop affaiblir leur roi.",
+    "learningGoal": "Laisser les blancs occuper le centre, puis l'attaquer proprement avec ...d5 et parfois ...c5.",
     "beginnerGoal": "Laisser les blancs occuper le centre, puis attaquer ce centre avec ...d5 et parfois ...c5.",
-    "coreIdeas": [
-      "Attaquer le centre blanc au lieu de le subir.",
-      "Développer le fou c8 avant qu'il soit bloqué si possible.",
-      "Mettre une pression progressive sur e5 ou d4.",
-      "Obtenir une structure solide pour le milieu de jeu."
-    ],
+    "coreIdeas": ["Preparer ...d5 avec ...c6.", "Attaquer le centre blanc sans se decouvrir.", "Sortir le fou c8 avant qu'il soit bloque si possible.", "Atteindre une structure solide."],
+    "whatYouWillLearn": ["Construire une structure saine.", "Attaquer le centre blanc.", "Liberer le fou c8.", "Jouer un milieu de partie stable."],
     "pieceMissions": [
-      { "piece": "Pion c7", "mission": "Jouer ...c6 pour soutenir ...d5." },
-      { "piece": "Pion d7", "mission": "Jouer ...d5 pour attaquer le centre blanc." },
-      { "piece": "Fou c8", "mission": "Sortir vers f5 ou g4 si la structure le permet." },
-      { "piece": "Cavalier g8", "mission": "Aller vers f6 pour attaquer le centre." }
+      { "piece": "Pion c7", "mission": "Aller en c6 pour soutenir ...d5." },
+      { "piece": "Pion d7", "mission": "Aller en d5 pour attaquer le centre blanc." },
+      { "piece": "Fou c8", "mission": "Sortir vers f5 ou g4 si la structure le permet." }
     ],
     "branches": [
       {
         "name": "Variante d'avance",
         "triggerLineUci": ["e2e4", "c7c6", "d2d4", "d7d5", "e4e5"],
-        "goal": "Attaquer la chaîne de pions blanche avec ...c5.",
+        "goal": "Attaquer la chaine de pions blanche avec ...c5.",
         "recommendedMoves": ["c7c5", "c8f5", "e7e6", "b8c6"],
-        "commonMistakes": ["Laisser les blancs garder leur centre sans l'attaquer.", "Enfermer le fou c8 trop tôt sans plan."]
-      },
-      {
-        "name": "Variante d'échange",
-        "triggerLineUci": ["e2e4", "c7c6", "d2d4", "d7d5", "e4d5", "c6d5"],
-        "goal": "Développer simplement les pièces et jouer une position équilibrée.",
-        "recommendedMoves": ["g8f6", "b8c6", "c8f5", "e7e6"]
+        "commonMistakes": ["Laisser les blancs garder leur centre sans l'attaquer."]
       }
     ],
     "transitionToMiddlegame": {
-      "when": ["plusieurs pièces sont développées", "le centre est clarifié ou bloqué", "la sécurité du roi devient prioritaire"],
-      "plans": ["attaquer le centre blanc", "jouer sur les colonnes ouvertes", "échanger une mauvaise pièce"]
-    }
-  },
-  {
-    "id": "black_e5_classical",
-    "nameFr": "Défense classique e5",
-    "nameEn": "Open Game with ...e5",
-    "side": "black",
-    "against": ["e2e4"],
-    "tier": "recommended",
-    "difficulty": "easy",
-    "style": ["classique", "centre", "développement"],
-    "recommendedElo": [600, 2000],
-    "mainLineUci": ["e2e4", "e7e5", "g1f3", "b8c6"],
-    "eco": ["C20", "C40"],
-    "beginnerGoal": "Répondre au centre, développer les cavaliers et apprendre les bases ouvertes.",
-    "coreIdeas": ["Jouer ...e5.", "Développer le cavalier b8 vers c6.", "Sortir le fou f8.", "Roquer."],
-    "pieceMissions": [
-      { "piece": "Pion e7", "mission": "Aller en e5 pour occuper le centre." },
-      { "piece": "Cavalier b8", "mission": "Aller en c6 pour défendre e5." }
-    ],
-    "branches": [],
-    "transitionToMiddlegame": {
-      "when": ["les cavaliers sont sortis", "le roi est prêt à roquer"],
-      "plans": ["développer le fou", "contester d4", "roquer"]
+      "when": ["le centre est clarifie ou bloque", "plusieurs pieces sont developpees"],
+      "plans": ["attaquer le centre blanc", "liberer le fou c8", "jouer sur une structure solide"]
     }
   },
   {
     "id": "french_defense_beginner",
-    "nameFr": "Française simplifiée",
+    "nameFr": "Francaise simplifiee",
     "nameEn": "French Defense",
     "side": "black",
     "against": ["e2e4"],
     "tier": "good",
     "difficulty": "medium",
-    "style": ["structure", "centre fermé", "contre-attaque"],
-    "recommendedElo": [900, 2200],
+    "style": ["structure", "centre ferme", "contre-attaque"],
+    "recommendedElo": [800, 2300],
     "mainLineUci": ["e2e4", "e7e6", "d2d4", "d7d5"],
     "eco": ["C00", "C02"],
-    "beginnerGoal": "Attaquer la chaîne de pions blanche et apprendre les structures fermées.",
-    "coreIdeas": ["Jouer ...e6.", "Contester e4 avec ...d5.", "Attaquer la base de la chaîne.", "Trouver un plan pour le fou c8."],
+    "shortHistory": "La Francaise accepte souvent moins d'espace au debut, mais elle donne un plan clair : construire ...e6, attaquer e4 avec ...d5, puis frapper la chaine blanche.",
+    "learningGoal": "Apprendre les centres fermes : les blancs avancent parfois, puis les noirs attaquent la base de leur chaine avec ...c5 ou ...f6.",
+    "beginnerGoal": "Attaquer la chaine de pions blanche et apprendre les structures fermees.",
+    "coreIdeas": ["Jouer ...e6 pour preparer ...d5.", "Contester e4 avec ...d5.", "Attaquer la base de la chaine blanche.", "Trouver un plan pour le fou c8."],
+    "whatYouWillLearn": ["Jouer une structure fermee.", "Attaquer une chaine de pions.", "Comprendre le fou c8.", "Preparer ...c5."],
     "pieceMissions": [
-      { "piece": "Pion e7", "mission": "Soutenir ...d5." },
-      { "piece": "Pion d7", "mission": "Attaquer e4 avec ...d5." }
+      { "piece": "Pion e7", "mission": "Aller en e6 pour soutenir ...d5." },
+      { "piece": "Pion d7", "mission": "Aller en d5 pour attaquer e4." },
+      { "piece": "Pion c7", "mission": "Chercher ...c5 plus tard pour attaquer d4." }
     ],
     "branches": [],
     "transitionToMiddlegame": {
-      "when": ["le centre est fermé ou échangé"],
-      "plans": ["attaquer d4", "libérer le fou c8", "jouer ...c5"]
+      "when": ["le centre est ferme ou echange"],
+      "plans": ["attaquer d4", "liberer le fou c8", "jouer ...c5"]
     }
   },
   {
@@ -101,18 +99,22 @@
     "tier": "situational",
     "difficulty": "easy",
     "style": ["direct", "centre", "simple"],
-    "recommendedElo": [600, 1800],
+    "recommendedElo": [600, 1900],
     "mainLineUci": ["e2e4", "d7d5"],
     "eco": ["B01"],
-    "beginnerGoal": "Attaquer immédiatement le pion e4 sans oublier le développement.",
-    "coreIdeas": ["Jouer ...d5.", "Reprendre au centre si les blancs capturent.", "Ne pas perdre trop de tempos avec la dame."],
+    "shortHistory": "La Scandinave dit tout de suite aux blancs : le pion e4 ne restera pas tranquille. Les noirs attaquent le centre au premier coup, mais doivent ensuite developper vite.",
+    "learningGoal": "Attaquer immediatement le pion e4 avec ...d5, reprendre si les blancs capturent, puis eviter de perdre trop de temps avec la dame.",
+    "beginnerGoal": "Attaquer immediatement le pion e4 sans oublier le developpement.",
+    "coreIdeas": ["Jouer ...d5 pour attaquer e4.", "Reprendre au centre si les blancs capturent.", "Developper les pieces au lieu de promener la dame.", "Roquer rapidement."],
+    "whatYouWillLearn": ["Contester le centre tout de suite.", "Gagner des tempos de developpement.", "Eviter les sorties de dame inutiles.", "Simplifier une structure ouverte."],
     "pieceMissions": [
-      { "piece": "Pion d7", "mission": "Aller en d5 pour attaquer e4." }
+      { "piece": "Pion d7", "mission": "Aller en d5 pour attaquer e4." },
+      { "piece": "Dame d8", "mission": "Reprendre seulement si c'est necessaire, puis eviter de perdre des tempos." }
     ],
     "branches": [],
     "transitionToMiddlegame": {
-      "when": ["la dame noire n'est plus exposée", "les pièces mineures peuvent sortir"],
-      "plans": ["développer vite", "roquer", "attaquer le centre"]
+      "when": ["la dame noire n'est plus exposee", "les pieces mineures peuvent sortir"],
+      "plans": ["developper vite", "roquer", "attaquer le centre"]
     }
   },
   {
@@ -124,16 +126,14 @@
     "tier": "situational",
     "difficulty": "hard",
     "style": ["actif", "tactique", "contre-attaque"],
-    "recommendedElo": [1000, 2400],
+    "recommendedElo": [1000, 2500],
     "mainLineUci": ["e2e4", "c7c5", "g1f3", "d7d6", "d2d4", "c5d4", "f3d4", "g8f6", "b1c3", "g7g6"],
     "eco": ["B70", "B72"],
+    "shortHistory": "La Sicilienne Dragon simplifiee conteste le centre depuis le cote avec ...c5, puis place le fou en g7 pour viser la grande diagonale.",
+    "learningGoal": "Jouer une defense active : attaquer d4 avec ...c5, developper le fou en g7 et accepter un milieu de partie plus tactique.",
     "beginnerGoal": "Contester le centre avec ...c5, developper le fou en g7 et jouer une position active.",
-    "coreIdeas": [
-      "Jouer ...c5 pour attaquer le centre blanc depuis le cote.",
-      "Developper le cavalier g8 vers f6 pour attaquer e4.",
-      "Mettre le fou f8 en g7 pour viser le centre et l'aile dame.",
-      "Roquer avant de lancer une attaque."
-    ],
+    "coreIdeas": ["Jouer ...c5 pour attaquer le centre blanc depuis le cote.", "Developper le cavalier g8 vers f6.", "Mettre le fou f8 en g7.", "Roquer avant de lancer une attaque."],
+    "whatYouWillLearn": ["Jouer contre le centre depuis le cote.", "Utiliser un fou en g7.", "Comprendre une position asymetrique.", "Surveiller les attaques adverses."],
     "pieceMissions": [
       { "piece": "Pion c7", "mission": "Aller en c5 pour contester d4." },
       { "piece": "Fou f8", "mission": "Aller en g7 pour devenir actif sur la grande diagonale." },
@@ -143,6 +143,168 @@
     "transitionToMiddlegame": {
       "when": ["le fou g7 est actif", "le roi noir est en securite", "le centre blanc est sous pression"],
       "plans": ["attaquer le centre", "jouer sur la colonne c", "surveiller les attaques blanches sur le roi"]
+    }
+  },
+  {
+    "id": "sicilian_najdorf_learning",
+    "nameFr": "Sicilienne Najdorf simplifiee",
+    "nameEn": "Sicilian Najdorf",
+    "side": "black",
+    "against": ["e2e4"],
+    "tier": "situational",
+    "difficulty": "hard",
+    "style": ["ambitieux", "tactique", "contre-jeu"],
+    "recommendedElo": [1300, 2800],
+    "mainLineUci": ["e2e4", "c7c5", "g1f3", "d7d6", "d2d4", "c5d4", "f3d4", "g8f6", "b1c3", "a7a6"],
+    "eco": ["B90", "B92", "B99"],
+    "shortHistory": "La Najdorf est une Sicilienne ambitieuse : ...a6 empeche souvent les pieces blanches d'utiliser b5 et prepare du contre-jeu avant de choisir ...e5 ou ...e6.",
+    "learningGoal": "Comprendre une Sicilienne de haut niveau sans memoriser tout : jouer ...c5, ...d6, ...Nf6, ...a6, puis choisir un plan central coherent.",
+    "beginnerGoal": "Obtenir une Sicilienne active avec beaucoup de contre-jeu, mais plus complexe.",
+    "coreIdeas": ["Contester le centre avec ...c5.", "Developper le cavalier en f6.", "Jouer ...a6 pour controler b5.", "Choisir ...e5 ou ...e6 selon la position."],
+    "whatYouWillLearn": ["Jouer une structure sicilienne complexe.", "Creer du contre-jeu.", "Controler la case b5.", "Accepter un jeu tactique."],
+    "pieceMissions": [
+      { "piece": "Pion a7", "mission": "Aller en a6 pour controler b5." },
+      { "piece": "Pion c7", "mission": "Aller en c5 pour attaquer d4." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["...a6 est joue", "le cavalier f6 attaque e4", "le roi noir a un plan de securite"],
+      "plans": ["jouer ...e5 ou ...e6", "preparer ...b5", "creer du contre-jeu sur l'aile dame"]
+    }
+  },
+  {
+    "id": "pirc_defense_learning",
+    "nameFr": "Defense Pirc",
+    "nameEn": "Pirc Defense",
+    "side": "black",
+    "against": ["e2e4"],
+    "tier": "good",
+    "difficulty": "hard",
+    "style": ["hypermoderne", "flexible", "contre-attaque"],
+    "recommendedElo": [1100, 2400],
+    "mainLineUci": ["e2e4", "d7d6", "d2d4", "g8f6", "b1c3", "g7g6"],
+    "eco": ["B07", "B08", "B09"],
+    "shortHistory": "La Pirc laisse les blancs construire un grand centre, puis les noirs l'attaquent avec les pieces, le fou en g7 et des ruptures comme ...e5 ou ...c5.",
+    "learningGoal": "Apprendre une defense hypermoderne : accepter le centre blanc au debut, roquer, puis le frapper au bon moment.",
+    "beginnerGoal": "Laisser les blancs prendre le centre, puis l'attaquer avec les pieces.",
+    "coreIdeas": ["Jouer ...d6.", "Developper le cavalier g8 en f6.", "Fianchetter le fou en g7.", "Contester le centre avec ...e5 ou ...c5."],
+    "whatYouWillLearn": ["Attaquer un centre large.", "Utiliser le fou en g7.", "Choisir une rupture centrale.", "Eviter de rester passif."],
+    "pieceMissions": [
+      { "piece": "Fou f8", "mission": "Aller en g7 pour viser le centre." },
+      { "piece": "Cavalier g8", "mission": "Aller en f6 pour attaquer e4." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["le fou g7 est actif", "le roi noir est roque"],
+      "plans": ["frapper le centre avec ...e5 ou ...c5", "attaquer les pions avances", "eviter une attaque directe sur le roi"]
+    }
+  },
+  {
+    "id": "modern_defense_learning",
+    "nameFr": "Defense moderne",
+    "nameEn": "Modern Defense",
+    "side": "black",
+    "against": ["e2e4"],
+    "tier": "situational",
+    "difficulty": "hard",
+    "style": ["flexible", "hypermoderne", "strategique"],
+    "recommendedElo": [1200, 2500],
+    "mainLineUci": ["e2e4", "g7g6", "d2d4", "f8g7", "b1c3", "d7d6"],
+    "eco": ["B06"],
+    "shortHistory": "La Moderne commence par ...g6 : les noirs ne contestent pas tout de suite le centre, ils placent le fou en g7 et attendent le bon moment pour frapper.",
+    "learningGoal": "Construire un setup flexible avec ...g6, ...Bg7 et ...d6, puis attaquer le centre blanc quand il devient une cible.",
+    "beginnerGoal": "Developper le fou en g7 et attaquer le centre plus tard.",
+    "coreIdeas": ["Jouer ...g6.", "Mettre le fou f8 en g7.", "Soutenir la structure avec ...d6.", "Choisir ...c5 ou ...e5 plus tard."],
+    "whatYouWillLearn": ["Jouer sans copier le centre blanc.", "Attendre le bon moment.", "Utiliser une grande diagonale.", "Gerer un espace inferieur."],
+    "pieceMissions": [
+      { "piece": "Fou f8", "mission": "Aller en g7 pour viser le centre." },
+      { "piece": "Pion d7", "mission": "Aller en d6 pour stabiliser le setup." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["le fou g7 est actif", "le centre blanc est visible"],
+      "plans": ["attaquer le centre avec ...c5 ou ...e5", "roquer", "chercher du contre-jeu"]
+    }
+  },
+  {
+    "id": "alekhine_defense_learning",
+    "nameFr": "Defense Alekhine",
+    "nameEn": "Alekhine Defense",
+    "side": "black",
+    "against": ["e2e4"],
+    "tier": "situational",
+    "difficulty": "hard",
+    "style": ["provocation", "centre", "contre-attaque"],
+    "recommendedElo": [1200, 2400],
+    "mainLineUci": ["e2e4", "g8f6", "e4e5", "f6d5", "d2d4", "d7d6"],
+    "eco": ["B02", "B03", "B04", "B05"],
+    "shortHistory": "L'Alekhine provoque les pions blancs : le cavalier attaque e4, les blancs avancent souvent, puis les noirs cherchent a prouver que ce centre est trop etendu.",
+    "learningGoal": "Attirer les pions blancs vers l'avant, puis les attaquer avec ...d6, ...g6 ou ...c5 selon la structure.",
+    "beginnerGoal": "Provoquer l'avance du centre blanc et l'attaquer ensuite.",
+    "coreIdeas": ["Jouer ...Nf6 pour attaquer e4.", "Reculer le cavalier sans paniquer.", "Attaquer le centre avance avec ...d6.", "Ne pas perdre trop de tempos."],
+    "whatYouWillLearn": ["Provoquer un centre avance.", "Attaquer des pions trop loin.", "Gerer un cavalier chasse.", "Jouer une defense rare mais saine."],
+    "pieceMissions": [
+      { "piece": "Cavalier g8", "mission": "Aller en f6 pour provoquer e5." },
+      { "piece": "Pion d7", "mission": "Aller en d6 pour attaquer e5." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["le centre blanc a avance", "les noirs peuvent l'attaquer"],
+      "plans": ["jouer ...d6", "attaquer d4 ou e5", "developper sans perdre d'autres tempos"]
+    }
+  },
+  {
+    "id": "petroff_defense_learning",
+    "nameFr": "Defense Petrov",
+    "nameEn": "Petroff Defense",
+    "side": "black",
+    "against": ["e2e4"],
+    "tier": "good",
+    "difficulty": "medium",
+    "style": ["solide", "symetrique", "precision"],
+    "recommendedElo": [1000, 2600],
+    "mainLineUci": ["e2e4", "e7e5", "g1f3", "g8f6"],
+    "eco": ["C42", "C43"],
+    "shortHistory": "La Petrov est une reponse solide dans les parties ouvertes : apres ...e5, les noirs attaquent aussi le pion e4 avec ...Nf6 au lieu de defendre e5 par ...Nc6.",
+    "learningGoal": "Apprendre une defense tres saine contre 1.e4 : accepter une symetrie temporaire, echanger la tension au centre et developper sans faiblesse.",
+    "beginnerGoal": "Jouer une partie ouverte solide en attaquant e4 avec le cavalier.",
+    "coreIdeas": ["Jouer ...e5.", "Repondre a Nf3 par ...Nf6.", "Ne pas reprendre trop vite sans calculer.", "Developper et roquer."],
+    "whatYouWillLearn": ["Jouer une structure solide.", "Comprendre la symetrie.", "Eviter les pieges de la Petrov.", "Simplifier sans passivite."],
+    "pieceMissions": [
+      { "piece": "Cavalier g8", "mission": "Aller en f6 pour attaquer e4." },
+      { "piece": "Pion e7", "mission": "Aller en e5 pour contester le centre." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["la tension e4/e5 est clarifiee", "les cavaliers sont actifs"],
+      "plans": ["developper les fous", "roquer", "jouer une position solide sans subir"]
+    }
+  },
+  {
+    "id": "philidor_defense_learning",
+    "nameFr": "Defense Philidor",
+    "nameEn": "Philidor Defense",
+    "side": "black",
+    "against": ["e2e4"],
+    "tier": "situational",
+    "difficulty": "medium",
+    "style": ["solide", "compact", "defensif"],
+    "recommendedElo": [800, 2000],
+    "mainLineUci": ["e2e4", "e7e5", "g1f3", "d7d6"],
+    "eco": ["C41"],
+    "shortHistory": "La Philidor defend e5 avec ...d6. Elle est compacte et facile a comprendre, mais les noirs doivent eviter de rester trop passifs.",
+    "learningGoal": "Apprendre une defense simple apres ...e5 : soutenir le pion e5, developper les pieces, puis chercher ...Nf6 ou ...f5 selon la position.",
+    "beginnerGoal": "Construire une position compacte et developper sans affaiblir le centre.",
+    "coreIdeas": ["Jouer ...e5.", "Soutenir e5 avec ...d6.", "Developper le cavalier g8.", "Chercher de l'espace au bon moment."],
+    "whatYouWillLearn": ["Defendre un centre compact.", "Eviter la passivite.", "Developper dans peu d'espace.", "Choisir le bon moment pour liberer la position."],
+    "pieceMissions": [
+      { "piece": "Pion d7", "mission": "Aller en d6 pour soutenir e5." },
+      { "piece": "Cavalier g8", "mission": "Aller en f6 pour attaquer e4." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["e5 est soutenu", "les pieces noires commencent a sortir"],
+      "plans": ["developper le fou", "roquer", "chercher ...f5 ou ...Nf6 sans affaiblir le roi"]
     }
   }
 ]

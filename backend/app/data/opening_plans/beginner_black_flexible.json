@@ -1,0 +1,137 @@
+[
+  {
+    "id": "black_flexible_d5_classical",
+    "nameFr": "Reponse classique d5",
+    "nameEn": "Classical ...d5 setup",
+    "side": "black",
+    "against": ["g1f3", "c2c4", "any"],
+    "tier": "recommended",
+    "difficulty": "easy",
+    "style": ["classique", "centre", "simple"],
+    "recommendedElo": [600, 2200],
+    "mainLineUci": ["g1f3", "d7d5", "d2d4", "g8f6", "c2c4", "e7e6"],
+    "eco": ["A05", "D02"],
+    "shortHistory": "La reponse classique ...d5 est le plan de secours le plus clair contre les premiers coups flexibles : les noirs prennent du centre et developpent normalement.",
+    "learningGoal": "Repondre aux debuts souples comme 1.Nf3 ou 1.c4 en occupant le centre avec ...d5, puis developper ...Nf6 et ...e6.",
+    "beginnerGoal": "Prendre le centre sans chercher une transposition compliquee.",
+    "coreIdeas": ["Jouer ...d5 pour occuper le centre.", "Developper le cavalier g8 en f6.", "Soutenir avec ...e6.", "Roquer rapidement."],
+    "whatYouWillLearn": ["Repondre aux coups flexibles.", "Construire un centre simple.", "Eviter les transpositions confuses.", "Rejoindre un milieu de partie sain."],
+    "pieceMissions": [
+      { "piece": "Pion d7", "mission": "Aller en d5 pour prendre du centre." },
+      { "piece": "Cavalier g8", "mission": "Aller en f6 pour controler e4 et d5." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["...d5 est installe", "les pieces noires sont developpees"],
+      "plans": ["soutenir le centre", "developper le fou f8", "roquer"]
+    }
+  },
+  {
+    "id": "english_e5_response",
+    "nameFr": "Anglaise : reponse e5",
+    "nameEn": "English Opening: ...e5 response",
+    "side": "black",
+    "against": ["c2c4"],
+    "tier": "recommended",
+    "difficulty": "medium",
+    "style": ["centre", "actif", "reversed sicilian"],
+    "recommendedElo": [800, 2400],
+    "mainLineUci": ["c2c4", "e7e5", "b1c3", "g8f6", "g2g3", "d7d5"],
+    "eco": ["A20", "A25"],
+    "shortHistory": "Contre 1.c4, ...e5 prend le centre et transforme souvent la position en Sicilienne avec les couleurs inversees.",
+    "learningGoal": "Repondre a l'Anglaise en occupant le centre avec ...e5, puis developper ...Nf6 et preparer ...d5 si les blancs laissent faire.",
+    "beginnerGoal": "Prendre le centre contre 1.c4 au lieu de laisser les blancs choisir seuls la structure.",
+    "coreIdeas": ["Jouer ...e5.", "Developper le cavalier g8 en f6.", "Preparer ...d5 si possible.", "Roquer vite."],
+    "whatYouWillLearn": ["Repondre a l'Anglaise activement.", "Jouer une structure de Sicilienne inversee.", "Controler d4.", "Ne pas laisser les blancs installer tout leur setup."],
+    "pieceMissions": [
+      { "piece": "Pion e7", "mission": "Aller en e5 pour prendre le centre." },
+      { "piece": "Cavalier g8", "mission": "Aller en f6 pour controler d5 et e4." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["...e5 est installe", "les pieces noires sortent"],
+      "plans": ["jouer ...d5 si possible", "developper le fou f8", "surveiller la case d5"]
+    }
+  },
+  {
+    "id": "symmetrical_english_response",
+    "nameFr": "Anglaise symetrique",
+    "nameEn": "Symmetrical English",
+    "side": "black",
+    "against": ["c2c4"],
+    "tier": "good",
+    "difficulty": "medium",
+    "style": ["symetrique", "positionnel", "aile dame"],
+    "recommendedElo": [900, 2400],
+    "mainLineUci": ["c2c4", "c7c5", "g1f3", "g8f6", "b1c3", "b8c6"],
+    "eco": ["A30", "A33"],
+    "shortHistory": "L'Anglaise symetrique repond a c4 par ...c5. Les noirs ne cherchent pas a refuter le plan blanc, ils contestent les memes cases.",
+    "learningGoal": "Jouer ...c5 pour controler d4, developper les cavaliers et garder une structure flexible sur l'aile dame.",
+    "beginnerGoal": "Repondre a l'aile dame blanche par une structure miroir solide.",
+    "coreIdeas": ["Jouer ...c5.", "Developper les cavaliers.", "Controler d4.", "Choisir ensuite ...d5 ou ...g6 selon la position."],
+    "whatYouWillLearn": ["Jouer les positions symetriques.", "Controler d4.", "Rester flexible.", "Eviter de copier sans plan."],
+    "pieceMissions": [
+      { "piece": "Pion c7", "mission": "Aller en c5 pour controler d4." },
+      { "piece": "Cavalier b8", "mission": "Aller en c6 pour soutenir d4 et e5." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["les pions c se font face", "les cavaliers sont developpes"],
+      "plans": ["preparer ...d5", "jouer sur la colonne c", "controler les cases centrales"]
+    }
+  },
+  {
+    "id": "black_fianchetto_universal",
+    "nameFr": "Setup fianchetto noir",
+    "nameEn": "Black fianchetto setup",
+    "side": "black",
+    "against": ["g1f3", "c2c4", "any"],
+    "tier": "good",
+    "difficulty": "medium",
+    "style": ["setup", "flexible", "fianchetto"],
+    "recommendedElo": [800, 2300],
+    "mainLineUci": ["g1f3", "g8f6", "g2g3", "g7g6", "f1g2", "f8g7"],
+    "eco": ["A05", "A15"],
+    "shortHistory": "Le setup fianchetto noir repond aux debuts souples en developpant le fou en g7 et en attendant de voir comment les blancs prennent le centre.",
+    "learningGoal": "Developper ...Nf6, ...g6 et ...Bg7 pour garder une reponse flexible contre 1.Nf3, 1.c4 ou d'autres premiers coups calmes.",
+    "beginnerGoal": "Construire une position souple et attaquer le centre plus tard.",
+    "coreIdeas": ["Developper ...Nf6.", "Jouer ...g6.", "Mettre le fou en g7.", "Choisir ...d5, ...c5 ou ...e5 selon le centre blanc."],
+    "whatYouWillLearn": ["Jouer un setup universel.", "Lire le centre adverse.", "Utiliser un fou en g7.", "Eviter de choisir trop tot une structure rigide."],
+    "pieceMissions": [
+      { "piece": "Cavalier g8", "mission": "Aller en f6 pour controler e4." },
+      { "piece": "Fou f8", "mission": "Aller en g7 pour viser le centre." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["le fou g7 est actif", "les blancs ont montre leur centre"],
+      "plans": ["frapper le centre avec ...d5, ...c5 ou ...e5", "roquer", "chercher du contre-jeu"]
+    }
+  },
+  {
+    "id": "black_e6_flexible",
+    "nameFr": "Setup e6 flexible",
+    "nameEn": "Flexible ...e6 setup",
+    "side": "black",
+    "against": ["g1f3", "c2c4", "any"],
+    "tier": "good",
+    "difficulty": "easy",
+    "style": ["solide", "transposition", "structure"],
+    "recommendedElo": [700, 2200],
+    "mainLineUci": ["g1f3", "g8f6", "d2d4", "e7e6", "c2c4", "d7d5"],
+    "eco": ["A04", "D30", "E10"],
+    "shortHistory": "Le setup ...e6 flexible garde plusieurs portes ouvertes : defense dame-pion, Nimzo-Indienne, Indienne de la dame ou structure solide selon les coups blancs.",
+    "learningGoal": "Repondre aux debuts flexibles par ...Nf6 et ...e6, puis choisir ...d5, ...Bb4 ou ...b6 selon la structure blanche.",
+    "beginnerGoal": "Construire une position solide sans se tromper de famille d'ouverture.",
+    "coreIdeas": ["Jouer ...Nf6.", "Jouer ...e6.", "Observer si les blancs jouent c4 et Nc3.", "Choisir ...d5, ...Bb4 ou ...b6."],
+    "whatYouWillLearn": ["Gerer les transpositions.", "Garder une structure solide.", "Choisir un plan apres les coups blancs.", "Eviter les reponses automatiques."],
+    "pieceMissions": [
+      { "piece": "Pion e7", "mission": "Aller en e6 pour soutenir le centre et liberer le fou f8." },
+      { "piece": "Cavalier g8", "mission": "Aller en f6 pour controler e4." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["...e6 et ...Nf6 sont joues", "la structure blanche est claire"],
+      "plans": ["transposer vers QGD", "jouer ...Bb4 si Nc3 est possible", "jouer ...b6 si le fou c8 doit etre actif"]
+    }
+  }
+]

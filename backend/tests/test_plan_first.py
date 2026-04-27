@@ -169,7 +169,7 @@ def test_opening_success_after_main_line(monkeypatch) -> None:
 
 def test_opening_data_main_menu_is_pedagogical() -> None:
     plans = list_available_plans()
-    assert 18 <= len(plans) <= 24
+    assert 32 <= len(plans) <= 40
     assert all(plan["tier"] != "hidden" for plan in plans)
     for plan in plans:
         assert plan["id"]
@@ -197,7 +197,10 @@ def test_black_plan_menu_filters_after_e4() -> None:
     assert "french_defense_beginner" in plan_ids
     assert "scandinavian_simple" in plan_ids
     assert "sicilian_dragon_simplified" in plan_ids
+    assert "pirc_defense_learning" in plan_ids
+    assert "alekhine_defense_learning" in plan_ids
     assert "qgd_simplified" not in plan_ids
+    assert "black_flexible_d5_classical" not in plan_ids
 
 
 def test_black_plan_menu_filters_after_d4() -> None:
@@ -206,7 +209,21 @@ def test_black_plan_menu_filters_after_d4() -> None:
     assert "qgd_simplified" in plan_ids
     assert "slav_beginner" in plan_ids
     assert "kings_indian_setup" in plan_ids
+    assert "nimzo_indian_simplified" in plan_ids
+    assert "grunfeld_simplified" in plan_ids
     assert "caro_kann_beginner" not in plan_ids
+
+
+def test_black_plan_menu_filters_after_flexible_first_moves() -> None:
+    after_nf3 = {plan["id"] for plan in list_available_plans(side="black", first_move="g1f3")}
+    assert "black_flexible_d5_classical" in after_nf3
+    assert "black_fianchetto_universal" in after_nf3
+    assert "caro_kann_beginner" not in after_nf3
+
+    after_c4 = {plan["id"] for plan in list_available_plans(side="black", first_move="c2c4")}
+    assert "english_e5_response" in after_c4
+    assert "symmetrical_english_response" in after_c4
+    assert "caro_kann_beginner" not in after_c4
 
 
 def test_phase_detector_detects_simple_endgame() -> None:
