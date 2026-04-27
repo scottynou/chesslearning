@@ -7,7 +7,6 @@ import { GameControls } from "@/components/GameControls";
 import { GlossaryPanel } from "@/components/GlossaryPanel";
 import { LastMoveReviewPanel } from "@/components/LastMoveReviewPanel";
 import { MoveHistory } from "@/components/MoveHistory";
-import { OpeningMiniBoard } from "@/components/OpeningMiniBoard";
 import { OpeningRepertoirePanel } from "@/components/OpeningRepertoirePanel";
 import { PlanFirstPanel } from "@/components/PlanFirstPanel";
 import { SideSelectionPanel } from "@/components/SideSelectionPanel";
@@ -75,6 +74,7 @@ export default function HomePage() {
   const [botThinking, setBotThinking] = useState(false);
   const [botError, setBotError] = useState<string | null>(null);
   const [highlightedMove, setHighlightedMove] = useState<{ from: string; to: string } | null>(null);
+  const [highlightedRecommendationUci, setHighlightedRecommendationUci] = useState<string | null>(null);
   const [botStrategyState, setBotStrategyState] = useState<Record<string, unknown>>({});
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -86,8 +86,16 @@ export default function HomePage() {
   const selectedPlan = useMemo(() => {
     return plans.find((plan) => plan.id === selectedPlanId) ?? (planRecommendations?.selectedPlan as StrategyPlan | null) ?? null;
   }, [plans, planRecommendations?.selectedPlan, selectedPlanId]);
-  const previewPlan = selectedPlan ?? plans[0] ?? null;
   const boardLocked = appStage === "black-plan-selection" || appStage === "white-plan-selection" || appStage === "side-selection";
+
+  useEffect(() => {
+    const primaryUci = planRecommendations?.primaryMove?.moveUci;
+    if (appStage !== "coach" || !primaryUci) {
+      return;
+    }
+    setHighlightedRecommendationUci(primaryUci);
+    setHighlightedMove({ from: primaryUci.slice(0, 2), to: primaryUci.slice(2, 4) });
+  }, [appStage, planRecommendations?.primaryMove?.moveUci]);
 
   useEffect(() => {
     function updateBoardWidth() {
@@ -204,6 +212,7 @@ export default function HomePage() {
       setPendingPromotion(null);
       setBotError(null);
       setHighlightedMove({ from, to });
+      setHighlightedRecommendationUci(null);
       rememberMoveForReview(fenBefore, result.game.fen(), moveUci, ply, source);
 
       if (appStage === "black-first-move" && history.length === 0 && source === "manual") {
@@ -274,6 +283,7 @@ export default function HomePage() {
         setBotStrategyState(response.updatedStrategyState);
         setGame(result.game);
         setHighlightedMove({ from, to });
+        setHighlightedRecommendationUci(null);
         rememberMoveForReview(fenBefore, result.game.fen(), response.move.moveUci, ply, "bot");
       })
       .catch((error: Error) => setBotError(error.message || "Le bot n'a pas pu jouer."))
@@ -354,6 +364,7 @@ export default function HomePage() {
       setLastMoveForReview(null);
       setPlanRecommendations(null);
       setHighlightedMove(null);
+      setHighlightedRecommendationUci(null);
       setLastMessage(null);
       setMenuOpen(false);
       if (plan?.side === "black") {
@@ -368,9 +379,15 @@ export default function HomePage() {
     [plans, userSide]
   );
 
-  const handlePlanRecommendationSelect = useCallback((recommendation: PlanRecommendation) => {
+  const handlePlanRecommendationToggle = useCallback((recommendation: PlanRecommendation) => {
+    if (highlightedRecommendationUci === recommendation.moveUci) {
+      setHighlightedRecommendationUci(null);
+      setHighlightedMove(null);
+      return;
+    }
+    setHighlightedRecommendationUci(recommendation.moveUci);
     setHighlightedMove({ from: recommendation.moveUci.slice(0, 2), to: recommendation.moveUci.slice(2, 4) });
-  }, []);
+  }, [highlightedRecommendationUci]);
 
   const reviewStoredMove = useCallback(
     (move: LastMoveForReview) => {
@@ -392,6 +409,7 @@ export default function HomePage() {
     setSelectedSquare(null);
     setPendingPromotion(null);
     setHighlightedMove(null);
+    setHighlightedRecommendationUci(null);
     setReviewsByPly({});
     setLastReview(null);
     setLastMoveForReview(null);
@@ -412,6 +430,7 @@ export default function HomePage() {
     setGame(next);
     setSelectedSquare(null);
     setHighlightedMove(null);
+    setHighlightedRecommendationUci(null);
     setLastMessage(null);
     setLastMoveForReview(null);
     if (userSide === "black" && nextHistory.length === 0) {
@@ -449,6 +468,7 @@ export default function HomePage() {
   function handleHistoryClick(ply: number, move: Move) {
     const review = reviewsByPly[ply];
     setHighlightedMove({ from: move.from, to: move.to });
+    setHighlightedRecommendationUci(null);
     if (review) {
       setLastReview(review);
       setMenuOpen(true);
@@ -477,7 +497,7 @@ export default function HomePage() {
 
   if (appStage === "black-first-move") {
     return (
-      <main className="mx-auto grid min-h-screen w-full max-w-7xl gap-5 px-4 py-4 md:px-6 lg:grid-cols-[minmax(0,600px)_minmax(0,1fr)] lg:py-6">
+      <main className="mx-auto grid min-h-screen w-full max-w-[1800px] gap-5 px-4 py-4 md:px-6 lg:grid-cols-[minmax(0,600px)_minmax(0,1fr)] lg:py-6">
         <section className="grid content-start gap-4">
           <Header status={status} menuOpen={menuOpen} setMenuOpen={setMenuOpen} changePlan={changePlan} />
           <ChessCoachBoard
@@ -506,7 +526,7 @@ export default function HomePage() {
   if (appStage === "white-plan-selection" || appStage === "black-plan-selection") {
     const isBlack = appStage === "black-plan-selection";
     return (
-      <main className="mx-auto grid min-h-screen w-full max-w-7xl gap-5 px-4 py-4 md:px-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:py-6">
+      <main className="mx-auto min-h-screen w-full max-w-[1800px] px-4 py-4 md:px-8 lg:py-8">
         <section className="grid content-start gap-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <button type="button" onClick={changePlan} className="rounded border border-line bg-white px-3 py-2 text-sm font-semibold text-night">
@@ -536,20 +556,12 @@ export default function HomePage() {
             intro={isBlack ? "Ces plans sont filtres selon le premier coup blanc. Le plan choisi restera verrouille, puis le coach adaptera seulement les prochains coups." : "Choisis une ouverture blanche. Ensuite, le coach t'aide a atteindre le milieu de partie avec un plan clair."}
           />
         </section>
-        <aside className="panel self-start">
-          <p className="text-xs font-semibold uppercase text-clay">Apercu</p>
-          <h2 className="mt-1 text-xl font-semibold text-night">{previewPlan?.nameFr ?? "Plan guide"}</h2>
-          <p className="mt-2 text-sm leading-6 text-neutral-700">{previewPlan?.shortHistory ?? "Les plans sont classes par difficulte et objectif pedagogique."}</p>
-          <div className="mt-4 max-w-64">
-            <OpeningMiniBoard fen={previewPlan?.miniBoardFen} />
-          </div>
-        </aside>
       </main>
     );
   }
 
   return (
-    <main className="mx-auto grid min-h-screen w-full max-w-7xl gap-5 px-4 py-4 md:px-6 lg:grid-cols-[minmax(0,600px)_minmax(0,1fr)] lg:py-6">
+    <main className="mx-auto grid min-h-screen w-full max-w-[1800px] gap-5 px-4 py-4 md:px-6 lg:grid-cols-[minmax(0,600px)_minmax(0,1fr)] lg:py-6">
       <section className="grid content-start gap-4">
         <Header status={status} menuOpen={menuOpen} setMenuOpen={setMenuOpen} changePlan={changePlan} />
 
@@ -605,7 +617,8 @@ export default function HomePage() {
           recommendations={planRecommendations}
           loading={planLoading}
           error={planError}
-          onSelectRecommendation={handlePlanRecommendationSelect}
+          highlightedMoveUci={highlightedRecommendationUci}
+          onToggleRecommendation={handlePlanRecommendationToggle}
         />
 
         {menuOpen ? (

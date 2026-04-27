@@ -193,7 +193,7 @@ def phase_coach(fen: str, phase: str) -> dict[str, Any]:
         }
     return {
         "phase": "Ouverture",
-        "mainGoal": "Suivre le plan choisi sans ignorer les menaces tactiques.",
+        "mainGoal": "Construire le plan choisi avec des coups simples et coherents.",
         "currentPriorities": fallback_goals("opening"),
         "candidatePlans": [],
     }
@@ -311,7 +311,7 @@ def current_objective_for(plan: dict[str, Any] | None, phase: str, primary_move:
 
 def last_event_for(move_history: list[str]) -> str:
     if not move_history:
-        return "La partie n'a pas encore commence. Choisis le premier objectif du plan."
+        return "La partie commence. Le premier coup sert a installer ton plan."
     board = chess.Board()
     for move_uci in move_history[:-1]:
         try:
@@ -339,13 +339,13 @@ def what_changed_for(
         return "L'ouverture a rempli assez de criteres : on peut passer au plan de milieu de partie."
     if deviation:
         if deviation.get("expected"):
-            return f"L'adversaire n'a pas suivi la ligne attendue. On garde {plan_name}, mais le prochain coup doit s'adapter a cette position."
-        return f"La ligne exacte de {plan_name} est terminee. On garde les idees du plan et on choisit un objectif concret."
+            return f"L'adversaire a choisi une autre reponse. On garde {plan_name}, mais le prochain coup change pour rester logique."
+        return f"La ligne exacte de {plan_name} est terminee. On garde ses idees principales et on choisit un objectif concret."
     if status == "on_plan":
         return f"Rien ne force a changer de direction : {plan_name} reste coherent."
     if primary_move and primary_move.get("warning"):
-        return "Le coup attendu demande de la prudence : Stockfish signale un risque tactique."
-    return "Le coach relie maintenant la position au plan choisi et verifie les coups surs."
+        return "Le coup attendu demande de la prudence : une menace concrete oblige a adapter le plan."
+    return "La position est reliee au plan choisi et les coups proposes restent prudents."
 
 
 def pedagogical_summary_for(coach_message: str, what_changed: str, next_objective: str) -> str:
@@ -361,7 +361,7 @@ def coach_message_for(plan: dict[str, Any] | None, status: str, phase_status: st
     if status == "transposed":
         return f"La position ressemble à une autre ouverture, mais ton plan reste verrouillé sur {plan_name}."
     if locked_plan:
-        return f"Tu suis {plan_name}. Le coach cherche le prochain coup du plan, puis vérifie avec Stockfish qu'il reste sain."
+        return f"Tu suis {plan_name}. Le coach cherche d'abord le coup qui construit cette ouverture."
     return explain_opening_status({"planName": plan_name, "status": status})
 
 

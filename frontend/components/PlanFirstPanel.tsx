@@ -7,7 +7,8 @@ type PlanFirstPanelProps = {
   recommendations?: PlanRecommendationsResponse | null;
   loading?: boolean;
   error?: string | null;
-  onSelectRecommendation: (recommendation: PlanRecommendation) => void;
+  highlightedMoveUci?: string | null;
+  onToggleRecommendation: (recommendation: PlanRecommendation) => void;
 };
 
 export function PlanFirstPanel({
@@ -15,7 +16,8 @@ export function PlanFirstPanel({
   recommendations,
   loading,
   error,
-  onSelectRecommendation
+  highlightedMoveUci,
+  onToggleRecommendation
 }: PlanFirstPanelProps) {
   const primary = recommendations?.primaryMove ?? recommendations?.planMoves[0] ?? recommendations?.mergedRecommendations[0] ?? null;
   const alternatives = recommendations?.adaptedAlternatives ?? [];
@@ -32,7 +34,7 @@ export function PlanFirstPanel({
             <h2 className="text-2xl font-semibold text-night">{planName}</h2>
             {recommendations ? <span className="rounded bg-night px-2 py-1 text-xs font-semibold text-white">{phaseLabel(recommendations.phase)}</span> : null}
           </div>
-          <p className="mt-2 text-sm leading-6 text-neutral-700">
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-700">
             {recommendations?.coachMessage ?? selectedPlan?.learningGoal ?? selectedPlan?.beginnerGoal ?? "Le coach relie les coups au plan choisi."}
           </p>
         </div>
@@ -42,7 +44,7 @@ export function PlanFirstPanel({
 
         {recommendations ? (
           <>
-            <div className="grid gap-3 rounded border border-line bg-stone-50 p-3">
+            <div className="grid gap-3 rounded-lg border border-line bg-stone-50 p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded bg-white px-2 py-1 text-xs font-semibold text-night">{phaseStatusLabel(recommendations.phaseStatus)}</span>
                 {typeof progress?.percent === "number" ? <span className="ml-auto text-sm font-semibold text-sage">{progress.percent}%</span> : null}
@@ -50,16 +52,22 @@ export function PlanFirstPanel({
               <div className="h-2 overflow-hidden rounded bg-white">
                 <div className="h-full rounded bg-sage" style={{ width: `${progress?.percent ?? 0}%` }} />
               </div>
-              <CoachFact title="Ce qui vient de se passer" value={recommendations.lastEvent || "La position est prete pour le plan."} />
-              <CoachFact title="Ce que cela change" value={recommendations.whatChanged || recommendations.coachMessage} />
-              <CoachFact title="Prochain objectif" value={recommendations.nextObjective || recommendations.currentObjective} />
+              <CoachFact title="Position" value={recommendations.lastEvent || "La partie est prete."} />
+              <CoachFact title="Lecture du plan" value={recommendations.whatChanged || recommendations.coachMessage} />
+              <CoachFact title="Objectif maintenant" value={recommendations.nextObjective || recommendations.currentObjective} />
             </div>
 
             {moves.length > 0 ? (
               <div className="grid gap-3">
-                <h3 className="text-sm font-semibold uppercase text-clay">Coups pour suivre ou adapter le plan</h3>
+                <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-clay">Prochain coup du plan</h3>
                 {moves.map((item, index) => (
-                  <RecommendationCard key={`${item.moveUci}-${index}`} item={item} primary={index === 0} onSelect={onSelectRecommendation} />
+                  <RecommendationCard
+                    key={`${item.moveUci}-${index}`}
+                    item={item}
+                    primary={index === 0}
+                    highlighted={highlightedMoveUci === item.moveUci}
+                    onToggle={onToggleRecommendation}
+                  />
                 ))}
               </div>
             ) : (
@@ -70,7 +78,7 @@ export function PlanFirstPanel({
 
             {recommendations.blockedExpectedMove ? (
               <div className="rounded border border-clay bg-orange-50 px-3 py-2 text-sm text-night">
-                Le coup attendu du plan est retenu : {recommendations.blockedExpectedMove.reason}
+                Un coup du plan est mis de cote : {recommendations.blockedExpectedMove.reason}
               </div>
             ) : null}
           </>
@@ -92,36 +100,38 @@ function CoachFact({ title, value }: { title: string; value: string }) {
 function RecommendationCard({
   item,
   primary,
-  onSelect
+  highlighted,
+  onToggle
 }: {
   item: PlanRecommendation;
   primary?: boolean;
-  onSelect: (item: PlanRecommendation) => void;
+  highlighted?: boolean;
+  onToggle: (item: PlanRecommendation) => void;
 }) {
   return (
-    <article className={primary ? "rounded border border-sage bg-white p-4 shadow-sm" : "rounded border border-line bg-white p-4"}>
+    <article className={primary ? "rounded-lg border border-sage bg-white p-4 shadow-sm" : "rounded-lg border border-line bg-white p-4"}>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded bg-night px-2 py-1 text-xs font-semibold text-white">{primary ? "Coup recommande" : "Alternative"}</span>
+        <span className="rounded bg-night px-2 py-1 text-xs font-semibold text-white">{primary ? "Coup du plan" : "Alternative"}</span>
         <span className="rounded bg-stone-100 px-2 py-1 text-xs font-semibold text-night">{complexityLabel(item.moveComplexity)}</span>
-        <span className="text-base font-semibold text-ink">{item.beginnerLabel}</span>
+        <span className="text-lg font-semibold text-ink">{item.beginnerLabel}</span>
       </div>
       <p className="mt-3 text-sm leading-6 text-neutral-700">
         {item.pedagogicalExplanation ?? `${item.purpose} ${item.planConnection}`}
       </p>
       {item.warning ? <p className="mt-2 text-sm font-semibold text-clay">{item.warning}</p> : null}
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => onSelect(item)} className="rounded border border-line bg-white px-3 py-2 text-sm font-semibold text-night hover:border-sage">
-          Voir sur l&apos;echiquier
+        <button type="button" onClick={() => onToggle(item)} className="rounded border border-line bg-white px-3 py-2 text-sm font-semibold text-night hover:border-sage">
+          {highlighted ? "Masquer la fleche" : "Afficher la fleche"}
         </button>
         <span className="text-sm text-neutral-600">Evaluation : {item.evalLabel}</span>
       </div>
       <details className="mt-3 rounded border border-line bg-stone-50 p-3">
-        <summary className="cursor-pointer text-sm font-semibold text-night">Plus de details</summary>
+        <summary className="cursor-pointer text-sm font-semibold text-night">Details avances</summary>
         <div className="mt-2 grid gap-1 text-sm text-neutral-700">
           <span>SAN : {item.moveSan}</span>
           <span>UCI : {item.moveUci}</span>
           <span>Source : {sourceLabel(item.source)}</span>
-          <span>Stockfish : {item.engineRank ? `#${item.engineRank}` : "hors top moteur"}</span>
+          <span>Rang moteur : {item.engineRank ? `#${item.engineRank}` : "hors liste"}</span>
           {item.candidate ? (
             <>
               <span>Eval brute : {item.candidate.evalCp ?? "mat"}</span>

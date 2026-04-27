@@ -65,16 +65,16 @@ const response: PlanRecommendationsResponse = {
 
 describe("PlanFirstPanel", () => {
   it("shows the educational explanation directly in the move card", () => {
-    render(<PlanFirstPanel recommendations={response} onSelectRecommendation={() => undefined} />);
-    expect(screen.getByText("Ce qui vient de se passer")).toBeTruthy();
+    render(<PlanFirstPanel recommendations={response} onToggleRecommendation={() => undefined} highlightedMoveUci="g8f6" />);
+    expect(screen.getByText("Position")).toBeTruthy();
     expect(screen.getByText("Joue Cavalier g8 -> f6. Le cavalier controle le centre et garde le plan lisible.")).toBeTruthy();
     expect(screen.queryByText("Comprendre ce coup")).toBeNull();
   });
 
   it("highlights a recommendation on demand without opening a separate explanation panel", () => {
     const onSelect = vi.fn();
-    render(<PlanFirstPanel recommendations={response} onSelectRecommendation={onSelect} />);
-    fireEvent.click(screen.getByText("Voir sur l'echiquier"));
+    render(<PlanFirstPanel recommendations={response} onToggleRecommendation={onSelect} highlightedMoveUci={null} />);
+    fireEvent.click(screen.getByText("Afficher la fleche"));
     expect(onSelect).toHaveBeenCalledWith(recommendation);
   });
 });

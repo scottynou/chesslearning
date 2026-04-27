@@ -96,11 +96,12 @@ cd backend
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-## Current V3 Features
+## Current V4 Features
 
-- Two-step UI: first choose an opening plan, then follow it in the coach.
+- The app starts with a clear choice: play White, play Black, or use free mode.
+- White chooses an opening plan before the game starts.
+- Black enters White's first move first, then receives adapted black plans.
 - The selected plan stays locked for the game; deviations adapt the next move instead of replacing the plan.
-- Three visible coach levels: Beginner, Intermediate and Pro.
 - The main UI shows one recommended plan move plus adapted alternatives only when useful.
 - Engine candidates are kept in advanced technical details, not in the primary learning flow.
 - Last-move review is on demand instead of automatic.
@@ -230,11 +231,18 @@ The project must not scrape Chess.com. Videos or informal material can inspire p
 
 - Simple two-state UI: opening gallery, then plan coach
 - Locked selected plan with deviation adaptation
-- Beginner / Intermediate / Pro levels
+- Internal pedagogical level instead of a visible Elo slider
 - Last-move review on demand
 - Docker backend with Stockfish for public hosting
 
 ### V4
+
+- White/Black first onboarding
+- Opening plans filtered after White's first move when playing Black
+- Minimal opening cards with expanded details on demand
+- Automatic arrow/highlight for the next recommended plan move
+
+### Future
 
 - Import `lichess-org/chess-openings`
 - Better transposition detection

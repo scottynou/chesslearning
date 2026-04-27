@@ -27,7 +27,7 @@ describe("OpeningRepertoirePanel", () => {
     render(<OpeningRepertoirePanel plans={[plan]} selectedPlanId={null} onSelect={() => undefined} />);
     expect(screen.getByText("Choisis ton plan")).toBeTruthy();
     expect(screen.getByText("Caro-Kann")).toBeTruthy();
-    expect(screen.getByText("Recommandee")).toBeTruthy();
-    expect(screen.getByText("Ce que tu vas apprendre")).toBeTruthy();
+    expect(screen.getByText("Intermediaire")).toBeTruthy();
+    expect(screen.getByText("Comprendre ce plan")).toBeTruthy();
   });
 });

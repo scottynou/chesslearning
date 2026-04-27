@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import clsx from "clsx";
 import { OpeningMiniBoard } from "@/components/OpeningMiniBoard";
 import type { StrategyPlan } from "@/lib/types";
@@ -18,50 +19,59 @@ export function OpeningRepertoirePanel({
   selectedPlanId,
   onSelect,
   title = "Choisis ton plan",
-  intro = "Chaque carte est un plan d'apprentissage. Une fois choisi, le coach garde ce fil conducteur et adapte seulement le prochain coup si l'adversaire devie.",
+  intro = "Clique une ouverture pour commencer. Ouvre le detail seulement si tu veux comprendre le plan avant de jouer.",
   emptyMessage = "Aucun plan disponible pour cette situation."
 }: OpeningRepertoirePanelProps) {
+  const [expandedPlanId, setExpandedPlanId] = useState<string | null>(null);
   const sortedPlans = [...plans].sort((a, b) => difficultyOrder(a.difficulty) - difficultyOrder(b.difficulty));
 
   return (
-    <section className="grid gap-4">
-      <div>
-        <p className="text-sm font-semibold uppercase text-clay">Repertoire guide</p>
-        <h2 className="text-2xl font-bold text-night">{title}</h2>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-700">{intro}</p>
+    <section className="grid gap-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-clay">Ouvertures</p>
+          <h2 className="mt-1 text-3xl font-semibold text-night md:text-4xl">{title}</h2>
+        </div>
+        <p className="max-w-xl text-sm leading-6 text-neutral-600">{intro}</p>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {sortedPlans.map((plan) => (
-          <button
-            key={plan.id}
-            type="button"
-            onClick={() => onSelect(plan.id)}
-            className={clsx(
-              "grid overflow-hidden rounded border bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:border-sage hover:shadow-md",
-              selectedPlanId === plan.id ? "border-clay" : "border-line"
-            )}
-          >
-            <OpeningVisual plan={plan} />
-            <div className="grid gap-3 p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-lg font-semibold text-night">{plan.nameFr}</span>
-                <span className="rounded bg-stone-100 px-2 py-1 text-xs text-neutral-700">{tierLabel(plan.tier)}</span>
-                <span className="rounded bg-stone-100 px-2 py-1 text-xs text-neutral-700">{difficultyLabel(plan.difficulty)}</span>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {sortedPlans.map((plan) => {
+          const expanded = expandedPlanId === plan.id;
+          return (
+            <article
+              key={plan.id}
+              className={clsx(
+                "overflow-hidden rounded-lg border bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-night hover:shadow-soft",
+                selectedPlanId === plan.id ? "border-clay" : "border-line"
+              )}
+            >
+              <button type="button" onClick={() => onSelect(plan.id)} className="block w-full text-left">
+                <OpeningVisual plan={plan} />
+                <div className="p-4">
+                  <h3 className="text-2xl font-semibold text-night">{plan.nameFr}</h3>
+                  <p className="mt-1 text-sm text-neutral-500">{difficultyLabel(plan.difficulty)}</p>
+                </div>
+              </button>
+
+              <div className="border-t border-line px-4 py-3">
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setExpandedPlanId(expanded ? null : plan.id);
+                  }}
+                  className="text-sm font-semibold text-night underline-offset-4 hover:underline"
+                  aria-expanded={expanded}
+                >
+                  {expanded ? "Masquer" : "Comprendre ce plan"}
+                </button>
               </div>
-              <p className="text-sm leading-6 text-neutral-700">{plan.learningGoal ?? plan.beginnerGoal}</p>
-              <div>
-                <p className="text-xs font-semibold uppercase text-clay">Ce que tu vas apprendre</p>
-                <ul className="mt-1 grid gap-1 text-sm text-neutral-700">
-                  {(plan.whatYouWillLearn ?? plan.coreIdeas).slice(0, 3).map((idea) => (
-                    <li key={idea}>- {idea}</li>
-                  ))}
-                </ul>
-              </div>
-              <p className="text-xs text-neutral-500">Style : {plan.style.join(", ")}</p>
-            </div>
-          </button>
-        ))}
+
+              {expanded ? <OpeningDetails plan={plan} /> : null}
+            </article>
+          );
+        })}
       </div>
 
       {sortedPlans.length === 0 ? <div className="panel text-sm text-neutral-700">{emptyMessage}</div> : null}
@@ -72,40 +82,70 @@ export function OpeningRepertoirePanel({
 function OpeningVisual({ plan }: { plan: StrategyPlan }) {
   if (plan.heroImage) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={plan.heroImage} alt="" className="h-36 w-full object-cover" />;
+    return <img src={plan.heroImage} alt="" className="aspect-[5/3] w-full object-cover" />;
   }
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_96px] items-center gap-3 bg-stone-50 p-4">
-      <div>
-        <p className="text-xs font-semibold uppercase text-clay">{sideLabel(plan.side)}</p>
-        <p className="mt-2 text-sm font-semibold text-night">{plan.shortHistory ?? plan.beginnerGoal}</p>
+    <div className="grid aspect-[5/3] place-items-center bg-[radial-gradient(circle_at_20%_20%,#ffffff_0,#f4efe7_38%,#dfd5c8_100%)] p-6">
+      <div className="w-44 max-w-[52%]">
+        <OpeningMiniBoard fen={plan.miniBoardFen} />
       </div>
-      <OpeningMiniBoard fen={plan.miniBoardFen} />
     </div>
   );
 }
 
-function sideLabel(side: StrategyPlan["side"]) {
-  return {
-    white: "Plan blancs",
-    black: "Plan noirs",
-    universal: "Plan universel"
-  }[side];
-}
+function OpeningDetails({ plan }: { plan: StrategyPlan }) {
+  return (
+    <div className="grid gap-4 border-t border-line bg-stone-50 p-4">
+      {plan.shortHistory ? (
+        <section>
+          <h4 className="text-sm font-semibold uppercase tracking-[0.14em] text-clay">En bref</h4>
+          <p className="mt-2 text-sm leading-6 text-neutral-700">{plan.shortHistory}</p>
+        </section>
+      ) : null}
 
-function tierLabel(tier: StrategyPlan["tier"]) {
-  return {
-    recommended: "Recommandee",
-    good: "Bonne option",
-    situational: "Situationnelle",
-    hidden: "Laboratoire"
-  }[tier];
+      <section>
+        <h4 className="text-sm font-semibold uppercase tracking-[0.14em] text-clay">Objectif</h4>
+        <p className="mt-2 text-sm leading-6 text-neutral-700">{plan.learningGoal ?? plan.beginnerGoal}</p>
+      </section>
+
+      <section>
+        <h4 className="text-sm font-semibold uppercase tracking-[0.14em] text-clay">Ce que tu vas apprendre</h4>
+        <ul className="mt-2 grid gap-2 text-sm leading-6 text-neutral-700">
+          {(plan.whatYouWillLearn ?? plan.coreIdeas).slice(0, 4).map((idea) => (
+            <li key={idea} className="rounded border border-line bg-white px-3 py-2">
+              {idea}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {plan.pieceMissions.length > 0 ? (
+        <section>
+          <h4 className="text-sm font-semibold uppercase tracking-[0.14em] text-clay">Pieces importantes</h4>
+          <div className="mt-2 grid gap-2">
+            {plan.pieceMissions.slice(0, 3).map((mission) => (
+              <p key={`${mission.piece}-${mission.mission}`} className="text-sm leading-6 text-neutral-700">
+                <span className="font-semibold text-night">{mission.piece}</span> : {mission.mission}
+              </p>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {plan.middlegamePlan && plan.middlegamePlan.length > 0 ? (
+        <section>
+          <h4 className="text-sm font-semibold uppercase tracking-[0.14em] text-clay">Apres ouverture</h4>
+          <p className="mt-2 text-sm leading-6 text-neutral-700">{plan.middlegamePlan.slice(0, 3).join(" - ")}</p>
+        </section>
+      ) : null}
+    </div>
+  );
 }
 
 function difficultyLabel(difficulty: StrategyPlan["difficulty"]) {
   return {
     easy: "Facile",
-    medium: "Moyenne",
+    medium: "Intermediaire",
     hard: "Difficile"
   }[difficulty];
 }

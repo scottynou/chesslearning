@@ -68,7 +68,7 @@ def merge_plan_and_engine_moves(
                 "beginnerSimplicityScore": simplicity,
                 "tacticalRisk": tactical_risk,
                 "finalCoachScore": final_score,
-                "evalLabel": evaluation_label(engine_candidate.eval_cp, engine_candidate.mate_in) if engine_candidate else "À vérifier avec le moteur",
+                "evalLabel": evaluation_label(engine_candidate.eval_cp, engine_candidate.mate_in) if engine_candidate else "A verifier avec le moteur",
                 "purpose": purpose,
                 "planConnection": connection,
                 "pedagogicalExplanation": pedagogical_explanation(
@@ -108,9 +108,9 @@ def plan_fit_score(plan_rank: int | None, plan_name: str | None) -> int:
 
 def safety_warning(engine_score: int, plan_rank: int | None) -> str | None:
     if plan_rank is not None and engine_score < 45:
-        return "Le plan choisi doit être adapté ici : ce coup semble trop risqué selon Stockfish."
+        return "Ce coup du plan est trop dangereux dans cette position. Il faut d'abord regler la menace."
     if plan_rank is not None and engine_score < 65:
-        return "Coup de plan possible, mais à vérifier : le moteur préfère une option plus sûre."
+        return "Ce coup reste possible, mais regarde d'abord si une piece est attaquee."
     return None
 
 
@@ -126,12 +126,12 @@ def source_label(plan_rank: int | None, engine_candidate: CandidateMove | None) 
 
 def purpose_for_move(piece_name: str, to_square: str) -> str:
     if piece_name == "Cavalier":
-        return f"Développer le cavalier vers {to_square} et contrôler des cases centrales."
+        return f"Le cavalier arrive en {to_square}, une case plus active d'ou il aide a controler le centre."
     if piece_name == "Pion" and to_square in {"c5", "d5", "e5", "c4", "d4", "e4"}:
-        return f"Utiliser le pion en {to_square} pour occuper ou attaquer le centre."
+        return f"Le pion va en {to_square} pour prendre de l'espace au centre et ouvrir le jeu des pieces."
     if piece_name == "Fou":
-        return f"Activer le fou vers {to_square} et préparer le roque."
-    return f"Améliorer {piece_name} vers {to_square}."
+        return f"Le fou va en {to_square}, devient actif et aide a preparer la securite du roi."
+    return f"{piece_name} va en {to_square} pour ameliorer sa place sans casser la structure."
 
 
 def move_complexity(simplicity: int, tactical_risk: int, source: str) -> str:
@@ -150,23 +150,20 @@ def pedagogical_explanation(
     warning: str | None,
     complexity: str,
 ) -> str:
-    base = (
-        f"Joue {beginner_label}. {purpose} {connection} "
-        "L'idee est de continuer ton plan sans ignorer ce que l'adversaire vient de changer."
-    )
+    base = f"Joue {beginner_label}. {purpose} {connection}"
     if warning:
         return f"{base} Attention : {warning}"
     if complexity == "simple":
-        return f"{base} C'est un coup simple : il ameliore la position et garde le plan lisible."
+        return f"{base} C'est un coup facile a jouer : il donne une position claire et prepare la suite de l'ouverture."
     if complexity == "moyen":
-        return f"{base} C'est un coup moyen : il reste logique, mais il faut regarder la reponse adverse."
-    return f"{base} C'est un coup complexe : il faut verifier la suite avant de le choisir."
+        return f"{base} C'est un coup logique, mais il demande de regarder ce que l'autre camp attaque ensuite."
+    return f"{base} C'est un coup plus exigeant : choisis-le seulement si tu comprends la reponse attendue."
 
 
 def plan_connection(plan_name: str | None, current_step_index: int, plan_rank: int | None) -> str:
     if not plan_name or plan_rank is None:
-        return "Ce coup suit un principe général : sécurité du roi, centre ou développement."
-    return f"Ce coup correspond à l'étape {current_step_index + plan_rank} du plan {plan_name}."
+        return "Il suit un principe simple : centre, pieces actives ou roi en securite."
+    return f"C'est l'etape {current_step_index + plan_rank} du plan {plan_name}."
 
 
 def _simplicity_from_line(board: chess.Board, move: chess.Move, engine_line: EngineLine | None) -> int:
