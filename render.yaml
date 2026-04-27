@@ -11,10 +11,19 @@ services:
       - key: STOCKFISH_PATH
         value: /usr/games/stockfish
       - key: FRONTEND_ORIGIN
-        value: https://your-vercel-domain.vercel.app
+        value: https://chess-elo-coach-web.onrender.com
       - key: FRONTEND_ORIGIN_REGEX
-        value: https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.vercel\.app
+        value: https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.vercel\.app|https://.*\.onrender\.com
       - key: RATE_LIMIT_WINDOW_SECONDS
         value: 60
       - key: RATE_LIMIT_PER_WINDOW
         value: 45
+  - type: web
+    name: chess-elo-coach-web
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build:live-server
+    staticPublishPath: out
+    envVars:
+      - key: NEXT_PUBLIC_API_BASE_URL
+        value: https://chess-elo-coach-api.onrender.com

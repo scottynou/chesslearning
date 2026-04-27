@@ -119,7 +119,7 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 Chosen simple setup:
 
-- Frontend: Vercel static Next.js export from `frontend/`.
+- Frontend: Render Static Site from `frontend/`.
 - Backend: Render Web Service using `backend/Dockerfile`.
 - Stockfish: installed inside the backend Docker image.
 - AI: keep `AI_PROVIDER=heuristic` for the public MVP to avoid API costs.
@@ -129,21 +129,21 @@ Follow the exact deployment runbook in [`DEPLOYMENT.md`](DEPLOYMENT.md).
 Frontend production env:
 
 ```env
-NEXT_PUBLIC_API_BASE_URL=https://your-backend-domain
+NEXT_PUBLIC_API_BASE_URL=https://chess-elo-coach-api.onrender.com
 ```
 
 Backend production env:
 
 ```env
 STOCKFISH_PATH=/usr/games/stockfish
-FRONTEND_ORIGIN=https://your-vercel-domain.vercel.app
-FRONTEND_ORIGIN_REGEX=https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.vercel\.app
+FRONTEND_ORIGIN=https://chess-elo-coach-web.onrender.com
+FRONTEND_ORIGIN_REGEX=https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.vercel\.app|https://.*\.onrender\.com
 AI_PROVIDER=heuristic
 RATE_LIMIT_WINDOW_SECONDS=60
 RATE_LIMIT_PER_WINDOW=45
 ```
 
-`render.yaml` is included. The default CORS regex accepts Vercel preview domains, then `FRONTEND_ORIGIN` can be tightened to the real domain after the first deployment.
+`render.yaml` creates both Render services. If Render assigns a different public URL, update `NEXT_PUBLIC_API_BASE_URL` and `FRONTEND_ORIGIN`.
 
 ## API Overview
 
