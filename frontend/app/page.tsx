@@ -1,7 +1,9 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chess, Move, Square } from "chess.js";
+import { Menu, X } from "lucide-react";
 import { ChessCoachBoard } from "@/components/ChessCoachBoard";
 import { GameControls } from "@/components/GameControls";
 import { GlossaryPanel } from "@/components/GlossaryPanel";
@@ -712,6 +714,11 @@ export default function HomePage() {
     navigateToSnapshot(createNavigationSnapshot());
   }
 
+  function goHome() {
+    setMenuOpen(false);
+    changePlan();
+  }
+
   async function copyText(value: string, label: string) {
     await navigator.clipboard.writeText(value);
     setLastMessage(`${label} copie.`);
@@ -739,8 +746,44 @@ export default function HomePage() {
     }
   }
 
+  const renderShell = (content: ReactNode) => (
+    <>
+      <SiteHeader status={appStage === "side-selection" ? null : status} menuOpen={menuOpen} onHome={goHome} onToggleMenu={() => setMenuOpen((open) => !open)} />
+      {menuOpen ? (
+        <SiteMenu status={status} onHome={goHome} onClose={() => setMenuOpen(false)}>
+          {appStage === "side-selection" ? (
+            <HomeMenuContent />
+          ) : (
+            <CoachUtilityMenu
+              orientation={orientation}
+              setOrientation={setOrientation}
+              mode={mode}
+              setMode={setMode}
+              undo={undo}
+              reset={reset}
+              copyFen={() => copyText(fen, "FEN")}
+              copyPgn={() => copyText(pgn || "*", "PGN")}
+              lastMoveForReview={lastMoveForReview}
+              reviewStoredMove={reviewStoredMove}
+              reviewLoading={reviewLoading}
+              reviewError={reviewError}
+              lastReview={lastReview}
+              history={history}
+              reviewsByPly={reviewsByPly}
+              handleHistoryClick={handleHistoryClick}
+              fen={fen}
+              pgn={pgn}
+              historyUci={historyUci}
+            />
+          )}
+        </SiteMenu>
+      ) : null}
+      {content}
+    </>
+  );
+
   if (appStage === "side-selection") {
-    return (
+    return renderShell(
       <main>
         <SideSelectionPanel onChooseWhite={startWhiteFlow} onChooseBlack={startBlackFlow} onChooseFreeMode={startFreeMode} />
       </main>
@@ -748,10 +791,9 @@ export default function HomePage() {
   }
 
   if (appStage === "black-first-move") {
-    return (
+    return renderShell(
       <main className="mx-auto grid min-h-screen w-full max-w-[1800px] gap-5 px-4 py-4 md:px-6 lg:grid-cols-[minmax(0,600px)_minmax(0,1fr)] lg:py-6">
         <section className="grid content-start gap-4">
-          <Header status={status} menuOpen={menuOpen} setMenuOpen={setMenuOpen} changePlan={changePlan} />
           <ChessCoachBoard
             fen={fen}
             boardWidth={boardWidth}
@@ -777,7 +819,7 @@ export default function HomePage() {
 
   if (appStage === "white-plan-selection" || appStage === "black-plan-selection") {
     const isBlack = appStage === "black-plan-selection";
-    return (
+    return renderShell(
       <main className="mx-auto min-h-screen w-full max-w-[1800px] px-4 py-4 md:px-8 lg:py-8">
         <section className="grid content-start gap-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -815,7 +857,7 @@ export default function HomePage() {
   }
 
   if (appStage === "plan-intro") {
-    return (
+    return renderShell(
       <main className="mx-auto grid min-h-screen w-full max-w-[1600px] place-items-center px-4 py-8 md:px-8">
         <PlanIntroScreen
           plan={selectedPlan}
@@ -830,11 +872,9 @@ export default function HomePage() {
     );
   }
 
-  return (
+  return renderShell(
     <main className="mx-auto grid min-h-screen w-full max-w-[1800px] gap-5 px-4 py-4 md:px-6 lg:grid-cols-[minmax(0,600px)_minmax(0,1fr)] lg:py-6">
       <section className="grid content-start gap-4">
-        <Header status={status} menuOpen={menuOpen} setMenuOpen={setMenuOpen} changePlan={changePlan} />
-
         <ChessCoachBoard
           fen={fen}
           boardWidth={boardWidth}
@@ -891,62 +931,87 @@ export default function HomePage() {
           expectedReplyLabel={expectedReplyLabel}
           onToggleRecommendation={handlePlanRecommendationToggle}
         />
-
-        {menuOpen ? (
-          <CoachUtilityMenu
-            orientation={orientation}
-            setOrientation={setOrientation}
-            mode={mode}
-            setMode={setMode}
-            undo={undo}
-            reset={reset}
-            copyFen={() => copyText(fen, "FEN")}
-            copyPgn={() => copyText(pgn || "*", "PGN")}
-            lastMoveForReview={lastMoveForReview}
-            reviewStoredMove={reviewStoredMove}
-            reviewLoading={reviewLoading}
-            reviewError={reviewError}
-            lastReview={lastReview}
-            history={history}
-            reviewsByPly={reviewsByPly}
-            handleHistoryClick={handleHistoryClick}
-            fen={fen}
-            pgn={pgn}
-            historyUci={historyUci}
-          />
-        ) : null}
       </section>
     </main>
   );
 }
 
-function Header({
+function SiteHeader({
   status,
   menuOpen,
-  setMenuOpen,
-  changePlan
+  onHome,
+  onToggleMenu
 }: {
-  status: string;
+  status: string | null;
   menuOpen: boolean;
-  setMenuOpen: (value: boolean) => void;
-  changePlan: () => void;
+  onHome: () => void;
+  onToggleMenu: () => void;
 }) {
   return (
-    <header className="flex flex-wrap items-end justify-between gap-3">
-      <div>
-        <p className="text-sm font-semibold uppercase text-clay">Chess Learning</p>
-        <h1 className="text-3xl font-bold text-ink sm:text-4xl">Coach de plan</h1>
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="rounded border border-line bg-white px-3 py-2 text-sm font-semibold text-night shadow-sm">{status}</span>
-        <button type="button" onClick={() => setMenuOpen(!menuOpen)} className="rounded border border-line bg-white px-3 py-2 text-sm font-semibold text-night">
-          Menu
+    <header className="site-header">
+      <div className="site-header-inner">
+        <button type="button" onClick={onHome} className="site-brand" aria-label="Retour a l'accueil Chess Learning">
+          <span className="site-brand-mark">CL</span>
+          <span className="site-brand-text">Chess Learning</span>
         </button>
-        <button type="button" onClick={changePlan} className="rounded border border-line bg-white px-3 py-2 text-sm font-semibold text-night">
-          Changer de plan
-        </button>
+        <div className="site-header-actions">
+          {status ? <span className="site-status">{status}</span> : null}
+          <button type="button" onClick={onToggleMenu} className="site-menu-button" aria-label={menuOpen ? "Fermer le menu" : "Ouvrir le menu"} aria-expanded={menuOpen}>
+            {menuOpen ? <X size={20} strokeWidth={2.1} /> : <Menu size={20} strokeWidth={2.1} />}
+          </button>
+        </div>
       </div>
     </header>
+  );
+}
+
+function SiteMenu({ status, onHome, onClose, children }: { status: string; onHome: () => void; onClose: () => void; children: ReactNode }) {
+  return (
+    <div className="site-menu-layer">
+      <button type="button" className="site-menu-backdrop" aria-label="Fermer le menu" onClick={onClose} />
+      <aside className="site-menu-popover" aria-label="Menu Chess Learning">
+        <div className="site-menu-head">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-clay">Menu</p>
+            <h2 className="text-xl font-semibold text-night">Chess Learning</h2>
+          </div>
+          <button type="button" onClick={onClose} className="site-menu-close" aria-label="Fermer le menu">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="grid gap-2">
+          <button type="button" onClick={onHome} className="site-menu-row">
+            Accueil
+          </button>
+          <div className="rounded border border-line bg-stone-50 px-3 py-2 text-sm font-semibold text-neutral-700">{status}</div>
+        </div>
+
+        {children}
+      </aside>
+    </div>
+  );
+}
+
+function HomeMenuContent() {
+  return (
+    <div className="grid gap-4">
+      <details open className="site-menu-details">
+        <summary>Glossaire</summary>
+        <div className="mt-3">
+          <GlossaryPanel compact />
+        </div>
+      </details>
+
+      <details className="site-menu-details">
+        <summary>Comment l&apos;utiliser</summary>
+        <div className="mt-3 grid gap-2 text-sm leading-6 text-neutral-700">
+          <p>Choisis d&apos;abord ton camp, puis une ouverture. Le coach t&apos;aide ensuite a suivre ce plan sur l&apos;echiquier interne.</p>
+          <p>Avec les noirs, joue d&apos;abord le premier coup blanc pour obtenir des reponses coherentes.</p>
+          <p>Les details moteur restent caches pour garder l&apos;interface lisible.</p>
+        </div>
+      </details>
+    </div>
   );
 }
 
@@ -1117,10 +1182,9 @@ function CoachUtilityMenu({
   historyUci: string[];
 }) {
   return (
-    <aside className="panel">
-      <h2 className="panel-title">Menu</h2>
+    <div className="grid gap-4">
       <div className="grid gap-4">
-        <details open>
+        <details open className="site-menu-details">
           <summary className="cursor-pointer text-sm font-semibold text-night">Comprendre un coup</summary>
           <div className="mt-3 grid gap-3">
             <button
@@ -1135,7 +1199,7 @@ function CoachUtilityMenu({
           </div>
         </details>
 
-        <details>
+        <details className="site-menu-details">
           <summary className="cursor-pointer text-sm font-semibold text-night">Commandes et reglages</summary>
           <div className="mt-3">
             <GameControls
@@ -1151,21 +1215,21 @@ function CoachUtilityMenu({
           </div>
         </details>
 
-        <details>
+        <details className="site-menu-details">
           <summary className="cursor-pointer text-sm font-semibold text-night">Historique</summary>
           <div className="mt-3">
             <MoveHistory moves={history} reviews={reviewsByPly} onMoveClick={handleHistoryClick} />
           </div>
         </details>
 
-        <details>
+        <details className="site-menu-details">
           <summary className="cursor-pointer text-sm font-semibold text-night">Glossaire</summary>
           <div className="mt-3">
-            <GlossaryPanel />
+            <GlossaryPanel compact />
           </div>
         </details>
 
-        <details>
+        <details className="site-menu-details">
           <summary className="cursor-pointer text-sm font-semibold text-night">Details techniques</summary>
           <div className="mt-3 grid gap-2 break-words text-sm text-neutral-700">
             <p>FEN : {fen}</p>
@@ -1174,6 +1238,6 @@ function CoachUtilityMenu({
           </div>
         </details>
       </div>
-    </aside>
+    </div>
   );
 }
