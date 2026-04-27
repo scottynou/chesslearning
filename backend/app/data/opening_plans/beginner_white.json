@@ -7,84 +7,182 @@
     "against": ["e7e5"],
     "tier": "recommended",
     "difficulty": "easy",
-    "style": ["classique", "développement", "roi en sécurité"],
-    "recommendedElo": [600, 1800],
+    "style": ["classique", "developpement", "roi en securite"],
+    "recommendedElo": [600, 1900],
     "mainLineUci": ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4"],
     "eco": ["C50", "C53", "C54"],
-    "beginnerGoal": "Développer vite les pièces, contrôler le centre et préparer le roque.",
+    "shortHistory": "La Partie italienne est l'ecole classique des echecs ouverts : tu sors les pieces vite, tu vises f7 avec le fou c4 et tu apprends a roquer avant de lancer une attaque.",
+    "learningGoal": "Obtenir une position ouverte ou les pieces blanches sortent naturellement : pion en e4, cavalier en f3, fou en c4, puis roque.",
+    "beginnerGoal": "Developper vite les pieces, controler le centre et preparer le roque.",
     "coreIdeas": [
-      "Jouer e4 pour occuper le centre.",
-      "Sortir le cavalier g1 vers f3 pour attaquer e5.",
-      "Développer le fou f1 vers c4 pour viser f7.",
-      "Roquer rapidement."
+      "Jouer e4 pour occuper le centre et ouvrir le fou f1.",
+      "Sortir le cavalier g1 vers f3 pour attaquer le pion e5.",
+      "Developper le fou f1 vers c4 pour viser f7.",
+      "Roquer avant de pousser trop de pions."
+    ],
+    "whatYouWillLearn": [
+      "Developper avant d'attaquer.",
+      "Comprendre pourquoi f7 est une cible fragile.",
+      "Transformer une ouverture ouverte en attaque simple.",
+      "Roquer au bon moment."
     ],
     "pieceMissions": [
-      { "piece": "Pion e2", "mission": "Occuper e4 et ouvrir le fou f1." },
-      { "piece": "Cavalier g1", "mission": "Aller en f3 pour attaquer e5." },
-      { "piece": "Fou f1", "mission": "Aller en c4 pour viser f7." }
+      { "piece": "Pion e2", "mission": "Aller en e4 pour prendre de l'espace et ouvrir le fou f1." },
+      { "piece": "Cavalier g1", "mission": "Aller en f3 pour attaquer e5 et preparer le roque." },
+      { "piece": "Fou f1", "mission": "Aller en c4 pour viser f7 et aider l'attaque." }
     ],
     "branches": [
       {
         "name": "Noirs sans ...Nc6",
         "triggerLineUci": ["e2e4", "e7e5", "g1f3"],
-        "goal": "Continuer le développement sans forcer Bc4 si e5 change.",
+        "goal": "Continuer le developpement sans forcer une attaque trop tot.",
         "recommendedMoves": ["f1c4", "b1c3", "d2d3"],
-        "commonMistakes": ["Attaquer f7 avant d'avoir développé assez de pièces."]
+        "commonMistakes": ["Attaquer f7 avant d'avoir sorti assez de pieces."]
       }
     ],
     "transitionToMiddlegame": {
-      "when": ["le roi blanc est roqué", "les deux cavaliers sont sortis", "le centre est ouvert ou stabilisé"],
-      "plans": ["attaquer le centre", "viser f7 si les noirs sont en retard", "améliorer la pire pièce"]
+      "when": ["le roi blanc est roque", "les pieces mineures sont sorties", "le centre est ouvert ou stabilise"],
+      "plans": ["ouvrir le centre avec d4 si possible", "viser f7 si les noirs sont en retard", "ameliorer la piece la moins active"]
+    }
+  },
+  {
+    "id": "four_knights_beginner",
+    "nameFr": "Partie des quatre cavaliers",
+    "nameEn": "Four Knights Game",
+    "side": "white",
+    "against": ["e7e5"],
+    "tier": "recommended",
+    "difficulty": "easy",
+    "style": ["simple", "developpement", "equilibre"],
+    "recommendedElo": [600, 1800],
+    "mainLineUci": ["e2e4", "e7e5", "g1f3", "b8c6", "b1c3", "g8f6"],
+    "eco": ["C47", "C48", "C49"],
+    "shortHistory": "La Partie des quatre cavaliers est une facon tres propre d'apprendre les debuts ouverts : chaque camp developpe ses cavaliers avant de choisir un plan plus ambitieux.",
+    "learningGoal": "Apprendre a sortir les cavaliers vers le centre sans prendre de risque inutile, puis choisir entre Bb5, d4 ou Bc4 selon la reponse noire.",
+    "beginnerGoal": "Developper les deux cavaliers, controler le centre et garder une position saine.",
+    "coreIdeas": [
+      "Jouer e4 pour prendre le centre.",
+      "Sortir le cavalier g1 en f3 puis le cavalier b1 en c3.",
+      "Eviter de bouger la meme piece plusieurs fois.",
+      "Choisir un plan de milieu de partie apres le developpement."
+    ],
+    "whatYouWillLearn": [
+      "Developper sans se mettre en danger.",
+      "Reconnaitre une position symetrique.",
+      "Choisir un plan apres une ouverture calme.",
+      "Eviter les attaques prematurees."
+    ],
+    "pieceMissions": [
+      { "piece": "Cavalier g1", "mission": "Aller en f3 pour attaquer e5." },
+      { "piece": "Cavalier b1", "mission": "Aller en c3 pour soutenir e4 et d5." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["les quatre cavaliers sont developpes", "le roi blanc peut roquer"],
+      "plans": ["jouer Bb5 pour mettre la pression sur c6", "jouer d4 pour ouvrir le centre", "roquer et ameliorer les fous"]
     }
   },
   {
     "id": "london_system_beginner",
-    "nameFr": "Système de Londres",
+    "nameFr": "Systeme de Londres",
     "nameEn": "London System",
     "side": "white",
     "against": ["any"],
     "tier": "recommended",
     "difficulty": "easy",
-    "style": ["système", "stable", "facile à répéter"],
-    "recommendedElo": [600, 2000],
+    "style": ["systeme", "stable", "repetable"],
+    "recommendedElo": [600, 2100],
     "mainLineUci": ["d2d4", "d7d5", "c1f4", "g8f6", "e2e3", "e7e6", "g1f3"],
     "eco": ["D00", "D02"],
-    "beginnerGoal": "Construire un setup stable, contrôler e5 et obtenir un milieu de jeu clair.",
+    "shortHistory": "Le Systeme de Londres est un plan blanc repetable : le fou sort en f4 avant e3, les pieces se placent vite, et tu peux jouer une position claire contre beaucoup de defenses.",
+    "learningGoal": "Construire un setup stable autour de d4, Bf4, e3 et Nf3, puis viser la case e5 ou une attaque simple sur le roi.",
+    "beginnerGoal": "Construire un setup stable, controler e5 et obtenir un milieu de jeu clair.",
     "coreIdeas": [
-      "Jouer d4 pour contrôler le centre.",
+      "Jouer d4 pour prendre de l'espace.",
       "Sortir le fou c1 vers f4 avant de jouer e3.",
-      "Développer le cavalier g1 vers f3.",
-      "Roquer et préparer c3 ou Bd3."
+      "Developper le cavalier g1 vers f3.",
+      "Roquer et preparer c3 ou Bd3."
+    ],
+    "whatYouWillLearn": [
+      "Construire un setup sans memoriser trop de lignes.",
+      "Garder le fou c1 actif.",
+      "Installer une piece en e5.",
+      "Attaquer seulement quand les pieces sont pretes."
     ],
     "pieceMissions": [
-      { "piece": "Fou c1", "mission": "Aller en f4 pour rester actif." },
-      { "piece": "Pion e2", "mission": "Soutenir d4 avec e3." },
-      { "piece": "Cavalier g1", "mission": "Aller en f3 pour contrôler e5." }
+      { "piece": "Fou c1", "mission": "Aller en f4 pour rester actif avant e3." },
+      { "piece": "Pion e2", "mission": "Aller en e3 pour soutenir d4." },
+      { "piece": "Cavalier g1", "mission": "Aller en f3 pour controler e5." }
     ],
     "branches": [],
     "transitionToMiddlegame": {
-      "when": ["le setup d4, Bf4, e3, Nf3 est en place", "le roi blanc est en sécurité"],
-      "plans": ["mettre un cavalier en e5", "attaquer le roi si les noirs roquent court", "jouer c3 pour solidifier"]
+      "when": ["le setup d4, Bf4, e3, Nf3 est en place", "le roi blanc est en securite"],
+      "plans": ["mettre un cavalier en e5", "jouer c3 pour solidifier", "attaquer le roi si les noirs roquent court"]
+    }
+  },
+  {
+    "id": "colle_system_beginner",
+    "nameFr": "Systeme Colle",
+    "nameEn": "Colle System",
+    "side": "white",
+    "against": ["any"],
+    "tier": "good",
+    "difficulty": "easy",
+    "style": ["solide", "setup", "attaque simple"],
+    "recommendedElo": [700, 1900],
+    "mainLineUci": ["d2d4", "d7d5", "g1f3", "g8f6", "e2e3", "e7e6", "f1d3", "c7c5", "c2c3"],
+    "eco": ["D04", "D05"],
+    "shortHistory": "Le Systeme Colle est un plan discret mais tres pedagogique : les blancs construisent une base solide puis cherchent souvent la poussee e4 au bon moment.",
+    "learningGoal": "Comprendre comment preparer une rupture centrale : d4, Nf3, e3, Bd3, c3, puis e4 si la position le permet.",
+    "beginnerGoal": "Construire une position solide et preparer une poussee centrale claire.",
+    "coreIdeas": [
+      "Jouer d4 puis soutenir le centre avec e3 et c3.",
+      "Developper le fou en d3 pour viser le roi noir.",
+      "Roquer avant d'ouvrir le centre.",
+      "Preparer e4 au lieu de le jouer trop tot."
+    ],
+    "whatYouWillLearn": [
+      "Preparer une rupture de pion.",
+      "Jouer une attaque simple sans affaiblir le roi.",
+      "Construire une chaine de pions solide.",
+      "Savoir quand ouvrir le centre."
+    ],
+    "pieceMissions": [
+      { "piece": "Fou f1", "mission": "Aller en d3 pour viser h7 et soutenir e4." },
+      { "piece": "Pion c2", "mission": "Aller en c3 pour soutenir d4." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["le roi est roque", "d4 est soutenu par c3 et e3"],
+      "plans": ["preparer e4", "viser h7 avec le fou d3", "ouvrir le centre quand les pieces sont pretes"]
     }
   },
   {
     "id": "scotch_game_beginner",
-    "nameFr": "Partie écossaise",
+    "nameFr": "Partie ecossaise",
     "nameEn": "Scotch Game",
     "side": "white",
     "against": ["e7e5"],
     "tier": "good",
     "difficulty": "medium",
     "style": ["direct", "centre", "tactique simple"],
-    "recommendedElo": [800, 2000],
+    "recommendedElo": [800, 2100],
     "mainLineUci": ["e2e4", "e7e5", "g1f3", "b8c6", "d2d4"],
     "eco": ["C44", "C45"],
-    "beginnerGoal": "Ouvrir le centre rapidement pour apprendre les échanges et le développement actif.",
+    "shortHistory": "La Partie ecossaise met la tension au centre tres tot : au lieu de construire lentement, tu joues d4 pour obliger les noirs a clarifier la position.",
+    "learningGoal": "Ouvrir le centre rapidement, comprendre les echanges et developper les pieces avec tempo apres la tension e4 contre e5.",
+    "beginnerGoal": "Ouvrir le centre rapidement pour apprendre les echanges et le developpement actif.",
     "coreIdeas": [
       "Occuper e4.",
       "Attaquer e5 avec le cavalier f3.",
       "Jouer d4 pour ouvrir le centre.",
-      "Développer vite après les échanges."
+      "Developper vite apres les echanges."
+    ],
+    "whatYouWillLearn": [
+      "Ouvrir le centre volontairement.",
+      "Reprendre au bon moment.",
+      "Developper avec tempo.",
+      "Eviter de sortir la dame trop tot."
     ],
     "pieceMissions": [
       { "piece": "Pion d2", "mission": "Aller en d4 pour attaquer e5." },
@@ -92,65 +190,230 @@
     ],
     "branches": [],
     "transitionToMiddlegame": {
-      "when": ["le centre est ouvert", "les échanges ont clarifié la structure"],
-      "plans": ["développer avec tempo", "viser le roi noir si son centre est faible"]
+      "when": ["le centre est ouvert", "les echanges ont clarifie la structure"],
+      "plans": ["developper avec tempo", "viser le roi noir si son centre est faible", "roquer avant de pousser une attaque"]
+    }
+  },
+  {
+    "id": "vienna_game_practical",
+    "nameFr": "Partie viennoise",
+    "nameEn": "Vienna Game",
+    "side": "white",
+    "against": ["e7e5"],
+    "tier": "good",
+    "difficulty": "medium",
+    "style": ["actif", "flexible", "attaque"],
+    "recommendedElo": [900, 2200],
+    "mainLineUci": ["e2e4", "e7e5", "b1c3", "g8f6", "f2f4"],
+    "eco": ["C25", "C26", "C27", "C28"],
+    "shortHistory": "La Partie viennoise garde une idee claire : developper le cavalier en c3 avant Nf3 pour preparer parfois f4 et attaquer le centre noir autrement.",
+    "learningGoal": "Apprendre une ouverture active ou le cavalier c3 soutient e4 et ou la poussee f4 peut creer une attaque, sans sacrifier n'importe quoi.",
+    "beginnerGoal": "Developper le cavalier b1 vers c3 et preparer une pression active sur le centre noir.",
+    "coreIdeas": [
+      "Jouer e4 pour prendre le centre.",
+      "Developper le cavalier b1 en c3 avant le cavalier g1.",
+      "Preparer f4 si le centre le permet.",
+      "Roquer ou securiser le roi avant une attaque longue."
+    ],
+    "whatYouWillLearn": [
+      "Attaquer le centre avec les pieces et les pions.",
+      "Comprendre quand f4 est utile.",
+      "Garder une attaque sous controle.",
+      "Reconnaitre les positions ouvertes."
+    ],
+    "pieceMissions": [
+      { "piece": "Cavalier b1", "mission": "Aller en c3 pour soutenir e4." },
+      { "piece": "Pion f2", "mission": "Aller en f4 seulement si cela attaque e5 sans exposer le roi." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["le centre e4/e5 est sous tension", "les pieces blanches sont sorties"],
+      "plans": ["attaquer e5", "ouvrir la colonne f si elle devient utile", "roquer avant de trop pousser les pions"]
     }
   },
   {
     "id": "queens_gambit_beginner",
-    "nameFr": "Gambit dame simplifié",
+    "nameFr": "Gambit dame simplifie",
     "nameEn": "Queen's Gambit",
     "side": "white",
     "against": ["d7d5"],
     "tier": "recommended",
     "difficulty": "medium",
     "style": ["centre", "structure", "positionnel"],
-    "recommendedElo": [800, 2200],
+    "recommendedElo": [800, 2300],
     "mainLineUci": ["d2d4", "d7d5", "c2c4"],
     "eco": ["D06", "D30", "D35"],
+    "shortHistory": "Le Gambit dame n'est pas un piege : c'est une facon de demander aux noirs comment ils comptent defendre le pion d5 et le centre.",
+    "learningGoal": "Mettre la pression sur d5 avec c4, apprendre la tension centrale et obtenir des plans clairs sur la colonne c ou contre un pion isole.",
     "beginnerGoal": "Mettre la pression sur le pion d5 et apprendre les structures de pions.",
     "coreIdeas": [
       "Jouer d4 pour prendre de l'espace.",
       "Jouer c4 pour attaquer d5.",
-      "Développer les cavaliers.",
-      "Récupérer le pion c4 si les noirs capturent."
+      "Developper les cavaliers avant de chercher une attaque.",
+      "Recuperer le pion c4 si les noirs capturent."
+    ],
+    "whatYouWillLearn": [
+      "Mettre la pression sur un pion central.",
+      "Comprendre les structures d4/c4.",
+      "Utiliser une colonne semi-ouverte.",
+      "Transformer un avantage d'espace en plan."
     ],
     "pieceMissions": [
       { "piece": "Pion c2", "mission": "Aller en c4 pour attaquer d5." },
-      { "piece": "Cavalier b1", "mission": "Aller en c3 pour soutenir d5/e4." }
+      { "piece": "Cavalier b1", "mission": "Aller en c3 pour soutenir d5 et e4." }
     ],
     "branches": [],
     "transitionToMiddlegame": {
-      "when": ["la tension d4-c4 contre d5 est résolue ou stabilisée"],
-      "plans": ["mettre une tour sur la colonne c", "jouer contre le pion isolé si possible"]
+      "when": ["la tension d4-c4 contre d5 est resolue ou stabilisee"],
+      "plans": ["mettre une tour sur la colonne c", "jouer contre un pion isole si possible", "preparer e4 si le centre le permet"]
     }
   },
   {
     "id": "ruy_lopez_simplified",
-    "nameFr": "Ruy Lopez simplifiée",
+    "nameFr": "Ruy Lopez simplifiee",
     "nameEn": "Ruy Lopez",
     "side": "white",
     "against": ["e7e5"],
     "tier": "good",
     "difficulty": "medium",
-    "style": ["classique", "profond", "développement"],
-    "recommendedElo": [1000, 2400],
+    "style": ["classique", "profond", "pression"],
+    "recommendedElo": [1000, 2500],
     "mainLineUci": ["e2e4", "e7e5", "g1f3", "b8c6", "f1b5"],
     "eco": ["C60", "C65"],
-    "beginnerGoal": "Mettre la pression sur le cavalier c6 qui défend e5.",
+    "shortHistory": "La Ruy Lopez est une ouverture classique de pression : le fou b5 attaque le cavalier c6, donc indirectement le pion e5.",
+    "learningGoal": "Comprendre la pression a long terme : attaquer le defenseur de e5, roquer, puis preparer d4 ou Re1 selon la position.",
+    "beginnerGoal": "Mettre la pression sur le cavalier c6 qui defend e5.",
     "coreIdeas": [
       "Occuper e4.",
       "Attaquer e5 avec le cavalier f3.",
       "Jouer Bb5 pour mettre la pression sur c6.",
-      "Roquer avant d'attaquer."
+      "Roquer avant d'ouvrir le centre."
+    ],
+    "whatYouWillLearn": [
+      "Mettre la pression sur un defenseur.",
+      "Construire une menace lente.",
+      "Preparer d4 au bon moment.",
+      "Jouer une ouverture classique sans se precipiter."
     ],
     "pieceMissions": [
-      { "piece": "Fou f1", "mission": "Aller en b5 pour viser le cavalier c6." }
+      { "piece": "Fou f1", "mission": "Aller en b5 pour viser le cavalier c6." },
+      { "piece": "Tour f1", "mission": "Aller souvent en e1 apres le roque pour soutenir e4." }
     ],
     "branches": [],
     "transitionToMiddlegame": {
-      "when": ["les pièces blanches sont sorties", "le roi blanc est roqué"],
-      "plans": ["préparer d4", "attaquer le centre noir", "améliorer la tour e1"]
+      "when": ["les pieces blanches sont sorties", "le roi blanc est roque"],
+      "plans": ["preparer d4", "attaquer le centre noir", "ameliorer la tour e1"]
+    }
+  },
+  {
+    "id": "english_opening_practical",
+    "nameFr": "Ouverture anglaise",
+    "nameEn": "English Opening",
+    "side": "white",
+    "against": ["any"],
+    "tier": "good",
+    "difficulty": "medium",
+    "style": ["flexible", "aile dame", "positionnel"],
+    "recommendedElo": [1000, 2600],
+    "mainLineUci": ["c2c4", "e7e5", "b1c3", "g8f6", "g2g3"],
+    "eco": ["A10", "A20", "A25"],
+    "shortHistory": "L'Ouverture anglaise commence par c4 : les blancs ne prennent pas le centre tout de suite, ils le controlent de cote et gardent beaucoup de flexibilite.",
+    "learningGoal": "Apprendre a controler d5 avec le pion c4, developper calmement, puis choisir entre pression sur l'aile dame ou rupture centrale.",
+    "beginnerGoal": "Controler le centre a distance et construire une position flexible.",
+    "coreIdeas": [
+      "Jouer c4 pour controler d5.",
+      "Developper le cavalier b1 vers c3.",
+      "Fianchetter le fou en g2 si la structure le permet.",
+      "Choisir le centre au bon moment."
+    ],
+    "whatYouWillLearn": [
+      "Controler le centre sans jouer e4 ou d4 immediatement.",
+      "Comprendre les plans sur l'aile dame.",
+      "Utiliser un fou en g2.",
+      "Garder plusieurs plans possibles."
+    ],
+    "pieceMissions": [
+      { "piece": "Pion c2", "mission": "Aller en c4 pour controler d5." },
+      { "piece": "Fou f1", "mission": "Aller souvent en g2 pour viser la grande diagonale." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["c4 controle d5", "les pieces blanches sont developpees"],
+      "plans": ["jouer sur l'aile dame", "preparer d4 ou e4", "utiliser le fou g2 sur la grande diagonale"]
+    }
+  },
+  {
+    "id": "reti_kia_practical",
+    "nameFr": "Reti / Attaque indienne du roi",
+    "nameEn": "Reti / King's Indian Attack",
+    "side": "white",
+    "against": ["any"],
+    "tier": "good",
+    "difficulty": "medium",
+    "style": ["flexible", "setup", "fianchetto"],
+    "recommendedElo": [1000, 2400],
+    "mainLineUci": ["g1f3", "d7d5", "g2g3", "g8f6", "f1g2", "e7e6", "e1g1"],
+    "eco": ["A04", "A07", "A08"],
+    "shortHistory": "La Reti et l'Attaque indienne du roi commencent calmement : tu developpes le cavalier, tu mets le fou en g2 et tu decides du centre apres avoir vu le plan noir.",
+    "learningGoal": "Construire un setup souple avec Nf3, g3, Bg2 et roque, puis jouer c4 ou e4 quand la structure adverse est claire.",
+    "beginnerGoal": "Developper calmement et choisir le centre plus tard.",
+    "coreIdeas": [
+      "Developper le cavalier g1 vers f3.",
+      "Mettre le fou f1 en g2.",
+      "Roquer rapidement.",
+      "Attaquer le centre quand la structure noire est visible."
+    ],
+    "whatYouWillLearn": [
+      "Jouer un setup flexible.",
+      "Utiliser le fou en g2.",
+      "Attendre le bon moment pour prendre le centre.",
+      "Passer d'une ouverture calme a un plan actif."
+    ],
+    "pieceMissions": [
+      { "piece": "Cavalier g1", "mission": "Aller en f3 pour controler e5 et d4." },
+      { "piece": "Fou f1", "mission": "Aller en g2 pour viser le centre a distance." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["le roi est roque", "le fou g2 vise le centre"],
+      "plans": ["jouer c4 ou e4", "mettre une tour au centre", "attaquer la structure noire choisie"]
+    }
+  },
+  {
+    "id": "catalan_simplified",
+    "nameFr": "Catalane simplifiee",
+    "nameEn": "Catalan Opening",
+    "side": "white",
+    "against": ["d7d5", "e7e6"],
+    "tier": "good",
+    "difficulty": "hard",
+    "style": ["positionnel", "pression longue", "fianchetto"],
+    "recommendedElo": [1400, 2800],
+    "mainLineUci": ["d2d4", "d7d5", "c2c4", "e7e6", "g2g3", "g8f6", "f1g2"],
+    "eco": ["E01", "E04", "E05"],
+    "shortHistory": "La Catalane melange les idees du Gambit dame avec un fou en g2 : les blancs mettent une pression longue sur la grande diagonale et sur le centre noir.",
+    "learningGoal": "Apprendre une pression positionnelle durable : d4 et c4 prennent l'espace, le fou g2 vise le centre, et les blancs jouent contre les faiblesses noires.",
+    "beginnerGoal": "Construire une pression longue avec d4, c4 et un fou en g2.",
+    "coreIdeas": [
+      "Jouer d4 et c4 pour prendre de l'espace.",
+      "Fianchetter le fou en g2.",
+      "Mettre la pression sur la diagonale h1-a8.",
+      "Recuperer ou attaquer le pion c4 si les noirs capturent."
+    ],
+    "whatYouWillLearn": [
+      "Construire une pression lente.",
+      "Utiliser un fou en g2 dans une structure dame-pion.",
+      "Jouer contre des faiblesses plutot que chercher une attaque immediate.",
+      "Transformer l'avantage d'espace en pression."
+    ],
+    "pieceMissions": [
+      { "piece": "Fou f1", "mission": "Aller en g2 pour peser sur la grande diagonale." },
+      { "piece": "Pion c2", "mission": "Aller en c4 pour attaquer d5." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["le fou g2 est actif", "le centre d4/c4 existe", "le roi blanc est en securite"],
+      "plans": ["mettre une tour en c1", "recuperer c4 si necessaire", "jouer contre la diagonale du fou g2"]
     }
   }
 ]

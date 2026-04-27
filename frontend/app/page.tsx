@@ -11,6 +11,7 @@ import { OpeningRepertoirePanel } from "@/components/OpeningRepertoirePanel";
 import { PlanFirstPanel } from "@/components/PlanFirstPanel";
 import { SideSelectionPanel } from "@/components/SideSelectionPanel";
 import { getPlanRecommendations, listAvailablePlans, requestBotMove, reviewMove } from "@/lib/api";
+import { notationFromUci } from "@/lib/beginnerNotation";
 import { canMoveInMode, gameStatus, isPromotionAttempt, tryMove } from "@/lib/chess";
 import type {
   Orientation,
@@ -205,6 +206,25 @@ export default function HomePage() {
   }, [plans, planRecommendations?.selectedPlan, selectedPlanId]);
   const boardLocked = appStage === "black-plan-selection" || appStage === "white-plan-selection" || appStage === "plan-intro" || appStage === "side-selection";
   const firstMoveLabel = firstOpponentMove ? history[0]?.san ?? firstOpponentMove : null;
+  const expectedReplyLabel = useMemo(() => {
+    const primary = planRecommendations?.primaryMove;
+    const line = selectedPlan?.mainLineUci;
+    const linePly = planRecommendations?.planProgress?.linePly ?? historyUci.length;
+    if (!primary || !line || line[linePly] !== primary.moveUci) return null;
+    const replyUci = line[linePly + 1];
+    if (!replyUci) return null;
+    const afterPrimary = new Chess(fen);
+    try {
+      afterPrimary.move({
+        from: primary.moveUci.slice(0, 2),
+        to: primary.moveUci.slice(2, 4),
+        ...(primary.moveUci.slice(4) ? { promotion: primary.moveUci.slice(4) } : {})
+      });
+      return notationFromUci(afterPrimary.fen(), replyUci).beginnerLabel;
+    } catch {
+      return `${replyUci.slice(0, 2)} -> ${replyUci.slice(2, 4)}`;
+    }
+  }, [fen, historyUci.length, planRecommendations?.planProgress?.linePly, planRecommendations?.primaryMove, selectedPlan?.mainLineUci]);
 
   const makeNavigationSnapshot = useCallback(
     (overrides: Partial<NavigationSnapshot> = {}) =>
@@ -868,6 +888,7 @@ export default function HomePage() {
           loading={planLoading}
           error={planError}
           highlightedMoveUci={highlightedRecommendationUci}
+          expectedReplyLabel={expectedReplyLabel}
           onToggleRecommendation={handlePlanRecommendationToggle}
         />
 

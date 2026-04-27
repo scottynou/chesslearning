@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { OpeningRepertoirePanel } from "./OpeningRepertoirePanel";
 import type { StrategyPlan } from "@/lib/types";
@@ -22,6 +22,18 @@ const plan: StrategyPlan = {
   whatYouWillLearn: ["Attaquer le centre", "Construire une structure", "Passer au milieu de partie"]
 };
 
+const secondPlan: StrategyPlan = {
+  ...plan,
+  id: "italian_game_beginner",
+  nameFr: "Partie italienne",
+  difficulty: "easy",
+  style: ["classique"],
+  mainLineUci: ["e2e4", "e7e5", "g1f3"],
+  beginnerGoal: "Developper vite les pieces et roquer.",
+  coreIdeas: ["Prendre le centre.", "Developper les pieces.", "Roquer vite."],
+  whatYouWillLearn: ["Developper avant d'attaquer", "Viser f7", "Roquer"]
+};
+
 describe("OpeningRepertoirePanel", () => {
   it("shows opening plan cards clearly", () => {
     render(<OpeningRepertoirePanel plans={[plan]} selectedPlanId={null} onSelect={() => undefined} />);
@@ -37,5 +49,15 @@ describe("OpeningRepertoirePanel", () => {
     expect(screen.getByText(/Pourquoi cette option est coherente/)).toBeTruthy();
     expect(screen.getByText(/milieu de partie clair/)).toBeTruthy();
     expect(screen.queryByText("Comprendre ce plan")).toBeNull();
+  });
+
+  it("keeps multiple opening explanations expanded until each one is hidden", () => {
+    render(<OpeningRepertoirePanel plans={[plan, secondPlan]} selectedPlanId={null} onSelect={() => undefined} />);
+    const buttons = screen.getAllByText("Comprendre ce plan");
+    fireEvent.click(buttons[0]);
+    fireEvent.click(buttons[1]);
+    expect(screen.getAllByText("Objectif")).toHaveLength(2);
+    fireEvent.click(screen.getAllByText("Masquer")[0]);
+    expect(screen.getAllByText("Objectif")).toHaveLength(1);
   });
 });

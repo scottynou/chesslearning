@@ -65,8 +65,9 @@ const response: PlanRecommendationsResponse = {
 
 describe("PlanFirstPanel", () => {
   it("shows the educational explanation directly in the move card", () => {
-    render(<PlanFirstPanel recommendations={response} onToggleRecommendation={() => undefined} highlightedMoveUci="g8f6" />);
+    render(<PlanFirstPanel recommendations={response} onToggleRecommendation={() => undefined} highlightedMoveUci="g8f6" expectedReplyLabel="Pion d2 -> d4" />);
     expect(screen.getByText("Position")).toBeTruthy();
+    expect(screen.getByText("Reponse attendue")).toBeTruthy();
     expect(screen.getByText("Joue Cavalier g8 -> f6. Le cavalier controle le centre et garde le plan lisible.")).toBeTruthy();
     expect(screen.queryByText("Comprendre ce coup")).toBeNull();
   });

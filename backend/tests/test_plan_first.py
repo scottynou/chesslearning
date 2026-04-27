@@ -169,7 +169,7 @@ def test_opening_success_after_main_line(monkeypatch) -> None:
 
 def test_opening_data_main_menu_is_pedagogical() -> None:
     plans = list_available_plans()
-    assert len(plans) <= 14
+    assert 18 <= len(plans) <= 24
     assert all(plan["tier"] != "hidden" for plan in plans)
     for plan in plans:
         assert plan["id"]
@@ -178,6 +178,15 @@ def test_opening_data_main_menu_is_pedagogical() -> None:
         assert plan["difficulty"]
         assert plan["mainLineUci"]
         assert len(plan["coreIdeas"]) >= 3
+        assert len(plan["shortHistory"]) > 70
+    assert len({plan["shortHistory"] for plan in plans}) == len(plans)
+
+
+def test_white_repertoire_has_multiple_difficulty_levels() -> None:
+    plans = list_available_plans(side="white")
+    plan_ids = {plan["id"] for plan in plans}
+    assert {"italian_game_beginner", "london_system_beginner", "english_opening_practical", "catalan_simplified"} <= plan_ids
+    assert {plan["difficulty"] for plan in plans} >= {"easy", "medium", "hard"}
 
 
 def test_black_plan_menu_filters_after_e4() -> None:

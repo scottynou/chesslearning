@@ -26,7 +26,7 @@ export function OpeningRepertoirePanel({
   mode = "opening",
   firstMoveLabel
 }: OpeningRepertoirePanelProps) {
-  const [expandedPlanId, setExpandedPlanId] = useState<string | null>(null);
+  const [expandedPlanIds, setExpandedPlanIds] = useState<string[]>([]);
   const sortedPlans = [...plans].sort((a, b) => difficultyOrder(a.difficulty) - difficultyOrder(b.difficulty));
 
   return (
@@ -41,7 +41,7 @@ export function OpeningRepertoirePanel({
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {sortedPlans.map((plan) => {
-          const expanded = expandedPlanId === plan.id;
+          const expanded = expandedPlanIds.includes(plan.id);
           if (mode === "black-reply") {
             return (
               <BlackReplyCard
@@ -75,7 +75,7 @@ export function OpeningRepertoirePanel({
                   type="button"
                   onClick={(event) => {
                     event.stopPropagation();
-                    setExpandedPlanId(expanded ? null : plan.id);
+                    setExpandedPlanIds((current) => (expanded ? current.filter((id) => id !== plan.id) : [...current, plan.id]));
                   }}
                   className="text-sm font-semibold text-night underline-offset-4 hover:underline"
                   aria-expanded={expanded}

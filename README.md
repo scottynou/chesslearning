@@ -104,6 +104,8 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 - After choosing a plan, a short intro screen explains what the plan is before the board opens.
 - Black reply cards explain why each response is coherent against White's first move.
 - Browser back/forward navigation works between the main learning steps.
+- White repertoire now includes practical plans from easy to hard: Italian, Four Knights, London, Colle, Scotch, Vienna, Queen's Gambit, Ruy Lopez, English, Reti/KIA and Catalan.
+- Opening descriptions are plan-specific instead of generated from repeated generic text.
 - The selected plan stays locked for the game; deviations adapt the next move instead of replacing the plan.
 - The main UI shows one recommended plan move plus adapted alternatives only when useful.
 - Engine candidates are kept in advanced technical details, not in the primary learning flow.

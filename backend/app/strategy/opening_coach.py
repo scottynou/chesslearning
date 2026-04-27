@@ -182,10 +182,23 @@ def mini_board_fen(main_line: list[str]) -> str:
 
 
 def short_history_for(plan: dict[str, Any]) -> str:
+    histories = {
+        "caro_kann_beginner": "La Caro-Kann est une reponse solide a 1.e4 : les noirs preparent ...d5 avec ...c6 pour attaquer le centre sans trop affaiblir leur roi.",
+        "black_e5_classical": "La defense classique par ...e5 remet un pion au centre tout de suite. Elle enseigne les bases des parties ouvertes : cavaliers actifs, fou developpe et roque rapide.",
+        "french_defense_beginner": "La Francaise construit une structure compacte avec ...e6 puis ...d5. Les noirs acceptent parfois moins d'espace pour attaquer la chaine de pions blanche.",
+        "scandinavian_simple": "La Scandinave attaque e4 immediatement avec ...d5. Elle est directe, mais demande de developper vite pour ne pas perdre trop de temps avec la dame.",
+        "sicilian_dragon_simplified": "La Sicilienne Dragon simplifiee conteste le centre avec ...c5 et place le fou en g7. Elle est active, mais plus exigeante tactiquement.",
+        "qgd_simplified": "La defense dame-pion simple repond a 1.d4 par un centre stable. Les noirs tiennent d5, developpent calmement et cherchent un milieu de partie sain.",
+        "slav_beginner": "La Slave soutient d5 avec ...c6. Elle garde le centre solide tout en laissant souvent le fou c8 sortir plus librement.",
+        "kings_indian_setup": "L'Indienne du roi simplifiee laisse les blancs occuper le centre, puis les noirs roquent vite et preparent une contre-attaque avec ...e5 ou ...c5.",
+        "reti_kia_situational": "La Reti et l'Attaque indienne du roi developpent d'abord les pieces, puis choisissent le centre quand la structure adverse est plus claire.",
+    }
+    if plan.get("id") in histories:
+        return histories[str(plan["id"])]
     name = plan.get("nameFr", "Cette ouverture")
     if plan.get("side") == "white":
-        return f"{name} est un plan classique pour commencer la partie avec un développement clair."
-    return f"{name} est une réponse structurée pour obtenir un milieu de partie compréhensible."
+        return f"{name} donne un plan blanc lisible : prendre ou controler le centre, developper les pieces, puis rejoindre un milieu de partie avec une idee concrete."
+    return f"{name} donne aux noirs une reponse organisee : contester le centre blanc, developper les pieces et viser un milieu de partie jouable."
 
 
 def default_middlegame_plan(plan: dict[str, Any]) -> list[str]:

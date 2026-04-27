@@ -8,6 +8,7 @@ type PlanFirstPanelProps = {
   loading?: boolean;
   error?: string | null;
   highlightedMoveUci?: string | null;
+  expectedReplyLabel?: string | null;
   onToggleRecommendation: (recommendation: PlanRecommendation) => void;
 };
 
@@ -17,6 +18,7 @@ export function PlanFirstPanel({
   loading,
   error,
   highlightedMoveUci,
+  expectedReplyLabel,
   onToggleRecommendation
 }: PlanFirstPanelProps) {
   const primary = recommendations?.primaryMove ?? recommendations?.planMoves[0] ?? recommendations?.mergedRecommendations[0] ?? null;
@@ -55,6 +57,9 @@ export function PlanFirstPanel({
               <CoachFact title="Position" value={recommendations.lastEvent || "La partie est prete."} />
               <CoachFact title="Lecture du plan" value={recommendations.whatChanged || recommendations.coachMessage} />
               <CoachFact title="Objectif maintenant" value={recommendations.nextObjective || recommendations.currentObjective} />
+              {expectedReplyLabel ? (
+                <CoachFact title="Reponse attendue" value={`Si l'autre camp suit la ligne du plan : ${expectedReplyLabel}. S'il joue autre chose, on garde le plan et on adapte le prochain coup.`} />
+              ) : null}
             </div>
 
             {moves.length > 0 ? (
