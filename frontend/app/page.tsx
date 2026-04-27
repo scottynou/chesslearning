@@ -9,6 +9,7 @@ import { GameControls } from "@/components/GameControls";
 import { GlossaryPanel } from "@/components/GlossaryPanel";
 import { LastMoveReviewPanel } from "@/components/LastMoveReviewPanel";
 import { MoveHistory } from "@/components/MoveHistory";
+import { OpeningMiniBoard } from "@/components/OpeningMiniBoard";
 import { OpeningRepertoirePanel } from "@/components/OpeningRepertoirePanel";
 import { PlanFirstPanel } from "@/components/PlanFirstPanel";
 import { SideSelectionPanel } from "@/components/SideSelectionPanel";
@@ -1050,68 +1051,258 @@ function PlanIntroScreen({
   }
 
   const isBlackReply = userSide === "black";
-  const ideas = (plan.whatYouWillLearn ?? plan.coreIdeas).slice(0, 4);
+  const teaching = buildPlanTeaching(plan, isBlackReply, firstMoveLabel);
+  const ideas = (plan.whatYouWillLearn ?? plan.coreIdeas).slice(0, 5);
+  const missions = plan.pieceMissions.slice(0, 5);
+  const successCriteria = (plan.successCriteria?.length ? plan.successCriteria : defaultSuccessCriteria()).slice(0, 5);
+  const middlegamePlan = (plan.middlegamePlan?.length ? plan.middlegamePlan : defaultMiddlegamePlan(plan)).slice(0, 4);
+  const endgamePlan = (plan.endgamePlan?.length ? plan.endgamePlan : defaultEndgamePlan()).slice(0, 3);
 
   return (
-    <section className="grid w-full max-w-5xl gap-5">
-      <button type="button" onClick={onBack} className="w-fit rounded border border-line bg-white px-3 py-2 text-sm font-semibold text-night">
-        Retour aux options
-      </button>
+    <section className="plan-intro-shell">
+      <div className="plan-intro-topbar">
+        <button type="button" onClick={onBack} className="control-button">
+          Retour aux options
+        </button>
+        <span>{isBlackReply ? "Plan noir verrouille" : "Plan blanc verrouille"}</span>
+      </div>
 
-      <article className="overflow-hidden rounded-xl border border-line bg-white shadow-soft">
-        <div className="grid gap-5 p-6 md:p-8">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-clay">{isBlackReply ? "Reponse choisie" : "Ouverture choisie"}</p>
-            <h1 className="mt-2 text-4xl font-semibold text-night md:text-6xl">{plan.nameFr}</h1>
-            {isBlackReply && firstMoveLabel ? (
-              <p className="mt-3 text-base leading-7 text-neutral-600">Les blancs ont commence par {firstMoveLabel}. Ce plan explique comment les noirs peuvent repondre sans changer d&apos;idee a chaque coup.</p>
-            ) : null}
+      <article className="plan-intro-hero">
+        <div className="plan-intro-copy">
+          <p className="plan-intro-kicker">{isBlackReply ? "Reponse choisie" : "Ouverture choisie"}</p>
+          <h1>{plan.nameFr}</h1>
+          <p className="plan-intro-lead">{teaching.lead}</p>
+
+          <div className="plan-intro-meta">
+            {plan.style.slice(0, 4).map((style) => (
+              <span key={style}>{style}</span>
+            ))}
+            {plan.eco.slice(0, 2).map((eco) => (
+              <span key={eco}>{eco}</span>
+            ))}
           </div>
+        </div>
 
-          <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr]">
-            <section className="rounded-lg border border-line bg-stone-50 p-5">
-              <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-clay">{isBlackReply ? "Pourquoi cette reponse" : "But du plan"}</h2>
-              <p className="mt-3 text-base leading-7 text-neutral-700">{introReasonForPlan(plan, isBlackReply, firstMoveLabel)}</p>
-            </section>
-
-            <section className="rounded-lg border border-line bg-stone-50 p-5">
-              <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-clay">Objectif</h2>
-              <p className="mt-3 text-base leading-7 text-neutral-700">{plan.learningGoal ?? plan.beginnerGoal}</p>
-            </section>
+        <div className="plan-intro-visual" aria-label={`Position typique de ${plan.nameFr}`}>
+          <div className="plan-intro-board">
+            <OpeningMiniBoard fen={plan.miniBoardFen} />
           </div>
-
-          <section className="rounded-lg border border-line bg-white">
-            <div className="border-b border-line px-5 py-4">
-              <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-clay">Ce qu&apos;on cherche a obtenir</h2>
-            </div>
-            <div className="grid gap-2 p-5 md:grid-cols-2">
-              {ideas.map((idea) => (
-                <p key={idea} className="rounded border border-line bg-stone-50 px-3 py-2 text-sm leading-6 text-neutral-700">
-                  {idea}
-                </p>
-              ))}
-            </div>
-          </section>
-
-          {plan.middlegamePlan?.length ? (
-            <section className="rounded-lg border border-line bg-white p-5">
-              <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-clay">Apres l&apos;ouverture</h2>
-              <p className="mt-3 text-base leading-7 text-neutral-700">{plan.middlegamePlan.slice(0, 3).join(" - ")}</p>
-            </section>
-          ) : null}
-
-          <div className="flex flex-wrap justify-end gap-3">
-            <button type="button" onClick={onBack} className="control-button">
-              Changer d&apos;option
-            </button>
-            <button type="button" onClick={onStart} className="rounded bg-night px-5 py-3 text-sm font-semibold text-white hover:bg-ink">
-              OK, commencer
-            </button>
+          <div className="plan-intro-visual-note">
+            <span>Position guide</span>
+            <strong>{plan.mainLineUci.length ? `${plan.mainLineUci.length} coups de repere` : "Plan flexible"}</strong>
           </div>
         </div>
       </article>
+
+      <div className="plan-intro-grid">
+        <section className="plan-story-card is-large">
+          <p className="plan-section-kicker">{isBlackReply ? "Pourquoi cette reponse" : "Ce que ce plan raconte"}</p>
+          <h2>{teaching.title}</h2>
+          <p>{teaching.story}</p>
+        </section>
+
+        <section className="plan-story-card">
+          <p className="plan-section-kicker">Objectif final</p>
+          <h2>La position que tu veux atteindre</h2>
+          <p>{plan.learningGoal ?? plan.beginnerGoal}</p>
+        </section>
+
+        <section className="plan-story-card">
+          <p className="plan-section-kicker">Question cle</p>
+          <h2>{teaching.question}</h2>
+          <p>{teaching.answer}</p>
+        </section>
+      </div>
+
+      <section className="plan-path-panel">
+        <div className="plan-path-heading">
+          <p className="plan-section-kicker">Fil conducteur</p>
+          <h2>Ce que tu dois construire, dans l&apos;ordre</h2>
+        </div>
+        <div className="plan-path-list">
+          {ideas.map((idea, index) => (
+            <article key={idea}>
+              <span>{index + 1}</span>
+              <p>{idea}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <div className="plan-intro-grid">
+        <section className="plan-story-card is-large">
+          <p className="plan-section-kicker">Missions des pieces</p>
+          <h2>Chaque piece doit avoir un travail clair</h2>
+          <div className="plan-mission-grid">
+            {missions.length ? (
+              missions.map((mission) => (
+                <p key={`${mission.piece}-${mission.mission}`}>
+                  <strong>{mission.piece}</strong>
+                  <span>{mission.mission}</span>
+                </p>
+              ))
+            ) : (
+              <p>
+                <strong>Pieces mineures</strong>
+                <span>Developper les cavaliers et les fous vers le centre avant de lancer une attaque.</span>
+              </p>
+            )}
+          </div>
+        </section>
+
+        <section className="plan-story-card">
+          <p className="plan-section-kicker">Ouverture reussie</p>
+          <h2>Comment tu sais que le debut est bon</h2>
+          <ul className="plan-check-list">
+            {successCriteria.map((criterion) => (
+              <li key={criterion}>{criterion}</li>
+            ))}
+          </ul>
+        </section>
+      </div>
+
+      <div className="plan-intro-grid">
+        <section className="plan-story-card">
+          <p className="plan-section-kicker">Apres l&apos;ouverture</p>
+          <h2>Le plan de milieu de partie</h2>
+          <ul className="plan-check-list">
+            {middlegamePlan.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="plan-story-card">
+          <p className="plan-section-kicker">Plus tard</p>
+          <h2>Si la partie arrive en finale</h2>
+          <ul className="plan-check-list">
+            {endgamePlan.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="plan-story-card">
+          <p className="plan-section-kicker">A eviter</p>
+          <h2>Le piege classique du plan</h2>
+          <p>{teaching.warning}</p>
+        </section>
+      </div>
+
+      <div className="plan-intro-actions">
+        <button type="button" onClick={onBack} className="control-button">
+          Changer d&apos;option
+        </button>
+        <button type="button" onClick={onStart} className="plan-start-button">
+          OK, commencer
+        </button>
+      </div>
     </section>
   );
+}
+
+function buildPlanTeaching(plan: StrategyPlan, isBlackReply: boolean, firstMoveLabel: string | null) {
+  const planName = plan.nameFr;
+  const intro = introReasonForPlan(plan, isBlackReply, firstMoveLabel);
+  const mainGoal = plan.learningGoal ?? plan.beginnerGoal;
+  const core = plan.coreIdeas[0] ?? mainGoal;
+  const style = plan.style.slice(0, 2).join(" et ");
+  const firstMove = firstMoveLabel ? ` apres ${firstMoveLabel}` : "";
+  const sideFrame = isBlackReply
+    ? `Avec ${planName}, tu ne cherches pas seulement a survivre${firstMove}. Tu choisis une structure qui donne aux noirs une maniere stable de contester le centre blanc, de sortir les pieces et de rejoindre un milieu de partie que tu comprends.`
+    : `Avec ${planName}, tu ne joues pas une suite de coups par coeur. Tu construis une position reconnaissable : un centre coherent, des pieces qui sortent avec une mission, puis un roi assez en securite pour jouer le milieu de partie.`;
+
+  const special: Record<string, Partial<ReturnType<typeof baseTeaching>>> = {
+    italian_game_beginner: {
+      title: "Developper vite, viser f7, puis roquer",
+      question: "Pourquoi le fou va-t-il souvent en c4 ?",
+      answer: "Depuis c4, le fou regarde f7, une case fragile au debut parce qu'elle est surtout defendue par le roi noir. Cela ne veut pas dire attaquer tout de suite : cela force surtout les noirs a respecter cette pression pendant que tu termines ton developpement.",
+      warning: "Le piege est de vouloir attaquer f7 trop tot. Si ton roi n'est pas roque ou si tes pieces dorment encore, l'attaque peut devenir artificielle."
+    },
+    london_system_beginner: {
+      title: "Construire un setup stable avant de choisir l'attaque",
+      question: "Pourquoi sortir le fou en f4 avant e3 ?",
+      answer: "Si tu joues e3 trop tot, le fou c1 peut rester enferme. En le sortant d'abord vers f4, tu gardes une piece active qui controle e5 et participe au plan contre le roi noir.",
+      warning: "Le piege est de jouer le meme setup sans regarder l'adversaire. Le London est stable, mais il faut quand meme verifier les ruptures noires comme ...c5 ou ...Qb6."
+    },
+    queens_gambit_beginner: {
+      title: "Mettre la pression sur d5 sans chercher un piege",
+      question: "Est-ce vraiment un gambit ?",
+      answer: "Pas vraiment dans l'esprit debutant : c4 attaque d5 et demande aux noirs comment ils veulent tenir le centre. Si les noirs prennent en c4, les blancs cherchent souvent a recuperer ce pion apres avoir developpe les pieces.",
+      warning: "Le piege est de courir apres le pion c4 trop vite. Tu veux d'abord garder ton centre, developper et reprendre dans de bonnes conditions."
+    },
+    caro_kann_beginner: {
+      title: "Construire solide, puis frapper le centre blanc",
+      question: "Pourquoi jouer ...c6 avant ...d5 ?",
+      answer: "...c6 soutient ...d5. Les noirs laissent les blancs occuper le centre, mais ils preparent une attaque propre contre ce centre sans affaiblir le roi.",
+      warning: "Le piege est de devenir trop passif. La Caro-Kann est solide, mais elle doit quand meme attaquer le centre avec ...d5 puis souvent ...c5."
+    },
+    french_defense_beginner: {
+      title: "Accepter moins d'espace pour attaquer la chaine blanche",
+      question: "Pourquoi le centre devient-il souvent ferme ?",
+      answer: "Apres ...e6 et ...d5, les blancs peuvent avancer e5. La partie devient alors une lutte contre une chaine de pions : les noirs cherchent a attaquer sa base, souvent avec ...c5.",
+      warning: "Le piege est d'oublier le fou c8. Si tu enfermes toutes tes pieces derriere tes pions, tu auras une position solide mais difficile a jouer."
+    },
+    qgd_simplified: {
+      title: "Tenir le centre et developper sans panique",
+      question: "Pourquoi ...e6 est-il si important ?",
+      answer: "...e6 soutient le pion d5 et donne aux noirs une structure fiable. L'objectif n'est pas de tout echanger, mais d'arriver a une position ou les pieces sortent sans faiblesse grave.",
+      warning: "Le piege est de subir longtemps le pion c4 blanc. Il faut tenir d5, developper, puis chercher le bon moment pour contester le centre."
+    },
+    slav_beginner: {
+      title: "Soutenir d5 en gardant le fou c8 vivant",
+      question: "Pourquoi ...c6 au lieu de ...e6 tout de suite ?",
+      answer: "...c6 defend d5 sans bloquer le fou c8. Cela donne aux noirs une structure solide et plus de chances de sortir le fou avant que la position se ferme.",
+      warning: "Le piege est de jouer solide sans plan actif. Une Slave reussie garde le centre, mais cherche ensuite ...Bf5 ou ...c5 quand c'est possible."
+    },
+    kings_indian_setup: {
+      title: "Laisser le centre blanc avancer, puis le frapper",
+      question: "Pourquoi accepter que les blancs prennent le centre ?",
+      answer: "Le fou en g7 et le roque rapide donnent aux noirs une base de contre-attaque. Le centre blanc est impressionnant, mais il devient aussi une cible pour ...e5 ou ...c5.",
+      warning: "Le piege est d'attendre trop longtemps. Si tu ne frappes jamais le centre, l'espace blanc peut t'etouffer."
+    }
+  };
+
+  return {
+    ...baseTeaching(planName, intro, mainGoal, core, style, sideFrame),
+    ...special[plan.id]
+  };
+}
+
+function baseTeaching(planName: string, intro: string, mainGoal: string, core: string, style: string, sideFrame: string) {
+  return {
+    lead: `${intro} ${sideFrame}`,
+    title: `Comprendre le fil conducteur de ${planName}`,
+    story: `${sideFrame} Le coeur du plan est simple : ${core} Ensuite, chaque coup doit aider cet objectif au lieu d'etre joue parce qu'il ressemble a un coup d'ouverture. ${mainGoal}`,
+    question: "Quelle est l'idee a garder en tete ?",
+    answer: `Cherche une position ${style || "coherente"} ou tes pieces travaillent ensemble. Si l'adversaire change l'ordre des coups, garde l'objectif principal et adapte seulement le prochain coup.`,
+    warning: "Le piege est de jouer les coups du plan sans regarder la position. Si l'adversaire menace quelque chose de concret, il faut d'abord verifier cette menace."
+  };
+}
+
+function defaultSuccessCriteria() {
+  return [
+    "La ligne principale ou une branche coherente a ete atteinte.",
+    "Le roi est en securite ou la securite du roi est le prochain objectif.",
+    "Les pieces mineures principales sont developpees.",
+    "Le centre est conteste, clarifie ou stabilise."
+  ];
+}
+
+function defaultEndgamePlan() {
+  return [
+    "Activer le roi quand les dames disparaissent.",
+    "Creer ou bloquer un pion passe.",
+    "Echanger les pieces si cela simplifie un avantage."
+  ];
+}
+
+function defaultMiddlegamePlan(plan: StrategyPlan) {
+  return [
+    ...(plan.coreIdeas.slice(0, 2).length ? plan.coreIdeas.slice(0, 2) : [plan.beginnerGoal]),
+    "Ameliorer la piece la moins active.",
+    "Transformer l'ouverture en cible concrete."
+  ];
 }
 
 function introReasonForPlan(plan: StrategyPlan, isBlackReply: boolean, firstMoveLabel: string | null) {

@@ -433,4 +433,169 @@ select {
   .opening-mission-list strong {
     @apply text-night;
   }
+
+  .plan-intro-shell {
+    @apply relative grid w-full max-w-[1500px] gap-5 overflow-hidden;
+  }
+
+  .plan-intro-shell::before {
+    content: "";
+    position: absolute;
+    inset: -20px;
+    background-image:
+      linear-gradient(90deg, rgba(22, 22, 22, 0.045) 1px, transparent 1px),
+      linear-gradient(0deg, rgba(22, 22, 22, 0.035) 1px, transparent 1px);
+    background-size: 72px 72px;
+    mask-image: linear-gradient(180deg, #000, transparent 72%);
+    pointer-events: none;
+  }
+
+  .plan-intro-topbar {
+    @apply relative z-10 flex flex-wrap items-center justify-between gap-3;
+  }
+
+  .plan-intro-topbar span {
+    @apply rounded border border-line bg-white px-3 py-2 text-sm font-semibold text-neutral-700 shadow-sm;
+  }
+
+  .plan-intro-hero {
+    @apply relative z-10 grid overflow-hidden rounded-lg border border-line bg-[#ebe4d6]/90 shadow-soft lg:grid-cols-[minmax(0,1.08fr)_minmax(360px,0.72fr)];
+  }
+
+  .plan-intro-copy {
+    @apply grid content-between gap-8 p-6 md:p-8 lg:min-h-[520px];
+  }
+
+  .plan-intro-kicker,
+  .plan-section-kicker {
+    @apply text-xs font-semibold uppercase text-clay;
+  }
+
+  .plan-intro-copy h1 {
+    @apply mt-3 max-w-4xl text-5xl font-semibold leading-none text-night md:text-7xl;
+  }
+
+  .plan-intro-lead {
+    @apply mt-6 max-w-4xl text-base leading-7 text-neutral-700 md:text-lg md:leading-8;
+  }
+
+  .plan-intro-meta {
+    @apply flex flex-wrap gap-2;
+  }
+
+  .plan-intro-meta span {
+    @apply rounded border border-line bg-white/80 px-3 py-1.5 text-xs font-semibold uppercase text-neutral-600;
+  }
+
+  .plan-intro-visual {
+    @apply relative min-h-[360px] overflow-hidden border-t border-line bg-[#dcd7ce] lg:border-l lg:border-t-0;
+  }
+
+  .plan-intro-visual::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(90deg, rgba(22, 22, 22, 0.08) 1px, transparent 1px),
+      linear-gradient(0deg, rgba(22, 22, 22, 0.07) 1px, transparent 1px);
+    background-size: 44px 44px;
+    opacity: 0.65;
+  }
+
+  .plan-intro-board {
+    @apply absolute bottom-8 right-8 w-[min(340px,72%)] rotate-[-7deg];
+  }
+
+  .plan-intro-visual-note {
+    @apply absolute left-6 top-6 grid gap-1 rounded border border-line bg-white/85 p-4 shadow-soft;
+  }
+
+  .plan-intro-visual-note span {
+    @apply text-xs font-semibold uppercase text-clay;
+  }
+
+  .plan-intro-visual-note strong {
+    @apply text-lg font-semibold text-night;
+  }
+
+  .plan-intro-grid {
+    @apply relative z-10 grid gap-4 lg:grid-cols-3;
+  }
+
+  .plan-story-card {
+    @apply rounded-lg border border-line bg-white p-5 shadow-sm;
+  }
+
+  .plan-story-card.is-large {
+    @apply lg:col-span-2;
+  }
+
+  .plan-story-card h2,
+  .plan-path-heading h2 {
+    @apply mt-2 text-2xl font-semibold leading-tight text-night;
+  }
+
+  .plan-story-card p {
+    @apply mt-3 text-sm leading-7 text-neutral-700;
+  }
+
+  .plan-path-panel {
+    @apply relative z-10 rounded-lg border border-line bg-night p-5 text-white shadow-soft md:p-6;
+  }
+
+  .plan-path-panel .plan-section-kicker {
+    @apply text-stone-300;
+  }
+
+  .plan-path-heading h2 {
+    @apply text-white;
+  }
+
+  .plan-path-list {
+    @apply mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5;
+  }
+
+  .plan-path-list article {
+    @apply rounded border border-white/15 bg-white/10 p-4;
+  }
+
+  .plan-path-list span {
+    @apply grid h-8 w-8 place-items-center rounded bg-white text-sm font-semibold text-night;
+  }
+
+  .plan-path-list p {
+    @apply mt-4 text-sm leading-6 text-stone-200;
+  }
+
+  .plan-mission-grid {
+    @apply mt-4 grid gap-3 md:grid-cols-2;
+  }
+
+  .plan-mission-grid p {
+    @apply m-0 grid gap-1 rounded border border-line bg-stone-50 p-3;
+  }
+
+  .plan-mission-grid strong {
+    @apply text-sm font-semibold text-night;
+  }
+
+  .plan-mission-grid span {
+    @apply text-sm leading-6 text-neutral-700;
+  }
+
+  .plan-check-list {
+    @apply mt-4 grid gap-2 text-sm leading-6 text-neutral-700;
+  }
+
+  .plan-check-list li {
+    @apply border-l-2 border-sage pl-3;
+  }
+
+  .plan-intro-actions {
+    @apply sticky bottom-3 z-20 flex flex-wrap justify-end gap-3 rounded-lg border border-line bg-white/90 p-3 shadow-soft backdrop-blur-xl;
+  }
+
+  .plan-start-button {
+    @apply inline-flex min-h-11 items-center justify-center rounded bg-night px-5 py-3 text-sm font-semibold text-white transition hover:bg-ink focus:outline-none focus:ring-4 focus:ring-sage/25;
+  }
 }
