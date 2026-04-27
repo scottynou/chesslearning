@@ -150,6 +150,8 @@ export type PlanRecommendation = {
   evalLabel: string;
   purpose: string;
   planConnection: string;
+  pedagogicalExplanation?: string;
+  moveComplexity?: "simple" | "moyen" | "complexe";
   warning: string | null;
   candidate: CandidateMove | null;
 };
@@ -188,6 +190,10 @@ export type PlanRecommendationsResponse = {
     lineTotal?: number;
   };
   currentObjective: string;
+  lastEvent?: string;
+  whatChanged?: string;
+  nextObjective?: string;
+  recommendedPlanMoves?: PlanRecommendation[];
   primaryMove: PlanRecommendation | null;
   adaptedAlternatives: PlanRecommendation[];
   blockedExpectedMove: {
@@ -197,5 +203,8 @@ export type PlanRecommendationsResponse = {
     deviation?: Record<string, unknown> | null;
   } | null;
   coachMessage: string;
+  pedagogicalSummary?: string;
+  moveComplexity?: "simple" | "moyen" | "complexe";
+  technicalDetails?: Record<string, unknown>;
   technicalEngineMoves: CandidateMove[];
 };

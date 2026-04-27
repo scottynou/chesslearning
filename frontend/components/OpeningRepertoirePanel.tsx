@@ -8,21 +8,31 @@ type OpeningRepertoirePanelProps = {
   plans: StrategyPlan[];
   selectedPlanId?: string | null;
   onSelect: (planId: string) => void;
+  title?: string;
+  intro?: string;
+  emptyMessage?: string;
 };
 
-export function OpeningRepertoirePanel({ plans, selectedPlanId, onSelect }: OpeningRepertoirePanelProps) {
+export function OpeningRepertoirePanel({
+  plans,
+  selectedPlanId,
+  onSelect,
+  title = "Choisis ton plan",
+  intro = "Chaque carte est un plan d'apprentissage. Une fois choisi, le coach garde ce fil conducteur et adapte seulement le prochain coup si l'adversaire devie.",
+  emptyMessage = "Aucun plan disponible pour cette situation."
+}: OpeningRepertoirePanelProps) {
+  const sortedPlans = [...plans].sort((a, b) => difficultyOrder(a.difficulty) - difficultyOrder(b.difficulty));
+
   return (
     <section className="grid gap-4">
       <div>
-        <p className="text-sm font-semibold uppercase text-clay">Répertoire guidé</p>
-        <h2 className="text-2xl font-bold text-night">Choisis ton plan</h2>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-700">
-          Chaque carte est un plan d&apos;apprentissage. Une fois choisi, le coach garde ce fil conducteur et adapte seulement le prochain coup si l&apos;adversaire dévie.
-        </p>
+        <p className="text-sm font-semibold uppercase text-clay">Repertoire guide</p>
+        <h2 className="text-2xl font-bold text-night">{title}</h2>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-700">{intro}</p>
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {plans.map((plan) => (
+        {sortedPlans.map((plan) => (
           <button
             key={plan.id}
             type="button"
@@ -44,7 +54,7 @@ export function OpeningRepertoirePanel({ plans, selectedPlanId, onSelect }: Open
                 <p className="text-xs font-semibold uppercase text-clay">Ce que tu vas apprendre</p>
                 <ul className="mt-1 grid gap-1 text-sm text-neutral-700">
                   {(plan.whatYouWillLearn ?? plan.coreIdeas).slice(0, 3).map((idea) => (
-                    <li key={idea}>• {idea}</li>
+                    <li key={idea}>- {idea}</li>
                   ))}
                 </ul>
               </div>
@@ -53,6 +63,8 @@ export function OpeningRepertoirePanel({ plans, selectedPlanId, onSelect }: Open
           </button>
         ))}
       </div>
+
+      {sortedPlans.length === 0 ? <div className="panel text-sm text-neutral-700">{emptyMessage}</div> : null}
     </section>
   );
 }
@@ -83,7 +95,7 @@ function sideLabel(side: StrategyPlan["side"]) {
 
 function tierLabel(tier: StrategyPlan["tier"]) {
   return {
-    recommended: "Recommandée",
+    recommended: "Recommandee",
     good: "Bonne option",
     situational: "Situationnelle",
     hidden: "Laboratoire"
@@ -95,5 +107,13 @@ function difficultyLabel(difficulty: StrategyPlan["difficulty"]) {
     easy: "Facile",
     medium: "Moyenne",
     hard: "Difficile"
+  }[difficulty];
+}
+
+function difficultyOrder(difficulty: StrategyPlan["difficulty"]) {
+  return {
+    easy: 1,
+    medium: 2,
+    hard: 3
   }[difficulty];
 }

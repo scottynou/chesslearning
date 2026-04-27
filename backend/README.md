@@ -75,7 +75,14 @@ STOCKFISH_PATH=/usr/games/stockfish
 AI_PROVIDER=heuristic
 ```
 
-For Render, use the repository-level `render.yaml`, then replace `FRONTEND_ORIGIN` with your real Vercel domain.
+For Render, use the repository-level `render.yaml`. The default configuration accepts Vercel preview domains through `FRONTEND_ORIGIN_REGEX`, then you can replace `FRONTEND_ORIGIN` with your real Vercel domain after the first deployment.
+
+Public MVP rate limit:
+
+```env
+RATE_LIMIT_WINDOW_SECONDS=60
+RATE_LIMIT_PER_WINDOW=45
+```
 
 ## AI Providers
 

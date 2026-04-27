@@ -100,10 +100,11 @@ export function getPositionPlan(fen: string, moveHistoryUci: string[]): Promise<
   });
 }
 
-export function listAvailablePlans(side?: string, elo?: number): Promise<{ plans: StrategyPlan[] }> {
+export function listAvailablePlans(side?: string, elo?: number, firstMove?: string): Promise<{ plans: StrategyPlan[] }> {
   const params = new URLSearchParams();
   if (side) params.set("side", side);
   if (elo) params.set("elo", String(elo));
+  if (firstMove) params.set("firstMove", firstMove);
   const query = params.toString();
   return getJson<{ plans: StrategyPlan[] }>(`/available-plans${query ? `?${query}` : ""}`);
 }

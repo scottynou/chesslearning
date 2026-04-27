@@ -169,7 +169,7 @@ def test_opening_success_after_main_line(monkeypatch) -> None:
 
 def test_opening_data_main_menu_is_pedagogical() -> None:
     plans = list_available_plans()
-    assert len(plans) <= 12
+    assert len(plans) <= 14
     assert all(plan["tier"] != "hidden" for plan in plans)
     for plan in plans:
         assert plan["id"]
@@ -178,6 +178,26 @@ def test_opening_data_main_menu_is_pedagogical() -> None:
         assert plan["difficulty"]
         assert plan["mainLineUci"]
         assert len(plan["coreIdeas"]) >= 3
+
+
+def test_black_plan_menu_filters_after_e4() -> None:
+    plans = list_available_plans(side="black", first_move="e2e4")
+    plan_ids = {plan["id"] for plan in plans}
+    assert "caro_kann_beginner" in plan_ids
+    assert "black_e5_classical" in plan_ids
+    assert "french_defense_beginner" in plan_ids
+    assert "scandinavian_simple" in plan_ids
+    assert "sicilian_dragon_simplified" in plan_ids
+    assert "qgd_simplified" not in plan_ids
+
+
+def test_black_plan_menu_filters_after_d4() -> None:
+    plans = list_available_plans(side="black", first_move="d2d4")
+    plan_ids = {plan["id"] for plan in plans}
+    assert "qgd_simplified" in plan_ids
+    assert "slav_beginner" in plan_ids
+    assert "kings_indian_setup" in plan_ids
+    assert "caro_kann_beginner" not in plan_ids
 
 
 def test_phase_detector_detects_simple_endgame() -> None:

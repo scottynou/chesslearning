@@ -114,5 +114,35 @@
       "when": ["la dame noire n'est plus exposée", "les pièces mineures peuvent sortir"],
       "plans": ["développer vite", "roquer", "attaquer le centre"]
     }
+  },
+  {
+    "id": "sicilian_dragon_simplified",
+    "nameFr": "Sicilienne Dragon simplifiee",
+    "nameEn": "Sicilian Dragon Setup",
+    "side": "black",
+    "against": ["e2e4"],
+    "tier": "situational",
+    "difficulty": "hard",
+    "style": ["actif", "tactique", "contre-attaque"],
+    "recommendedElo": [1000, 2400],
+    "mainLineUci": ["e2e4", "c7c5", "g1f3", "d7d6", "d2d4", "c5d4", "f3d4", "g8f6", "b1c3", "g7g6"],
+    "eco": ["B70", "B72"],
+    "beginnerGoal": "Contester le centre avec ...c5, developper le fou en g7 et jouer une position active.",
+    "coreIdeas": [
+      "Jouer ...c5 pour attaquer le centre blanc depuis le cote.",
+      "Developper le cavalier g8 vers f6 pour attaquer e4.",
+      "Mettre le fou f8 en g7 pour viser le centre et l'aile dame.",
+      "Roquer avant de lancer une attaque."
+    ],
+    "pieceMissions": [
+      { "piece": "Pion c7", "mission": "Aller en c5 pour contester d4." },
+      { "piece": "Fou f8", "mission": "Aller en g7 pour devenir actif sur la grande diagonale." },
+      { "piece": "Cavalier g8", "mission": "Aller en f6 pour attaquer e4." }
+    ],
+    "branches": [],
+    "transitionToMiddlegame": {
+      "when": ["le fou g7 est actif", "le roi noir est en securite", "le centre blanc est sous pression"],
+      "plans": ["attaquer le centre", "jouer sur la colonne c", "surveiller les attaques blanches sur le roi"]
+    }
   }
 ]

@@ -4,6 +4,7 @@ from typing import Any
 
 import chess
 
+from ..beginner_notation import beginner_notation_for_uci
 from ..elo_ranker import rank_candidates
 from ..stockfish_engine import StockfishEngine
 from .endgame_coach import analyze_endgame
@@ -82,6 +83,11 @@ def get_plan_recommendations(
     progress = plan_progress_for(board, active_plan, move_history, phase_status)
     technical_moves = [candidate.model_dump(by_alias=True) for candidate in engine_candidates[: int(level_settings["technical_limit"])]]
     coach_message = coach_message_for(active_plan, status, phase_status, locked_plan)
+    last_event = last_event_for(move_history)
+    what_changed = what_changed_for(active_plan, status, phase_status, deviation, primary_move)
+    next_objective = current_objective
+    pedagogical_summary = pedagogical_summary_for(coach_message, what_changed, next_objective)
+    response_move_complexity = str(primary_move.get("moveComplexity", "simple")) if primary_move else "simple"
 
     plan_state = {
         "selectedPlanId": active_plan.get("id") if active_plan else None,
@@ -117,10 +123,22 @@ def get_plan_recommendations(
         "phaseStatus": phase_status,
         "planProgress": progress,
         "currentObjective": current_objective,
+        "lastEvent": last_event,
+        "whatChanged": what_changed,
+        "nextObjective": next_objective,
+        "recommendedPlanMoves": plan_items,
         "primaryMove": primary_move,
         "adaptedAlternatives": adapted_alternatives,
         "blockedExpectedMove": blocked_expected_move,
         "coachMessage": coach_message,
+        "pedagogicalSummary": pedagogical_summary,
+        "moveComplexity": response_move_complexity,
+        "technicalDetails": {
+            "engineDepth": engine_depth,
+            "maxMoves": max_moves,
+            "detectedOpeningId": detected_plan.get("id") if detected_plan else None,
+            "transpositionId": transposed_plan.get("id") if transposed_plan else None,
+        },
         "technicalEngineMoves": technical_moves,
     }
 
@@ -289,6 +307,49 @@ def current_objective_for(plan: dict[str, Any] | None, phase: str, primary_move:
     if phase == "endgame" and plan and plan.get("endgamePlan"):
         return str(plan["endgamePlan"][0])
     return fallback_goals(phase)[0]
+
+
+def last_event_for(move_history: list[str]) -> str:
+    if not move_history:
+        return "La partie n'a pas encore commence. Choisis le premier objectif du plan."
+    board = chess.Board()
+    for move_uci in move_history[:-1]:
+        try:
+            board.push_uci(move_uci)
+        except ValueError:
+            return "Le dernier coup est connu, mais son ordre exact n'a pas pu etre reconstruit."
+    last_move = move_history[-1]
+    side = "Les blancs" if board.turn == chess.WHITE else "Les noirs"
+    try:
+        notation = beginner_notation_for_uci(board.fen(), last_move)
+    except Exception:
+        return f"{side} viennent de jouer {last_move}."
+    return f"{side} viennent de jouer {notation.beginner_label}."
+
+
+def what_changed_for(
+    plan: dict[str, Any] | None,
+    status: str,
+    phase_status: str,
+    deviation: dict[str, Any] | None,
+    primary_move: dict[str, Any] | None,
+) -> str:
+    plan_name = plan.get("nameFr") if plan else "le plan general"
+    if phase_status == "opening_success":
+        return "L'ouverture a rempli assez de criteres : on peut passer au plan de milieu de partie."
+    if deviation:
+        if deviation.get("expected"):
+            return f"L'adversaire n'a pas suivi la ligne attendue. On garde {plan_name}, mais le prochain coup doit s'adapter a cette position."
+        return f"La ligne exacte de {plan_name} est terminee. On garde les idees du plan et on choisit un objectif concret."
+    if status == "on_plan":
+        return f"Rien ne force a changer de direction : {plan_name} reste coherent."
+    if primary_move and primary_move.get("warning"):
+        return "Le coup attendu demande de la prudence : Stockfish signale un risque tactique."
+    return "Le coach relie maintenant la position au plan choisi et verifie les coups surs."
+
+
+def pedagogical_summary_for(coach_message: str, what_changed: str, next_objective: str) -> str:
+    return f"{coach_message} {what_changed} Prochain objectif : {next_objective}"
 
 
 def coach_message_for(plan: dict[str, Any] | None, status: str, phase_status: str, locked_plan: bool) -> str:

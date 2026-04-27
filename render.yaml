@@ -12,3 +12,9 @@ services:
         value: /usr/games/stockfish
       - key: FRONTEND_ORIGIN
         value: https://your-vercel-domain.vercel.app
+      - key: FRONTEND_ORIGIN_REGEX
+        value: https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.vercel\.app
+      - key: RATE_LIMIT_WINDOW_SECONDS
+        value: 60
+      - key: RATE_LIMIT_PER_WINDOW
+        value: 45

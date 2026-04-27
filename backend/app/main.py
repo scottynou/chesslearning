@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import os
 import shutil
+import time
+from collections import defaultdict, deque
 
 import chess
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from .bot_service import choose_bot_move
@@ -40,14 +43,42 @@ load_dotenv()
 app = FastAPI(title="Chess Elo Coach API", version="0.1.0")
 
 frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
+frontend_origin_regex = os.getenv(
+    "FRONTEND_ORIGIN_REGEX",
+    r"https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.vercel\.app",
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[frontend_origin, "http://127.0.0.1:3000"],
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_origin_regex=frontend_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+EXPENSIVE_PATHS = {"/analyze", "/plan-recommendations", "/bot-move", "/review-move", "/explain-candidate"}
+rate_limit_window_seconds = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
+rate_limit_per_window = int(os.getenv("RATE_LIMIT_PER_WINDOW", "45"))
+rate_limit_hits: defaultdict[str, deque[float]] = defaultdict(deque)
+
+
+@app.middleware("http")
+async def simple_ip_rate_limit(request: Request, call_next):
+    if request.method == "POST" and request.url.path in EXPENSIVE_PATHS:
+        forwarded_for = request.headers.get("x-forwarded-for", "")
+        client_ip = forwarded_for.split(",")[0].strip() if forwarded_for else (request.client.host if request.client else "unknown")
+        key = f"{client_ip}:{request.url.path}"
+        now = time.monotonic()
+        hits = rate_limit_hits[key]
+        while hits and now - hits[0] > rate_limit_window_seconds:
+            hits.popleft()
+        if len(hits) >= rate_limit_per_window:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Trop de requetes. Attends un instant puis reessaie."},
+            )
+        hits.append(now)
+    return await call_next(request)
 
 analyze_cache: MemoryCache[AnalyzeResponse] = MemoryCache(ttl_seconds=300)
 explain_cache: MemoryCache[ExplainResponse] = MemoryCache(ttl_seconds=900)
@@ -177,8 +208,15 @@ def position_plan_endpoint(request: PositionPlanRequest) -> PositionPlanResponse
 
 
 @app.get("/available-plans", response_model=AvailablePlansResponse)
-def available_plans(side: str | None = None, elo: int | None = None, includeHidden: bool = False) -> AvailablePlansResponse:
-    return AvailablePlansResponse(plans=list_available_plans(side=side, elo=elo, include_hidden=includeHidden))
+def available_plans(
+    side: str | None = None,
+    elo: int | None = None,
+    includeHidden: bool = False,
+    firstMove: str | None = None,
+) -> AvailablePlansResponse:
+    return AvailablePlansResponse(
+        plans=list_available_plans(side=side, elo=elo, include_hidden=includeHidden, first_move=firstMove)
+    )
 
 
 @app.post("/plan-recommendations", response_model=PlanRecommendationsResponse)

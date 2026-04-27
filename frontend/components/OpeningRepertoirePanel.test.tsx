@@ -16,7 +16,7 @@ const plan: StrategyPlan = {
   mainLineUci: ["e2e4", "c7c6"],
   eco: ["B10"],
   beginnerGoal: "Attaquer le centre blanc avec une structure solide.",
-  coreIdeas: ["Attaquer le centre.", "Développer les pièces.", "Roquer."],
+  coreIdeas: ["Attaquer le centre.", "Developper les pieces.", "Roquer."],
   pieceMissions: [],
   miniBoardFen: "rnbqkbnr/pp1ppppp/2p5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
   whatYouWillLearn: ["Attaquer le centre", "Construire une structure", "Passer au milieu de partie"]
@@ -27,7 +27,7 @@ describe("OpeningRepertoirePanel", () => {
     render(<OpeningRepertoirePanel plans={[plan]} selectedPlanId={null} onSelect={() => undefined} />);
     expect(screen.getByText("Choisis ton plan")).toBeTruthy();
     expect(screen.getByText("Caro-Kann")).toBeTruthy();
-    expect(screen.getByText("Recommandée")).toBeTruthy();
+    expect(screen.getByText("Recommandee")).toBeTruthy();
     expect(screen.getByText("Ce que tu vas apprendre")).toBeTruthy();
   });
 });

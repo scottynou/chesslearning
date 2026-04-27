@@ -16,10 +16,29 @@ MAIN_FILES = [
 ]
 
 
-def list_available_plans(side: str | None = None, elo: int | None = None, include_hidden: bool = False) -> list[dict[str, Any]]:
+def list_available_plans(
+    side: str | None = None,
+    elo: int | None = None,
+    include_hidden: bool = False,
+    first_move: str | None = None,
+) -> list[dict[str, Any]]:
     plans = [enrich_plan(plan) for plan in load_opening_plans(include_hidden=include_hidden)]
     if side:
         plans = [plan for plan in plans if plan["side"] == side or plan["side"] == "universal"]
+    if first_move:
+        matching = [
+            plan
+            for plan in plans
+            if first_move in plan.get("against", []) or "any" in plan.get("against", [])
+        ]
+        if matching:
+            plans = matching
+        elif side == "black":
+            plans = [
+                plan
+                for plan in plans
+                if plan.get("tier") in {"recommended", "good"} and plan.get("difficulty") in {"easy", "medium"}
+            ]
     if elo is not None:
         plans = [
             plan

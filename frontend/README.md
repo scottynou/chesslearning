@@ -45,22 +45,25 @@ frontend/out/
 
 The FastAPI backend still needs to run separately on `http://localhost:8000`.
 
-## V3 Interface
+## V4 Interface
 
-The app is now split into two simple states:
+The app starts with the main pedagogical choice: play white or play black.
 
-- opening gallery: choose a guided plan,
-- coach view: board plus one plan-first coaching panel.
+- White: choose an opening plan before starting.
+- Black: enter White's first move on the internal board, then choose an adapted black plan.
+- Free mode remains available, but it is secondary.
 
-The default UI is beginner-first:
+The default UI is plan-first:
 
-- visible levels are Beginner, Intermediate and Pro,
 - the selected opening stays locked for the game,
-- Stockfish candidates stay in technical details,
-- last-move review is requested by clicking a button,
-- SAN, UCI, cp and PV remain hidden in advanced sections.
+- Stockfish candidates stay in advanced technical details,
+- history, glossary and technical details live in the corner menu,
+- move cards explain the idea directly,
+- complexity labels replace the visible Elo selector.
 
 ## Vercel
+
+Import the GitHub repo in Vercel with `frontend/` as the root directory.
 
 Set this environment variable in Vercel once the backend is deployed:
 

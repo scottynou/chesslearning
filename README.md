@@ -117,12 +117,14 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 ## Public Deployment
 
-Recommended simple setup:
+Chosen simple setup:
 
-- Frontend: Vercel or Netlify static Next.js export.
-- Backend: Render, Railway or Fly using `backend/Dockerfile`.
+- Frontend: Vercel static Next.js export from `frontend/`.
+- Backend: Render Web Service using `backend/Dockerfile`.
 - Stockfish: installed inside the backend Docker image.
 - AI: keep `AI_PROVIDER=heuristic` for the public MVP to avoid API costs.
+
+Follow the exact deployment runbook in [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 Frontend production env:
 
@@ -135,10 +137,13 @@ Backend production env:
 ```env
 STOCKFISH_PATH=/usr/games/stockfish
 FRONTEND_ORIGIN=https://your-vercel-domain.vercel.app
+FRONTEND_ORIGIN_REGEX=https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.vercel\.app
 AI_PROVIDER=heuristic
+RATE_LIMIT_WINDOW_SECONDS=60
+RATE_LIMIT_PER_WINDOW=45
 ```
 
-`render.yaml` is included as a starting point. Replace `FRONTEND_ORIGIN` with the real Vercel domain before deploying.
+`render.yaml` is included. The default CORS regex accepts Vercel preview domains, then `FRONTEND_ORIGIN` can be tightened to the real domain after the first deployment.
 
 ## API Overview
 

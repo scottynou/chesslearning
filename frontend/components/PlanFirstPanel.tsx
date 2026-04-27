@@ -1,149 +1,154 @@
 "use client";
 
-import type { PlanRecommendationsResponse, PlanRecommendation, SkillLevel, StrategyPlan } from "@/lib/types";
+import type { PlanRecommendation, PlanRecommendationsResponse, StrategyPlan } from "@/lib/types";
 
 type PlanFirstPanelProps = {
   selectedPlan?: StrategyPlan | null;
   recommendations?: PlanRecommendationsResponse | null;
-  skillLevel: SkillLevel;
   loading?: boolean;
   error?: string | null;
   onSelectRecommendation: (recommendation: PlanRecommendation) => void;
-  onReviewLastMove?: () => void;
-  canReviewLastMove?: boolean;
-  reviewLoading?: boolean;
 };
 
 export function PlanFirstPanel({
   selectedPlan,
   recommendations,
-  skillLevel,
   loading,
   error,
-  onSelectRecommendation,
-  onReviewLastMove,
-  canReviewLastMove,
-  reviewLoading
+  onSelectRecommendation
 }: PlanFirstPanelProps) {
   const primary = recommendations?.primaryMove ?? recommendations?.planMoves[0] ?? recommendations?.mergedRecommendations[0] ?? null;
   const alternatives = recommendations?.adaptedAlternatives ?? [];
   const progress = recommendations?.planProgress;
+  const planName = recommendations?.selectedPlan?.nameFr ?? selectedPlan?.nameFr ?? "Plan general";
+  const moves = [primary, ...alternatives].filter(Boolean) as PlanRecommendation[];
 
   return (
     <section className="panel">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+      <div className="grid gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase text-clay">Coach de plan</p>
-          <h2 className="text-2xl font-semibold text-night">{recommendations?.selectedPlan?.nameFr ?? selectedPlan?.nameFr ?? "Plan général"}</h2>
-          <p className="mt-1 text-sm leading-6 text-neutral-700">
-            {recommendations?.coachMessage ?? selectedPlan?.learningGoal ?? selectedPlan?.beginnerGoal ?? "Choisis un plan pour guider la partie."}
+          <p className="text-xs font-semibold uppercase text-clay">Plan actuel</p>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <h2 className="text-2xl font-semibold text-night">{planName}</h2>
+            {recommendations ? <span className="rounded bg-night px-2 py-1 text-xs font-semibold text-white">{phaseLabel(recommendations.phase)}</span> : null}
+          </div>
+          <p className="mt-2 text-sm leading-6 text-neutral-700">
+            {recommendations?.coachMessage ?? selectedPlan?.learningGoal ?? selectedPlan?.beginnerGoal ?? "Le coach relie les coups au plan choisi."}
           </p>
         </div>
-        <span className="rounded bg-night px-3 py-2 text-xs font-semibold text-white">{skillLabel(skillLevel)}</span>
-      </div>
 
-      {loading ? <p className="text-sm text-clay">Mise à jour du plan...</p> : null}
-      {error ? <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
+        {loading ? <p className="text-sm text-clay">Mise a jour du plan...</p> : null}
+        {error ? <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
 
-      {recommendations ? (
-        <div className="grid gap-4">
-          <div className="rounded border border-line bg-stone-50 p-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded bg-white px-2 py-1 text-xs font-semibold text-night">{phaseLabel(recommendations.phase)}</span>
-              <span className="rounded bg-white px-2 py-1 text-xs font-semibold text-night">{phaseStatusLabel(recommendations.phaseStatus)}</span>
-              {typeof progress?.percent === "number" ? (
-                <span className="ml-auto text-sm font-semibold text-sage">{progress.percent}%</span>
-              ) : null}
+        {recommendations ? (
+          <>
+            <div className="grid gap-3 rounded border border-line bg-stone-50 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded bg-white px-2 py-1 text-xs font-semibold text-night">{phaseStatusLabel(recommendations.phaseStatus)}</span>
+                {typeof progress?.percent === "number" ? <span className="ml-auto text-sm font-semibold text-sage">{progress.percent}%</span> : null}
+              </div>
+              <div className="h-2 overflow-hidden rounded bg-white">
+                <div className="h-full rounded bg-sage" style={{ width: `${progress?.percent ?? 0}%` }} />
+              </div>
+              <CoachFact title="Ce qui vient de se passer" value={recommendations.lastEvent || "La position est prete pour le plan."} />
+              <CoachFact title="Ce que cela change" value={recommendations.whatChanged || recommendations.coachMessage} />
+              <CoachFact title="Prochain objectif" value={recommendations.nextObjective || recommendations.currentObjective} />
             </div>
-            <div className="mt-3 h-2 overflow-hidden rounded bg-white">
-              <div className="h-full rounded bg-sage" style={{ width: `${progress?.percent ?? 0}%` }} />
-            </div>
-            <p className="mt-3 text-sm font-semibold text-night">Objectif actuel</p>
-            <p className="mt-1 text-sm leading-6 text-neutral-700">{recommendations.currentObjective}</p>
-          </div>
 
-          {primary ? (
-            <div className="grid gap-2">
-              <h3 className="text-sm font-semibold text-night">Coup recommandé</h3>
-              <RecommendationCard item={primary} primary onSelect={onSelectRecommendation} />
-            </div>
-          ) : null}
-
-          {alternatives.length > 0 ? (
-            <div className="grid gap-2">
-              <h3 className="text-sm font-semibold text-night">Alternatives adaptées</h3>
-              {alternatives.map((item) => (
-                <RecommendationCard key={item.moveUci} item={item} onSelect={onSelectRecommendation} />
-              ))}
-            </div>
-          ) : null}
-
-          {recommendations.blockedExpectedMove ? (
-            <div className="rounded border border-clay bg-orange-50 px-3 py-2 text-sm text-night">
-              Le coup attendu du plan est retenu : {recommendations.blockedExpectedMove.reason}
-            </div>
-          ) : null}
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={onReviewLastMove}
-              disabled={!canReviewLastMove || reviewLoading}
-              className="rounded border border-line bg-white px-3 py-2 text-sm font-semibold text-night disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {reviewLoading ? "Analyse..." : "Comprendre le dernier coup"}
-            </button>
-          </div>
-
-          <details className="rounded border border-line bg-white p-3">
-            <summary className="cursor-pointer text-sm font-semibold text-night">Critères et détails techniques</summary>
-            <div className="mt-3 grid gap-3 text-sm text-neutral-700">
-              {progress?.criteria ? (
-                <ul className="grid gap-1">
-                  {progress.criteria.map((criterion) => (
-                    <li key={criterion.label}>{criterion.ok ? "OK" : "À faire"} - {criterion.label}</li>
-                  ))}
-                </ul>
-              ) : null}
-              <div className="grid gap-1">
-                {(recommendations.technicalEngineMoves ?? []).slice(0, 5).map((move) => (
-                  <span key={move.moveUci}>
-                    #{move.stockfishRank} {move.moveSan} / {move.moveUci} / eval {move.evalCp ?? "mat"}
-                  </span>
+            {moves.length > 0 ? (
+              <div className="grid gap-3">
+                <h3 className="text-sm font-semibold uppercase text-clay">Coups pour suivre ou adapter le plan</h3>
+                {moves.map((item, index) => (
+                  <RecommendationCard key={`${item.moveUci}-${index}`} item={item} primary={index === 0} onSelect={onSelectRecommendation} />
                 ))}
               </div>
-            </div>
-          </details>
-        </div>
-      ) : null}
+            ) : (
+              <div className="rounded border border-line bg-white px-3 py-2 text-sm text-neutral-700">
+                Aucun coup de plan clair pour l&apos;instant. Verifie les details techniques ou joue un coup legal simple.
+              </div>
+            )}
+
+            {recommendations.blockedExpectedMove ? (
+              <div className="rounded border border-clay bg-orange-50 px-3 py-2 text-sm text-night">
+                Le coup attendu du plan est retenu : {recommendations.blockedExpectedMove.reason}
+              </div>
+            ) : null}
+          </>
+        ) : null}
+      </div>
     </section>
   );
 }
 
-function RecommendationCard({ item, primary, onSelect }: { item: PlanRecommendation; primary?: boolean; onSelect: (item: PlanRecommendation) => void }) {
+function CoachFact({ title, value }: { title: string; value: string }) {
   return (
-    <article className={primary ? "rounded border border-sage bg-white p-4 shadow-sm" : "rounded border border-line bg-white p-3"}>
+    <div>
+      <p className="text-xs font-semibold uppercase text-clay">{title}</p>
+      <p className="mt-1 text-sm leading-6 text-neutral-700">{value}</p>
+    </div>
+  );
+}
+
+function RecommendationCard({
+  item,
+  primary,
+  onSelect
+}: {
+  item: PlanRecommendation;
+  primary?: boolean;
+  onSelect: (item: PlanRecommendation) => void;
+}) {
+  return (
+    <article className={primary ? "rounded border border-sage bg-white p-4 shadow-sm" : "rounded border border-line bg-white p-4"}>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded bg-night px-2 py-1 text-xs font-semibold text-white">{primary ? "Plan" : "Alt"}</span>
+        <span className="rounded bg-night px-2 py-1 text-xs font-semibold text-white">{primary ? "Coup recommande" : "Alternative"}</span>
+        <span className="rounded bg-stone-100 px-2 py-1 text-xs font-semibold text-night">{complexityLabel(item.moveComplexity)}</span>
         <span className="text-base font-semibold text-ink">{item.beginnerLabel}</span>
-        <span className="ml-auto text-sm font-semibold text-sage">{item.finalCoachScore}/100</span>
       </div>
-      <p className="mt-2 text-sm leading-6 text-neutral-700">But : {item.purpose}</p>
-      <p className="mt-1 text-sm leading-6 text-neutral-700">Lien au plan : {item.planConnection}</p>
+      <p className="mt-3 text-sm leading-6 text-neutral-700">
+        {item.pedagogicalExplanation ?? `${item.purpose} ${item.planConnection}`}
+      </p>
       {item.warning ? <p className="mt-2 text-sm font-semibold text-clay">{item.warning}</p> : null}
-      <button type="button" onClick={() => onSelect(item)} className="mt-3 rounded bg-clay px-3 py-2 text-sm font-semibold text-white">
-        Comprendre ce coup
-      </button>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button type="button" onClick={() => onSelect(item)} className="rounded border border-line bg-white px-3 py-2 text-sm font-semibold text-night hover:border-sage">
+          Voir sur l&apos;echiquier
+        </button>
+        <span className="text-sm text-neutral-600">Evaluation : {item.evalLabel}</span>
+      </div>
+      <details className="mt-3 rounded border border-line bg-stone-50 p-3">
+        <summary className="cursor-pointer text-sm font-semibold text-night">Plus de details</summary>
+        <div className="mt-2 grid gap-1 text-sm text-neutral-700">
+          <span>SAN : {item.moveSan}</span>
+          <span>UCI : {item.moveUci}</span>
+          <span>Source : {sourceLabel(item.source)}</span>
+          <span>Stockfish : {item.engineRank ? `#${item.engineRank}` : "hors top moteur"}</span>
+          {item.candidate ? (
+            <>
+              <span>Eval brute : {item.candidate.evalCp ?? "mat"}</span>
+              <span>PV : {item.candidate.pv.join(" ") || "aucune"}</span>
+            </>
+          ) : null}
+        </div>
+      </details>
     </article>
   );
 }
 
-function skillLabel(level: SkillLevel) {
+function complexityLabel(complexity?: string) {
   return {
-    beginner: "Débutant",
-    intermediate: "Intermédiaire",
-    pro: "Pro"
-  }[level];
+    simple: "simple",
+    moyen: "moyen",
+    complexe: "complexe"
+  }[complexity ?? "simple"] ?? "simple";
+}
+
+function sourceLabel(source: PlanRecommendation["source"]) {
+  return {
+    plan: "plan",
+    engine: "moteur",
+    plan_and_engine: "plan + moteur",
+    fallback_principle: "principe"
+  }[source];
 }
 
 function phaseLabel(phase: string) {
@@ -158,9 +163,9 @@ function phaseLabel(phase: string) {
 function phaseStatusLabel(status: string) {
   return {
     opening_in_progress: "Ouverture en cours",
-    opening_success: "Ouverture réussie",
-    adapted: "Plan adapté",
-    transposed: "Transposition signalée",
+    opening_success: "Ouverture reussie",
+    adapted: "Plan adapte",
+    transposed: "Transposition signalee",
     fallback: "Plan de secours"
   }[status] ?? status;
 }
