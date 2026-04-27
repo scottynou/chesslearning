@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chess, Move, Square } from "chess.js";
 import { ChessCoachBoard } from "@/components/ChessCoachBoard";
 import { GameControls } from "@/components/GameControls";
@@ -42,11 +42,111 @@ type LastMoveForReview = {
 
 type AppStage = "side-selection" | "white-plan-selection" | "black-first-move" | "black-plan-selection" | "coach";
 type UserSide = "white" | "black" | "both";
+type NavigationSnapshot = {
+  key: "chess-learning-navigation";
+  appStage: AppStage;
+  userSide: UserSide;
+  orientation: Orientation;
+  mode: PlayMode;
+  selectedPlanId: string | null;
+  firstOpponentMove: string | null;
+  historyUci: string[];
+};
 
 const INTERNAL_SKILL_LEVEL: SkillLevel = "beginner";
 const INTERNAL_ELO = 1200;
 const INTERNAL_MAX_MOVES = 5;
 const INTERNAL_ENGINE_DEPTH = 8;
+const NAVIGATION_KEY = "chess-learning-navigation";
+
+function buildGameFromHistory(moves: string[]) {
+  const next = new Chess();
+  for (const move of moves) {
+    try {
+      next.move({
+        from: move.slice(0, 2),
+        to: move.slice(2, 4),
+        ...(move.slice(4) ? { promotion: move.slice(4) } : {})
+      });
+    } catch {
+      break;
+    }
+  }
+  return next;
+}
+
+function isNavigationSnapshot(value: unknown): value is NavigationSnapshot {
+  return Boolean(value && typeof value === "object" && (value as NavigationSnapshot).key === NAVIGATION_KEY);
+}
+
+function snapshotFromLocation(): NavigationSnapshot {
+  const params = new URLSearchParams(window.location.search);
+  const view = params.get("view");
+  const sideParam = params.get("side");
+  const userSide: UserSide = sideParam === "black" || sideParam === "both" ? sideParam : "white";
+  const plan = params.get("plan");
+  const first = params.get("first");
+
+  if (view === "white-plans") {
+    return createNavigationSnapshot({ appStage: "white-plan-selection", userSide: "white", orientation: "white" });
+  }
+  if (view === "black-first-move") {
+    return createNavigationSnapshot({ appStage: "black-first-move", userSide: "black", orientation: "black" });
+  }
+  if (view === "black-plans") {
+    return createNavigationSnapshot({
+      appStage: "black-plan-selection",
+      userSide: "black",
+      orientation: "black",
+      firstOpponentMove: first,
+      historyUci: first ? [first] : []
+    });
+  }
+  if (view === "coach") {
+    return createNavigationSnapshot({
+      appStage: "coach",
+      userSide,
+      orientation: userSide === "black" ? "black" : "white",
+      selectedPlanId: plan,
+      firstOpponentMove: first,
+      historyUci: first ? [first] : []
+    });
+  }
+  return createNavigationSnapshot();
+}
+
+function createNavigationSnapshot(overrides: Partial<NavigationSnapshot> = {}): NavigationSnapshot {
+  return {
+    key: NAVIGATION_KEY,
+    appStage: "side-selection",
+    userSide: "white",
+    orientation: "white",
+    mode: "both",
+    selectedPlanId: null,
+    firstOpponentMove: null,
+    historyUci: [],
+    ...overrides
+  };
+}
+
+function urlForSnapshot(snapshot: NavigationSnapshot) {
+  const params = new URLSearchParams();
+  if (snapshot.appStage === "white-plan-selection") {
+    params.set("view", "white-plans");
+  } else if (snapshot.appStage === "black-first-move") {
+    params.set("view", "black-first-move");
+  } else if (snapshot.appStage === "black-plan-selection") {
+    params.set("view", "black-plans");
+    if (snapshot.firstOpponentMove) params.set("first", snapshot.firstOpponentMove);
+  } else if (snapshot.appStage === "coach") {
+    params.set("view", "coach");
+    params.set("side", snapshot.userSide);
+    if (snapshot.selectedPlanId) params.set("plan", snapshot.selectedPlanId);
+    if (snapshot.firstOpponentMove) params.set("first", snapshot.firstOpponentMove);
+  }
+  const query = params.toString();
+  return `${window.location.pathname}${query ? `?${query}` : ""}`;
+}
 
 export default function HomePage() {
   const [game, setGame] = useState(() => new Chess());
@@ -77,6 +177,8 @@ export default function HomePage() {
   const [highlightedRecommendationUci, setHighlightedRecommendationUci] = useState<string | null>(null);
   const [botStrategyState, setBotStrategyState] = useState<Record<string, unknown>>({});
   const [menuOpen, setMenuOpen] = useState(false);
+  const navigationReady = useRef(false);
+  const skipNextHistoryReplace = useRef(false);
 
   const fen = game.fen();
   const history = useMemo(() => game.history({ verbose: true }) as VerboseMove[], [game]);
@@ -87,6 +189,94 @@ export default function HomePage() {
     return plans.find((plan) => plan.id === selectedPlanId) ?? (planRecommendations?.selectedPlan as StrategyPlan | null) ?? null;
   }, [plans, planRecommendations?.selectedPlan, selectedPlanId]);
   const boardLocked = appStage === "black-plan-selection" || appStage === "white-plan-selection" || appStage === "side-selection";
+
+  const makeNavigationSnapshot = useCallback(
+    (overrides: Partial<NavigationSnapshot> = {}) =>
+      createNavigationSnapshot({
+        appStage,
+        userSide,
+        orientation,
+        mode,
+        selectedPlanId,
+        firstOpponentMove,
+        historyUci,
+        ...overrides
+      }),
+    [appStage, firstOpponentMove, historyUci, mode, orientation, selectedPlanId, userSide]
+  );
+
+  const writeNavigationSnapshot = useCallback((snapshot: NavigationSnapshot, action: "push" | "replace") => {
+    if (typeof window === "undefined") return;
+    const url = urlForSnapshot(snapshot);
+    if (action === "push") {
+      window.history.pushState(snapshot, "", url);
+    } else {
+      window.history.replaceState(snapshot, "", url);
+    }
+  }, []);
+
+  const restoreNavigationSnapshot = useCallback((snapshot: NavigationSnapshot) => {
+    setGame(buildGameFromHistory(snapshot.historyUci));
+    setAppStage(snapshot.appStage);
+    setUserSide(snapshot.userSide);
+    setOrientation(snapshot.orientation);
+    setMode(snapshot.mode);
+    setSelectedPlanId(snapshot.selectedPlanId);
+    setFirstOpponentMove(snapshot.firstOpponentMove);
+    setSelectedSquare(null);
+    setPendingPromotion(null);
+    setLastMessage(null);
+    if (snapshot.appStage === "side-selection" || snapshot.appStage === "black-first-move") {
+      setPlans([]);
+    }
+    setPlansError(null);
+    setPlanRecommendations(null);
+    setPlanError(null);
+    setLastReview(null);
+    setReviewsByPly({});
+    setReviewLoading(false);
+    setReviewError(null);
+    setLastMoveForReview(null);
+    setBotThinking(false);
+    setBotError(null);
+    setBotStrategyState({});
+    setHighlightedMove(null);
+    setHighlightedRecommendationUci(null);
+    setMenuOpen(false);
+  }, []);
+
+  const navigateToSnapshot = useCallback(
+    (snapshot: NavigationSnapshot, action: "push" | "replace" = "push") => {
+      restoreNavigationSnapshot(snapshot);
+      writeNavigationSnapshot(snapshot, action);
+    },
+    [restoreNavigationSnapshot, writeNavigationSnapshot]
+  );
+
+  useEffect(() => {
+    const initialSnapshot = isNavigationSnapshot(window.history.state) ? window.history.state : snapshotFromLocation();
+    restoreNavigationSnapshot(initialSnapshot);
+    writeNavigationSnapshot(initialSnapshot, "replace");
+    navigationReady.current = true;
+    skipNextHistoryReplace.current = true;
+
+    function handlePopState(event: PopStateEvent) {
+      const snapshot = isNavigationSnapshot(event.state) ? event.state : snapshotFromLocation();
+      restoreNavigationSnapshot(snapshot);
+    }
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [restoreNavigationSnapshot, writeNavigationSnapshot]);
+
+  useEffect(() => {
+    if (!navigationReady.current) return;
+    if (skipNextHistoryReplace.current) {
+      skipNextHistoryReplace.current = false;
+      return;
+    }
+    writeNavigationSnapshot(makeNavigationSnapshot(), "replace");
+  }, [makeNavigationSnapshot, writeNavigationSnapshot]);
 
   useEffect(() => {
     const primaryUci = planRecommendations?.primaryMove?.moveUci;
@@ -216,15 +406,24 @@ export default function HomePage() {
       rememberMoveForReview(fenBefore, result.game.fen(), moveUci, ply, source);
 
       if (appStage === "black-first-move" && history.length === 0 && source === "manual") {
+        const nextSnapshot = makeNavigationSnapshot({
+          appStage: "black-plan-selection",
+          userSide: "black",
+          orientation: "black",
+          selectedPlanId: null,
+          firstOpponentMove: moveUci,
+          historyUci: [...historyUci, moveUci]
+        });
         setFirstOpponentMove(moveUci);
         setAppStage("black-plan-selection");
         setLastMessage("Premier coup blanc enregistre. Choisis maintenant une reponse noire adaptee.");
+        writeNavigationSnapshot(nextSnapshot, "push");
       } else {
         setLastMessage(null);
       }
       return true;
     },
-    [appStage, boardLocked, game, history.length, mode, rememberMoveForReview]
+    [appStage, boardLocked, game, history.length, historyUci, makeNavigationSnapshot, mode, rememberMoveForReview, writeNavigationSnapshot]
   );
 
   const requestMove = useCallback(
@@ -323,60 +522,51 @@ export default function HomePage() {
   );
 
   function startWhiteFlow() {
-    resetBoardOnly();
-    setUserSide("white");
-    setOrientation("white");
-    setMode("both");
-    setSelectedPlanId(null);
-    setFirstOpponentMove(null);
-    setPlans([]);
-    setAppStage("white-plan-selection");
+    navigateToSnapshot(
+      createNavigationSnapshot({
+        appStage: "white-plan-selection",
+        userSide: "white",
+        orientation: "white"
+      })
+    );
   }
 
   function startBlackFlow() {
-    resetBoardOnly();
-    setUserSide("black");
-    setOrientation("black");
-    setMode("both");
-    setSelectedPlanId(null);
-    setFirstOpponentMove(null);
-    setPlans([]);
-    setAppStage("black-first-move");
+    navigateToSnapshot(
+      createNavigationSnapshot({
+        appStage: "black-first-move",
+        userSide: "black",
+        orientation: "black"
+      })
+    );
   }
 
   function startFreeMode() {
-    resetBoardOnly();
-    setUserSide("both");
-    setOrientation("white");
-    setMode("both");
-    setSelectedPlanId(null);
-    setPlans([]);
-    setAppStage("coach");
+    navigateToSnapshot(
+      createNavigationSnapshot({
+        appStage: "coach",
+        userSide: "both",
+        orientation: "white"
+      })
+    );
   }
 
   const handlePlanSelect = useCallback(
     (planId: string) => {
       const plan = plans.find((item) => item.id === planId);
-      setSelectedPlanId(planId);
-      setAppStage("coach");
-      setReviewsByPly({});
-      setLastReview(null);
-      setLastMoveForReview(null);
-      setPlanRecommendations(null);
-      setHighlightedMove(null);
-      setHighlightedRecommendationUci(null);
-      setLastMessage(null);
-      setMenuOpen(false);
-      if (plan?.side === "black") {
-        setOrientation("black");
-      } else if (plan?.side === "white") {
-        setOrientation("white");
-      }
-      if (userSide !== "black") {
-        setGame(new Chess());
-      }
+      const planOrientation: Orientation = plan?.side === "black" ? "black" : "white";
+      navigateToSnapshot(
+        makeNavigationSnapshot({
+          appStage: "coach",
+          userSide,
+          orientation: planOrientation,
+          selectedPlanId: planId,
+          historyUci: userSide === "black" ? historyUci : [],
+          firstOpponentMove: userSide === "black" ? firstOpponentMove : null
+        })
+      );
     },
-    [plans, userSide]
+    [firstOpponentMove, historyUci, makeNavigationSnapshot, navigateToSnapshot, plans, userSide]
   );
 
   const handlePlanRecommendationToggle = useCallback((recommendation: PlanRecommendation) => {
@@ -452,12 +642,7 @@ export default function HomePage() {
   }
 
   function changePlan() {
-    resetBoardOnly();
-    setSelectedPlanId(null);
-    setFirstOpponentMove(null);
-    setPlans([]);
-    setAppStage("side-selection");
-    setMenuOpen(false);
+    navigateToSnapshot(createNavigationSnapshot());
   }
 
   async function copyText(value: string, label: string) {
