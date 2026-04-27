@@ -1,6 +1,6 @@
-# Chess Elo Coach
+# Chess Learning
 
-Chess Elo Coach is a mobile-first chess training web app. It uses an internal board only: it does not read live games from Chess.com, Lichess, or any other site, and it never plays moves automatically outside its own training board.
+Chess Learning is a plan-first chess training web app. It uses an internal board only: it does not read live games from Chess.com, Lichess, or any other site, and it never plays moves automatically outside its own training board.
 
 ## Project Layout
 
@@ -137,7 +137,7 @@ Backend production env:
 ```env
 STOCKFISH_PATH=/usr/games/stockfish
 FRONTEND_ORIGIN=https://chess-elo-coach-web.onrender.com
-FRONTEND_ORIGIN_REGEX=https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.vercel\.app|https://.*\.onrender\.com
+FRONTEND_ORIGIN_REGEX=https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.onrender\.com
 AI_PROVIDER=heuristic
 RATE_LIMIT_WINDOW_SECONDS=60
 RATE_LIMIT_PER_WINDOW=45

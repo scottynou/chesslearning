@@ -1,4 +1,0 @@
-{
-  "buildCommand": "npm run build:live-server",
-  "outputDirectory": "out"
-}

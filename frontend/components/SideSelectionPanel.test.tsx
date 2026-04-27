@@ -7,7 +7,7 @@ describe("SideSelectionPanel", () => {
     render(<SideSelectionPanel onChooseWhite={() => undefined} onChooseBlack={() => undefined} onChooseFreeMode={() => undefined} />);
     expect(screen.getByText("Je joue les blancs")).toBeTruthy();
     expect(screen.getByText("Je joue les noirs")).toBeTruthy();
-    expect(screen.getByText("Mode libre / jouer les deux camps")).toBeTruthy();
+    expect(screen.getByText("Mode libre")).toBeTruthy();
   });
 
   it("calls the black flow when the black choice is clicked", () => {

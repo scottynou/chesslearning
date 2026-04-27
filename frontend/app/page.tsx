@@ -469,15 +469,8 @@ export default function HomePage() {
 
   if (appStage === "side-selection") {
     return (
-      <main className="mx-auto grid min-h-screen w-full max-w-7xl gap-5 px-4 py-4 md:px-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:py-6">
+      <main>
         <SideSelectionPanel onChooseWhite={startWhiteFlow} onChooseBlack={startBlackFlow} onChooseFreeMode={startFreeMode} />
-        <aside className="panel self-start">
-          <p className="text-xs font-semibold uppercase text-clay">Mode principal</p>
-          <h2 className="mt-1 text-xl font-semibold text-night">Manuel guide</h2>
-          <p className="mt-2 text-sm leading-6 text-neutral-700">
-            Tu joues les coups toi-meme sur l&apos;echiquier interne. Le coach explique le plan, les deviations et les coups coherents.
-          </p>
-        </aside>
       </main>
     );
   }
@@ -657,7 +650,7 @@ function Header({
   return (
     <header className="flex flex-wrap items-end justify-between gap-3">
       <div>
-        <p className="text-sm font-semibold uppercase text-clay">Chess Elo Coach</p>
+        <p className="text-sm font-semibold uppercase text-clay">Chess Learning</p>
         <h1 className="text-3xl font-bold text-ink sm:text-4xl">Coach de plan</h1>
       </div>
       <div className="flex items-center gap-2">

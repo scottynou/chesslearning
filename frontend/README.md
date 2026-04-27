@@ -1,4 +1,4 @@
-# Chess Elo Coach Frontend
+# Chess Learning Frontend
 
 Next.js App Router frontend for the plan-first chess training interface.
 
@@ -61,12 +61,10 @@ The default UI is plan-first:
 - move cards explain the idea directly,
 - complexity labels replace the visible Elo selector.
 
-## Vercel
+## Render
 
-Import the GitHub repo in Vercel with `frontend/` as the root directory.
-
-Set this environment variable in Vercel once the backend is deployed:
+The root `render.yaml` creates the frontend as a Render Static Site. It also sets this variable automatically from the backend service URL:
 
 ```env
-NEXT_PUBLIC_API_BASE_URL=https://your-backend-domain
+NEXT_PUBLIC_API_BASE_URL=https://your-backend.onrender.com
 ```

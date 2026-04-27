@@ -13,7 +13,7 @@ services:
       - key: FRONTEND_ORIGIN
         value: https://chess-elo-coach-web.onrender.com
       - key: FRONTEND_ORIGIN_REGEX
-        value: https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.vercel\.app|https://.*\.onrender\.com
+        value: https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.onrender\.com
       - key: RATE_LIMIT_WINDOW_SECONDS
         value: 60
       - key: RATE_LIMIT_PER_WINDOW

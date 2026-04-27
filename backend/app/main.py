@@ -40,12 +40,12 @@ from .strategy.plan_engine import get_plan_recommendations
 
 load_dotenv()
 
-app = FastAPI(title="Chess Elo Coach API", version="0.1.0")
+app = FastAPI(title="Chess Learning API", version="0.1.0")
 
 frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
 frontend_origin_regex = os.getenv(
     "FRONTEND_ORIGIN_REGEX",
-    r"https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.vercel\.app",
+    r"https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.onrender\.com",
 )
 app.add_middleware(
     CORSMiddleware,

@@ -14,7 +14,7 @@ Chemin choisi maintenant : tout mettre sur Render.
 - `frontend/next.config.mjs` exporte le site statique dans `frontend/out`.
 - Le frontend recupere automatiquement l'URL publique du backend Render avec `RENDER_EXTERNAL_URL`.
 
-- Le backend accepte les domaines Render et Vercel via CORS.
+- Le backend accepte les domaines Render via CORS.
 - Les endpoints couteux ont une limite simple par IP.
 
 ## Ce que tu dois faire sur Render
@@ -47,7 +47,7 @@ Si tu ne vois pas `Blueprint`, fais dans cet ordre :
 AI_PROVIDER=heuristic
 STOCKFISH_PATH=/usr/games/stockfish
 FRONTEND_ORIGIN=https://chess-elo-coach-web.onrender.com
-FRONTEND_ORIGIN_REGEX=https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.vercel\.app|https://.*\.onrender\.com
+FRONTEND_ORIGIN_REGEX=https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.onrender\.com
 RATE_LIMIT_WINDOW_SECONDS=60
 RATE_LIMIT_PER_WINDOW=45
 ```
