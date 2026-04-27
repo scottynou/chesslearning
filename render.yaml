@@ -26,4 +26,7 @@ services:
     staticPublishPath: out
     envVars:
       - key: NEXT_PUBLIC_API_BASE_URL
-        value: https://chess-elo-coach-api.onrender.com
+        fromService:
+          type: web
+          name: chess-elo-coach-api
+          envVarKey: RENDER_EXTERNAL_URL

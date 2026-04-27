@@ -129,7 +129,7 @@ Follow the exact deployment runbook in [`DEPLOYMENT.md`](DEPLOYMENT.md).
 Frontend production env:
 
 ```env
-NEXT_PUBLIC_API_BASE_URL=https://chess-elo-coach-api.onrender.com
+NEXT_PUBLIC_API_BASE_URL=<automatically set from the backend RENDER_EXTERNAL_URL in render.yaml>
 ```
 
 Backend production env:
@@ -143,7 +143,7 @@ RATE_LIMIT_WINDOW_SECONDS=60
 RATE_LIMIT_PER_WINDOW=45
 ```
 
-`render.yaml` creates both Render services. If Render assigns a different public URL, update `NEXT_PUBLIC_API_BASE_URL` and `FRONTEND_ORIGIN`.
+`render.yaml` creates both Render services. The frontend reads the backend public URL from Render's `RENDER_EXTERNAL_URL`, so random Blueprint suffixes are handled automatically.
 
 ## API Overview
 

@@ -12,11 +12,7 @@ Chemin choisi maintenant : tout mettre sur Render.
 - `render.yaml` cree les deux services Render.
 - `backend/Dockerfile` installe Stockfish et lance FastAPI.
 - `frontend/next.config.mjs` exporte le site statique dans `frontend/out`.
-- Le frontend appelle par defaut :
-
-```text
-https://chess-elo-coach-api.onrender.com
-```
+- Le frontend recupere automatiquement l'URL publique du backend Render avec `RENDER_EXTERNAL_URL`.
 
 - Le backend accepte les domaines Render et Vercel via CORS.
 - Les endpoints couteux ont une limite simple par IP.
@@ -70,10 +66,10 @@ https://chess-elo-coach-api.onrender.com/health
    - Root Directory: `frontend`
    - Build Command: `npm install && npm run build:live-server`
    - Publish Directory: `out`
-10. Ajoute :
+10. Ajoute seulement si Render ne l'a pas cree automatiquement :
 
 ```env
-NEXT_PUBLIC_API_BASE_URL=https://chess-elo-coach-api.onrender.com
+NEXT_PUBLIC_API_BASE_URL=https://URL-DE-TON-BACKEND.onrender.com
 ```
 
 11. Deploie le frontend.
