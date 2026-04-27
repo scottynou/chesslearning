@@ -42,7 +42,7 @@ export function GlossaryPanel({ compact = false }: { compact?: boolean }) {
       <div className="grid gap-2">
         {TERMS.map(([term, definition]) => (
           <details key={term} className={compact ? "glossary-compact-item" : "rounded border border-line bg-stone-50 px-3 py-2 text-sm"}>
-            <summary className="cursor-pointer font-semibold text-night">? {term}</summary>
+            <summary className="cursor-pointer font-semibold text-night">{term}</summary>
             <p className="mt-1 text-neutral-700">{definition}</p>
           </details>
         ))}
