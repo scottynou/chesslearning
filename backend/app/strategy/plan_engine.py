@@ -127,6 +127,16 @@ def get_plan_recommendations(
             primary_move = choose_primary_move([], visible_merged)
 
     phase_display = phase_display_for(phase, phase_status)
+    accuracy_profile = accuracy_profile_for(
+        phase_display=phase_display,
+        phase_status=phase_status,
+        opening_state=opening_state,
+        engine_candidates=engine_candidates,
+        player_turn=player_turn,
+    )
+    if player_turn and visible_merged and should_shape_for_human_accuracy(phase_display, phase_status, opening_state):
+        visible_merged = shape_recommendations_for_accuracy(visible_merged, accuracy_profile)
+        primary_move = choose_primary_move([], visible_merged)
     visible_recommendations = visible_recommendations_for(
         phase_display=phase_display,
         primary_move=primary_move,
@@ -148,6 +158,8 @@ def get_plan_recommendations(
             move_history=move_history,
             recommendations=visible_recommendations,
         )
+        if should_shape_for_human_accuracy(phase_display, phase_status, opening_state):
+            visible_recommendations = shape_recommendations_for_accuracy(visible_recommendations, accuracy_profile)
         visible_recommendations = decorate_recommendations(
             visible_recommendations,
             str(phase_display["recommendationStyle"]),
@@ -222,6 +234,7 @@ def get_plan_recommendations(
             "adaptations": suggest_adaptation_after_deviation(fen, plan_state, engine_candidates),
             "phaseCoach": phase_coach_context,
             "skillLevel": level_settings,
+            "accuracyProfile": accuracy_profile,
         },
         "selectedPlan": active_plan,
         "phase": phase,
@@ -448,6 +461,174 @@ def decorate_recommendations(items: list[dict[str, Any]], style: str) -> list[di
         copy["arrowColor"] = colors[min(index, len(colors) - 1)]
         decorated.append(copy)
     return decorated
+
+
+def should_shape_for_human_accuracy(phase_display: dict[str, Any], phase_status: str, opening_state: str) -> bool:
+    if phase_display["key"] != "opening":
+        return True
+    return phase_status in {"adapted", "fallback"} or opening_state in {"recoverable", "abandoned"}
+
+
+def accuracy_profile_for(
+    *,
+    phase_display: dict[str, Any],
+    phase_status: str,
+    opening_state: str,
+    engine_candidates: list[Any],
+    player_turn: bool,
+) -> dict[str, Any]:
+    if not player_turn:
+        return {
+            "mode": "idle",
+            "target": 84,
+            "min": 78,
+            "max": 88,
+            "reason": "Hors tour joueur.",
+        }
+
+    position_score = score_from_side_to_move(engine_candidates)
+    mating_danger = mate_danger_from_side_to_move(engine_candidates)
+    phase_key = str(phase_display.get("key", "opening"))
+
+    if mating_danger == "critical" or position_score <= -260:
+        return {
+            "mode": "survival",
+            "target": 97,
+            "min": 92,
+            "max": 100,
+            "reason": "Position critique : on accepte des coups tres proches du moteur pour ne pas perdre.",
+        }
+    if phase_status in {"adapted", "fallback"} or opening_state in {"recoverable", "abandoned"} or position_score <= -90:
+        return {
+            "mode": "pressure",
+            "target": 90,
+            "min": 84,
+            "max": 96,
+            "reason": "Sous pression : on monte la qualite sans devenir systematiquement machine.",
+        }
+    if phase_key == "endgame":
+        return {
+            "mode": "conversion",
+            "target": 88,
+            "min": 82,
+            "max": 94,
+            "reason": "Finale : les coups doivent convertir proprement.",
+        }
+    if position_score >= 220:
+        return {
+            "mode": "comfortable",
+            "target": 81,
+            "min": 76,
+            "max": 86,
+            "reason": "Position confortable : on evite les coups inutilement parfaits.",
+        }
+    return {
+        "mode": "human",
+        "target": 84,
+        "min": 78,
+        "max": 89,
+        "reason": "Zone humaine forte : proche du moteur, mais pas toujours top engine.",
+    }
+
+
+def shape_recommendations_for_accuracy(items: list[dict[str, Any]], profile: dict[str, Any]) -> list[dict[str, Any]]:
+    if len(items) <= 1:
+        return [annotate_accuracy(dict(item), profile) for item in items]
+
+    mode = str(profile.get("mode", "human"))
+    if mode == "survival":
+        ordered = sorted(
+            items,
+            key=lambda item: (
+                -int(item.get("engineScore") or 0),
+                int(item.get("tacticalRisk") or 0),
+                -int(item.get("finalCoachScore") or 0),
+                item.get("engineRank") or 99,
+            ),
+        )
+        return [annotate_accuracy(dict(item), profile) for item in ordered]
+
+    candidates = [item for item in items if not _is_severe_warning(item)]
+    if not candidates:
+        candidates = list(items)
+
+    minimum = int(profile.get("min", 78))
+    viable = [
+        item
+        for item in candidates
+        if int(item.get("engineScore") or 0) >= minimum
+        or (int(item.get("planFitScore") or 0) >= 90 and int(item.get("engineScore") or 0) >= minimum - 6)
+    ]
+    if not viable:
+        viable = sorted(candidates, key=lambda item: -int(item.get("engineScore") or 0))[: max(1, min(3, len(candidates)))]
+
+    ordered = sorted(viable, key=lambda item: human_accuracy_sort_score(item, profile), reverse=True)
+    remaining = [
+        item
+        for item in candidates
+        if item.get("moveUci") not in {ordered_item.get("moveUci") for ordered_item in ordered}
+    ]
+    tail = sorted(
+        remaining,
+        key=lambda item: (
+            -int(item.get("engineScore") or 0),
+            int(item.get("tacticalRisk") or 0),
+            -int(item.get("finalCoachScore") or 0),
+        ),
+    )
+    return [annotate_accuracy(dict(item), profile) for item in [*ordered, *tail]]
+
+
+def human_accuracy_sort_score(item: dict[str, Any], profile: dict[str, Any]) -> float:
+    engine_score = int(item.get("engineScore") or 0)
+    plan_fit = int(item.get("planFitScore") or 0)
+    simplicity = int(item.get("beginnerSimplicityScore") or 0)
+    risk = int(item.get("tacticalRisk") or 0)
+    final_score = int(item.get("finalCoachScore") or 0)
+    target = int(profile.get("target", 84))
+    minimum = int(profile.get("min", 78))
+    maximum = int(profile.get("max", 89))
+    mode = str(profile.get("mode", "human"))
+
+    if mode == "pressure":
+        over_penalty = 0.45
+        under_penalty = 3.4
+        distance_penalty = 1.35
+    elif mode == "conversion":
+        over_penalty = 0.75
+        under_penalty = 3.1
+        distance_penalty = 1.45
+    elif mode == "comfortable":
+        over_penalty = 2.1
+        under_penalty = 2.7
+        distance_penalty = 1.7
+    else:
+        over_penalty = 1.65
+        under_penalty = 3.0
+        distance_penalty = 1.55
+
+    in_band_bonus = 22 if minimum <= engine_score <= maximum else 0
+    plan_bonus = 9 if item.get("source") in {"plan", "plan_and_engine"} else 0
+    return (
+        in_band_bonus
+        + plan_bonus
+        + final_score * 0.24
+        + plan_fit * 0.23
+        + simplicity * 0.15
+        + engine_score * 0.14
+        - risk * 0.42
+        - abs(engine_score - target) * distance_penalty
+        - max(0, minimum - engine_score) * under_penalty
+        - max(0, engine_score - maximum) * over_penalty
+    )
+
+
+def annotate_accuracy(item: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
+    engine_score = int(item.get("engineScore") or 0)
+    target = int(profile.get("target", 84))
+    item["humanAccuracyEstimate"] = max(0, min(99, round(engine_score * 0.92 + target * 0.08)))
+    item["accuracyBand"] = str(profile.get("mode", "human"))
+    return item
 
 
 def expected_opponent_move_for(item: dict[str, Any] | None) -> dict[str, Any] | None:

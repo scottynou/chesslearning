@@ -201,12 +201,19 @@ def _prompt(
             "beginnerSimplicityScore": item.get("beginnerSimplicityScore"),
             "tacticalRisk": item.get("tacticalRisk"),
             "finalCoachScore": item.get("finalCoachScore"),
+            "humanAccuracyEstimate": item.get("humanAccuracyEstimate"),
+            "accuracyBand": item.get("accuracyBand"),
             "warning": item.get("warning"),
         }
         for item in recommendations
     ]
     payload = {
-        "task": "Rank only these legal candidate moves. Do not invent a move. Prefer the selected opening plan when safe, then engine safety, then human simplicity around 1200 Elo.",
+        "task": (
+            "Rank only these legal candidate moves. Do not invent a move. Prefer the selected opening plan when safe, "
+            "then engine safety, then human simplicity around 1200 Elo. In stable positions, prefer the hidden "
+            "humanAccuracyEstimate band over always choosing the top engine move. In pressure or survival positions, "
+            "prioritize the strongest safe move."
+        ),
         "output": {"orderedMoveUci": ["only candidate moveUci values in best order"], "confidence": "0-100"},
         "fen": fen,
         "phase": phase,

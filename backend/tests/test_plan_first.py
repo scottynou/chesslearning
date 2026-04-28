@@ -198,6 +198,87 @@ def test_adaptive_signal_progressively_tracks_position_pressure() -> None:
     assert stable["suggestedBoostDelta"] == -50
 
 
+def test_human_accuracy_shaping_prefers_strong_human_band() -> None:
+    from app.strategy.plan_engine import shape_recommendations_for_accuracy
+
+    engine_perfect = {
+        "moveUci": "d1h5",
+        "source": "engine",
+        "engineRank": 1,
+        "planFitScore": 35,
+        "engineScore": 100,
+        "beginnerSimplicityScore": 48,
+        "tacticalRisk": 18,
+        "finalCoachScore": 82,
+        "warning": None,
+    }
+    human_plan_move = {
+        "moveUci": "g1f3",
+        "source": "plan_and_engine",
+        "engineRank": 3,
+        "planFitScore": 92,
+        "engineScore": 86,
+        "beginnerSimplicityScore": 82,
+        "tacticalRisk": 6,
+        "finalCoachScore": 90,
+        "warning": None,
+    }
+    weaker_move = {
+        "moveUci": "b1a3",
+        "source": "engine",
+        "engineRank": 7,
+        "planFitScore": 35,
+        "engineScore": 64,
+        "beginnerSimplicityScore": 58,
+        "tacticalRisk": 22,
+        "finalCoachScore": 56,
+        "warning": None,
+    }
+
+    shaped = shape_recommendations_for_accuracy(
+        [engine_perfect, human_plan_move, weaker_move],
+        {"mode": "human", "target": 84, "min": 78, "max": 89},
+    )
+
+    assert shaped[0]["moveUci"] == "g1f3"
+    assert shaped[0]["accuracyBand"] == "human"
+    assert shaped[0]["humanAccuracyEstimate"] <= 89
+
+
+def test_survival_accuracy_shaping_keeps_best_engine_move() -> None:
+    from app.strategy.plan_engine import shape_recommendations_for_accuracy
+
+    shaped = shape_recommendations_for_accuracy(
+        [
+            {
+                "moveUci": "d1h5",
+                "source": "engine",
+                "engineRank": 1,
+                "planFitScore": 35,
+                "engineScore": 100,
+                "beginnerSimplicityScore": 48,
+                "tacticalRisk": 18,
+                "finalCoachScore": 82,
+                "warning": None,
+            },
+            {
+                "moveUci": "g1f3",
+                "source": "plan_and_engine",
+                "engineRank": 3,
+                "planFitScore": 92,
+                "engineScore": 86,
+                "beginnerSimplicityScore": 82,
+                "tacticalRisk": 6,
+                "finalCoachScore": 90,
+                "warning": None,
+            },
+        ],
+        {"mode": "survival", "target": 97, "min": 92, "max": 100},
+    )
+
+    assert shaped[0]["moveUci"] == "d1h5"
+
+
 def test_player_turn_after_deviation_returns_primary_move(monkeypatch) -> None:
     import app.strategy.plan_engine as plan_engine
 
