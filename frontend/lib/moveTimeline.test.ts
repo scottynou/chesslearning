@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canStepBack, redoTimeline, undoTimeline } from "./moveTimeline";
+import { canStepBack, redoTimeline, undoTimeline, type MoveSource, type TimelineMove } from "./moveTimeline";
 
 describe("move timeline", () => {
   it("moves the last ply into the redo stack and preserves its source", () => {
@@ -26,5 +26,34 @@ describe("move timeline", () => {
 
     expect(result.nextMove).toEqual({ moveUci: "d2d4", source: "manual" });
     expect(result.redoStack).toEqual([{ moveUci: "d7d5", source: "bot" }]);
+  });
+
+  it("undoes exactly one ply per call and queues redo moves in the right order", () => {
+    const history = ["e2e4", "e7e5", "g1f3"];
+    const sources: MoveSource[] = ["manual", "bot", "manual"];
+    const redo: TimelineMove[] = [];
+
+    const firstUndo = undoTimeline(history, sources, redo);
+    expect(firstUndo.historyUci).toEqual(["e2e4", "e7e5"]);
+    expect(firstUndo.redoStack.map((move) => move.moveUci)).toEqual(["g1f3"]);
+
+    const secondUndo = undoTimeline(firstUndo.historyUci, firstUndo.moveSources, firstUndo.redoStack);
+    expect(secondUndo.historyUci).toEqual(["e2e4"]);
+    expect(secondUndo.redoStack.map((move) => move.moveUci)).toEqual(["e7e5", "g1f3"]);
+  });
+
+  it("redoes exactly one ply per call in the original order", () => {
+    const redo: TimelineMove[] = [
+      { moveUci: "e7e5", source: "bot" },
+      { moveUci: "g1f3", source: "manual" }
+    ];
+
+    const firstRedo = redoTimeline(redo);
+    expect(firstRedo.nextMove).toEqual({ moveUci: "e7e5", source: "bot" });
+    expect(firstRedo.redoStack.map((move) => move.moveUci)).toEqual(["g1f3"]);
+
+    const secondRedo = redoTimeline(firstRedo.redoStack);
+    expect(secondRedo.nextMove).toEqual({ moveUci: "g1f3", source: "manual" });
+    expect(secondRedo.redoStack).toEqual([]);
   });
 });

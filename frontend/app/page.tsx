@@ -236,6 +236,12 @@ export default function HomePage() {
   const preloadReviewController = useRef<AbortController | null>(null);
   const preloadingReviewPly = useRef<number | null>(null);
   const botRequestInFlight = useRef(false);
+  const botPausedByTimelineNavigation = useRef(false);
+  const timelineRef = useRef<{ historyUci: string[]; moveSources: MoveSource[]; redoStack: TimelineMove[] }>({
+    historyUci: [],
+    moveSources: [],
+    redoStack: []
+  });
   const liveInsightCache = useRef<Map<string, LivePlanInsightResponse>>(new Map());
 
   const fen = game.fen();
@@ -334,6 +340,8 @@ export default function HomePage() {
   }, []);
 
   const restoreNavigationSnapshot = useCallback((snapshot: NavigationSnapshot) => {
+    const restoredMoveSources: MoveSource[] = snapshot.historyUci.map(() => "manual");
+    timelineRef.current = { historyUci: snapshot.historyUci, moveSources: restoredMoveSources, redoStack: [] };
     setGame(buildGameFromHistory(snapshot.historyUci));
     setAppStage(snapshot.appStage);
     setUserSide(snapshot.userSide);
@@ -341,12 +349,13 @@ export default function HomePage() {
     setMode(snapshot.mode);
     setSelectedPlanId(snapshot.selectedPlanId);
     setFirstOpponentMove(snapshot.firstOpponentMove);
-    setMoveSources(snapshot.historyUci.map(() => "manual"));
+    setMoveSources(restoredMoveSources);
     setRedoStack([]);
     setAdaptiveBoost(0);
     setStableEloPlyCount(0);
     lastEloAdjustmentPly.current = null;
     botRequestInFlight.current = false;
+    botPausedByTimelineNavigation.current = false;
     setSelectedSquare(null);
     setPendingPromotion(null);
     setLastMessage(null);
@@ -635,11 +644,17 @@ export default function HomePage() {
       }
 
       const moveUci = `${from}${to}${promotion ?? ""}`;
-      const ply = history.length + 1;
-      const nextHistoryUci = [...historyUci, moveUci];
+      const currentTimeline = timelineRef.current;
+      const ply = currentTimeline.historyUci.length + 1;
+      const nextHistoryUci = [...currentTimeline.historyUci, moveUci];
+      const nextMoveSources = [...currentTimeline.moveSources.slice(0, currentTimeline.historyUci.length), source];
+      timelineRef.current = { historyUci: nextHistoryUci, moveSources: nextMoveSources, redoStack: [] };
       setGame(result.game);
-      setMoveSources((current) => [...current.slice(0, history.length), source]);
+      setMoveSources(nextMoveSources);
       setRedoStack([]);
+      if (source === "manual") {
+        botPausedByTimelineNavigation.current = false;
+      }
       setSelectedSquare(null);
       setPendingPromotion(null);
       setBotError(null);
@@ -664,7 +679,7 @@ export default function HomePage() {
       }
       return true;
     },
-    [appStage, boardLocked, game, history.length, historyUci, makeNavigationSnapshot, mode, rememberMoveForReview, writeNavigationSnapshot]
+    [appStage, boardLocked, game, history.length, makeNavigationSnapshot, mode, rememberMoveForReview, writeNavigationSnapshot]
   );
 
   const requestMove = useCallback(
@@ -688,6 +703,9 @@ export default function HomePage() {
 
     const userTurn = mode === "white" ? game.turn() === "w" : game.turn() === "b";
     if (userTurn) {
+      return;
+    }
+    if (botPausedByTimelineNavigation.current) {
       return;
     }
 
@@ -724,9 +742,12 @@ export default function HomePage() {
           return;
         }
         setBotStrategyState(response.updatedStrategyState);
-        const nextHistoryUci = [...historyUci, response.move.moveUci];
+        const currentTimeline = timelineRef.current;
+        const nextHistoryUci = [...currentTimeline.historyUci, response.move.moveUci];
+        const nextMoveSources = [...currentTimeline.moveSources.slice(0, currentTimeline.historyUci.length), "bot" as MoveSource];
+        timelineRef.current = { historyUci: nextHistoryUci, moveSources: nextMoveSources, redoStack: [] };
         setGame(result.game);
-        setMoveSources((current) => [...current.slice(0, history.length), "bot"]);
+        setMoveSources(nextMoveSources);
         setRedoStack([]);
         setHighlightedMove(null);
         rememberMoveForReview(fenBefore, result.game.fen(), response.move.moveUci, ply, "bot", nextHistoryUci);
@@ -988,6 +1009,8 @@ export default function HomePage() {
   }
 
   function resetBoardOnly() {
+    timelineRef.current = { historyUci: [], moveSources: [], redoStack: [] };
+    botPausedByTimelineNavigation.current = false;
     setGame(new Chess());
     setMoveSources([]);
     setRedoStack([]);
@@ -1014,9 +1037,17 @@ export default function HomePage() {
   }
 
   function undo() {
-    const timeline = undoTimeline(historyUci, moveSources, redoStack, protectedTimelinePlyCount);
+    const currentTimeline = timelineRef.current;
+    const timeline = undoTimeline(
+      currentTimeline.historyUci,
+      currentTimeline.moveSources,
+      currentTimeline.redoStack,
+      protectedTimelinePlyCount
+    );
     if (!timeline.undoneMove) return;
 
+    timelineRef.current = { historyUci: timeline.historyUci, moveSources: timeline.moveSources, redoStack: timeline.redoStack };
+    botPausedByTimelineNavigation.current = true;
     setGame(buildGameFromHistory(timeline.historyUci));
     setMoveSources(timeline.moveSources);
     setRedoStack(timeline.redoStack);
@@ -1031,22 +1062,28 @@ export default function HomePage() {
   }
 
   function redo() {
-    const timeline = redoTimeline(redoStack);
+    const currentTimeline = timelineRef.current;
+    const timeline = redoTimeline(currentTimeline.redoStack);
     if (!timeline.nextMove || boardLocked) return;
 
     const { moveUci, source } = timeline.nextMove;
-    const fenBefore = game.fen();
-    const result = tryMove(game, moveUci.slice(0, 2), moveUci.slice(2, 4), moveUci.slice(4) || undefined);
+    const baseGame = buildGameFromHistory(currentTimeline.historyUci);
+    const fenBefore = baseGame.fen();
+    const result = tryMove(baseGame, moveUci.slice(0, 2), moveUci.slice(2, 4), moveUci.slice(4) || undefined);
     if (!result) {
+      timelineRef.current = { ...currentTimeline, redoStack: [] };
       setRedoStack([]);
       setLastMessage("Le coup suivant ne correspond plus a cette position.");
       return;
     }
 
-    const ply = history.length + 1;
-    const nextHistoryUci = [...historyUci, moveUci];
+    const ply = currentTimeline.historyUci.length + 1;
+    const nextHistoryUci = [...currentTimeline.historyUci, moveUci];
+    const nextMoveSources = [...currentTimeline.moveSources, source];
+    timelineRef.current = { historyUci: nextHistoryUci, moveSources: nextMoveSources, redoStack: timeline.redoStack };
+    botPausedByTimelineNavigation.current = true;
     setGame(result.game);
-    setMoveSources((current) => [...current.slice(0, history.length), source]);
+    setMoveSources(nextMoveSources);
     setRedoStack(timeline.redoStack);
     clearPositionDerivedState();
     rememberMoveForReview(fenBefore, result.game.fen(), moveUci, ply, source, nextHistoryUci);
