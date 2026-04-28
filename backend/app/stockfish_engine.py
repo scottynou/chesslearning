@@ -7,6 +7,7 @@ import subprocess
 import threading
 from dataclasses import dataclass
 from pathlib import Path
+from time import monotonic
 
 
 class StockfishConfigurationError(RuntimeError):
@@ -26,6 +27,12 @@ class EngineLine:
     pv: list[str]
 
 
+_ANALYSIS_CACHE_TTL_SECONDS = 120
+_ANALYSIS_CACHE_MAX_ITEMS = 256
+_analysis_cache_lock = threading.Lock()
+_analysis_cache: dict[tuple[str, str, int, int], tuple[float, list[EngineLine]]] = {}
+
+
 class StockfishEngine:
     def __init__(self, stockfish_path: str | None = None, timeout_seconds: float = 12.0) -> None:
         self.stockfish_path = stockfish_path or os.getenv("STOCKFISH_PATH", "")
@@ -33,6 +40,11 @@ class StockfishEngine:
 
     def analyze(self, fen: str, multipv: int, depth: int) -> list[EngineLine]:
         executable = self._resolve_executable()
+        cache_key = (str(executable), fen, multipv, depth)
+        cached = _get_cached_analysis(cache_key)
+        if cached is not None:
+            return cached
+
         process = subprocess.Popen(
             [str(executable)],
             stdin=subprocess.PIPE,
@@ -67,7 +79,9 @@ class StockfishEngine:
             except subprocess.TimeoutExpired:
                 process.kill()
 
-        return self._parse_engine_lines(lines)
+        result = self._parse_engine_lines(lines)
+        _set_cached_analysis(cache_key, result)
+        return result
 
     def _resolve_executable(self) -> Path:
         candidates = [
@@ -172,3 +186,24 @@ class StockfishEngine:
             )
 
         return [by_rank[index] for index in sorted(by_rank)]
+
+
+def _get_cached_analysis(key: tuple[str, str, int, int]) -> list[EngineLine] | None:
+    now = monotonic()
+    with _analysis_cache_lock:
+        entry = _analysis_cache.get(key)
+        if entry is None:
+            return None
+        created_at, lines = entry
+        if now - created_at > _ANALYSIS_CACHE_TTL_SECONDS:
+            _analysis_cache.pop(key, None)
+            return None
+        return list(lines)
+
+
+def _set_cached_analysis(key: tuple[str, str, int, int], lines: list[EngineLine]) -> None:
+    with _analysis_cache_lock:
+        if len(_analysis_cache) >= _ANALYSIS_CACHE_MAX_ITEMS:
+            oldest_key = min(_analysis_cache, key=lambda item: _analysis_cache[item][0])
+            _analysis_cache.pop(oldest_key, None)
+        _analysis_cache[key] = (monotonic(), list(lines))

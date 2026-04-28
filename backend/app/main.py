@@ -143,6 +143,7 @@ explain_candidate_cache: MemoryCache[ExplainCandidateResponse] = MemoryCache(ttl
 review_cache: MemoryCache[ReviewMoveResponse] = MemoryCache(ttl_seconds=900)
 plan_cache: MemoryCache[PositionPlanResponse] = MemoryCache(ttl_seconds=300)
 plan_recommendations_cache: MemoryCache[PlanRecommendationsResponse] = MemoryCache(ttl_seconds=300)
+bot_move_cache: MemoryCache[BotMoveResponse] = MemoryCache(ttl_seconds=120)
 
 
 @app.get("/health")
@@ -242,12 +243,23 @@ def review_move_endpoint(request: ReviewMoveRequest) -> ReviewMoveResponse:
 
 @app.post("/bot-move", response_model=BotMoveResponse)
 def bot_move_endpoint(request: BotMoveRequest) -> BotMoveResponse:
+    move_history = (request.strategy_state or {}).get("moveHistoryUci", [])
+    cache_key = (
+        f"{request.fen}|{request.elo}|{request.skill_level}|{request.max_moves}|{request.engine_depth}|"
+        f"{request.bot_style}|{request.selected_bot_plan_id}|{request.user_plan_id}|{','.join(str(move) for move in move_history)}"
+    )
+    cached = bot_move_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     try:
-        return choose_bot_move(request)
+        response = choose_bot_move(request)
     except StockfishConfigurationError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except StockfishRuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+    bot_move_cache.set(cache_key, response)
+    return response
 
 
 @app.post("/position-plan", response_model=PositionPlanResponse)

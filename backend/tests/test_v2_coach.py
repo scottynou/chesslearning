@@ -105,6 +105,32 @@ def test_bot_move_returns_legal_move_and_respects_elo_pool(monkeypatch) -> None:
     assert move_uci in {"e2e4", "d2d4"}
 
 
+def test_bot_follows_selected_opening_plan_primary_move(monkeypatch) -> None:
+    import app.strategy.plan_engine as plan_engine
+
+    monkeypatch.setattr(plan_engine, "StockfishEngine", lambda: FakeStockfishEngine())
+    client = TestClient(app)
+    board = chess.Board()
+    board.push_uci("e2e4")
+
+    response = client.post(
+        "/bot-move",
+        json={
+            "fen": board.fen(),
+            "elo": 1200,
+            "skillLevel": "beginner",
+            "maxMoves": 10,
+            "engineDepth": 1,
+            "botStyle": "educational",
+            "selectedBotPlanId": "caro_kann_beginner",
+            "strategyState": {"moveHistoryUci": ["e2e4"]},
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["move"]["moveUci"] == "c7c6"
+
+
 def test_cors_allows_render_frontend_for_expensive_routes() -> None:
     client = TestClient(app)
     origin = "https://chess-elo-coach-web-bh95.onrender.com"

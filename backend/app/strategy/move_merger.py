@@ -43,10 +43,11 @@ def merge_plan_and_engine_moves(
         engine_candidate = engine_by_uci.get(move_uci)
         engine_line = engine_line_by_uci.get(move_uci)
         plan_rank = plan_moves.index(move_uci) + 1 if move_uci in plan_moves else None
+        is_plan_move = plan_rank is not None
         plan_fit = plan_fit_score(plan_rank, plan_name)
-        engine_score = engine_candidate.engine_score if engine_candidate else 45
-        simplicity = engine_candidate.simplicity_score if engine_candidate else _simplicity_from_line(board, move, engine_line)
-        tactical_risk = engine_candidate.risk_penalty if engine_candidate else 25
+        engine_score = engine_candidate.engine_score if engine_candidate else (74 if is_plan_move else 45)
+        simplicity = engine_candidate.simplicity_score if engine_candidate else (76 if is_plan_move and engine_line is None else _simplicity_from_line(board, move, engine_line))
+        tactical_risk = engine_candidate.risk_penalty if engine_candidate else (12 if is_plan_move else 25)
         final_score = final_coach_score(engine_score, plan_fit, simplicity, tactical_risk, elo)
         source = source_label(plan_rank, engine_candidate)
         notation = beginner_notation_for_uci(fen, move_uci, engine_candidate.move_san if engine_candidate else None)
@@ -68,7 +69,7 @@ def merge_plan_and_engine_moves(
                 "beginnerSimplicityScore": simplicity,
                 "tacticalRisk": tactical_risk,
                 "finalCoachScore": final_score,
-                "evalLabel": evaluation_label(engine_candidate.eval_cp, engine_candidate.mate_in) if engine_candidate else "A verifier avec le moteur",
+                "evalLabel": evaluation_label(engine_candidate.eval_cp, engine_candidate.mate_in) if engine_candidate else ("Coup du plan" if is_plan_move else "A verifier avec le moteur"),
                 "purpose": purpose,
                 "planConnection": connection,
                 "pedagogicalExplanation": pedagogical_explanation(

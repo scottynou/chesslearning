@@ -47,7 +47,8 @@ def get_plan_recommendations(
     waiting_for_opponent = active_plan is not None and plan_color is not None and board.turn != plan_color and phase == "opening"
     level_settings = skill_level_settings(skill_level, elo, max_moves)
 
-    if waiting_for_opponent:
+    plan_can_drive_opening = phase == "opening" and status == "on_plan" and bool(plan_moves)
+    if waiting_for_opponent or plan_can_drive_opening:
         engine_lines = []
         engine_candidates = []
     else:

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Chess Learning">
+  <rect width="64" height="64" rx="14" fill="#05070a"/>
+  <path d="M32 10c4 0 7 3 7 7 0 2.9-1.7 5.4-4.1 6.5l2.3 15.3h6.3c2 0 3.5 1.5 3.5 3.4 0 1.4-.8 2.7-2.1 3.2l2.9 5.6H16.2l2.9-5.6c-1.3-.5-2.1-1.8-2.1-3.2 0-1.9 1.5-3.4 3.5-3.4h6.3l2.3-15.3C26.7 22.4 25 19.9 25 17c0-4 3-7 7-7Z" fill="#f7efe0"/>
+  <path d="M20 53h24" stroke="#d8b16a" stroke-width="3" stroke-linecap="round"/>
+</svg>

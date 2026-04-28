@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import random
+from typing import Any
 
 from .elo_ranker import rank_candidates
 from .schemas import BotMoveRequest, BotMoveResponse, CandidateMove
@@ -49,8 +50,8 @@ def choose_bot_move(request: BotMoveRequest) -> BotMoveResponse:
     )
 
 
-def candidates_from_plan_response(plan_response: dict) -> list[CandidateMove]:
-    ordered_items = []
+def candidates_from_plan_response(plan_response: dict[str, Any]) -> list[CandidateMove]:
+    ordered_items: list[dict[str, Any]] = []
     if plan_response.get("primaryMove"):
         ordered_items.append(plan_response["primaryMove"])
     ordered_items.extend(plan_response.get("adaptedAlternatives", []))
@@ -59,15 +60,65 @@ def candidates_from_plan_response(plan_response: dict) -> list[CandidateMove]:
     candidates = []
     seen = set()
     for item in ordered_items:
-        candidate_data = item.get("candidate") if isinstance(item, dict) else None
-        if not candidate_data:
+        candidate = candidate_from_plan_item(item, rank=len(candidates) + 1)
+        if candidate is None:
             continue
-        move_uci = candidate_data.get("moveUci")
+        move_uci = candidate.move_uci
         if move_uci in seen:
             continue
         seen.add(move_uci)
-        candidates.append(CandidateMove.model_validate(candidate_data))
+        candidates.append(candidate)
     return candidates
+
+
+def candidate_from_plan_item(item: dict[str, Any], rank: int) -> CandidateMove | None:
+    candidate_data = item.get("candidate")
+    if candidate_data:
+        return CandidateMove.model_validate({**candidate_data, "rank": rank})
+
+    move_uci = item.get("moveUci")
+    if not isinstance(move_uci, str) or len(move_uci) < 4:
+        return None
+
+    simplicity = int(item.get("beginnerSimplicityScore") or 72)
+    risk_penalty = int(item.get("tacticalRisk") or 12)
+    coach_score = int(item.get("finalCoachScore") or item.get("planFitScore") or 76)
+    engine_score = int(item.get("engineScore") or 70)
+    summary = str(item.get("purpose") or item.get("pedagogicalExplanation") or "Coup naturel qui respecte le plan choisi.")
+
+    return CandidateMove(
+        rank=rank,
+        moveUci=move_uci,
+        moveSan=str(item.get("moveSan") or move_uci),
+        stockfishRank=int(item.get("engineRank") or 99),
+        evalCp=None,
+        mateIn=None,
+        pv=[move_uci],
+        coachScore=coach_score,
+        engineScore=engine_score,
+        humanLikelihood=max(50, min(100, round((simplicity + coach_score) / 2))),
+        simplicityScore=simplicity,
+        riskPenalty=risk_penalty,
+        difficulty=difficulty_for_complexity(str(item.get("moveComplexity") or "simple"), simplicity, risk_penalty),
+        risk=risk_for_penalty(risk_penalty),
+        summary=summary,
+    )
+
+
+def difficulty_for_complexity(complexity: str, simplicity: int, risk_penalty: int) -> str:
+    if complexity == "complexe" or risk_penalty >= 35 or simplicity < 50:
+        return "hard"
+    if complexity == "moyen" or risk_penalty >= 20 or simplicity < 70:
+        return "medium"
+    return "easy"
+
+
+def risk_for_penalty(risk_penalty: int) -> str:
+    if risk_penalty >= 36:
+        return "high"
+    if risk_penalty >= 19:
+        return "medium"
+    return "low"
 
 
 def candidate_pool_for_elo(candidates: list[CandidateMove], elo: int) -> list[CandidateMove]:
