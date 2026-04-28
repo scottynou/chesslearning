@@ -1,24 +1,30 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { ChangeEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chess, Move, Square } from "chess.js";
-import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ImageUp, Menu, X } from "lucide-react";
 import { ChessCoachBoard } from "@/components/ChessCoachBoard";
 import { GameControls } from "@/components/GameControls";
 import { MoveHistory } from "@/components/MoveHistory";
 import { OpeningRepertoirePanel } from "@/components/OpeningRepertoirePanel";
 import { PlanFirstPanel } from "@/components/PlanFirstPanel";
 import { SideSelectionPanel } from "@/components/SideSelectionPanel";
-import { getPlanRecommendations, listAvailablePlans, requestBotMove } from "@/lib/api";
+import { getPlanRecommendations, importPositionImage, listAvailablePlans, requestBotMove } from "@/lib/api";
 import { canMoveInMode, gameStatus, isPromotionAttempt, tryMove } from "@/lib/chess";
 import { DEFAULT_BASE_ELO, MAX_ADAPTIVE_BOOST, effectiveElo, skillLevelForElo } from "@/lib/eloAdaptation";
 import { canStepBack, redoTimeline, undoTimeline, type MoveSource, type TimelineMove } from "@/lib/moveTimeline";
-import type { Orientation, PlanRecommendationsResponse, PlayMode, StrategyPlan } from "@/lib/types";
+import type { ImportPositionImageResponse, Orientation, PlanRecommendationsResponse, PlayMode, StrategyPlan } from "@/lib/types";
 
 type PendingPromotion = {
   from: string;
   to: string;
+};
+
+type ImageImportDraft = {
+  previewUrl: string;
+  result: ImportPositionImageResponse;
+  sideToMove: "white" | "black";
 };
 
 type VerboseMove = Move & {
@@ -37,6 +43,7 @@ type NavigationSnapshot = {
   selectedPlanId: string | null;
   firstOpponentMove: string | null;
   historyUci: string[];
+  importedFen: string | null;
 };
 
 const INTERNAL_MAX_MOVES = 4;
@@ -46,8 +53,8 @@ const NAVIGATION_KEY = "chess-learning-navigation";
 const PLAYER_ARROW_FALLBACKS = ["rgba(224,185,118,0.82)", "rgba(125,183,154,0.78)", "rgba(126,166,224,0.76)"];
 const OPPONENT_EXPECTED_ARROW = "rgba(239,118,118,0.78)";
 
-function buildGameFromHistory(moves: string[]) {
-  const next = new Chess();
+function buildGameFromHistory(moves: string[], startFen?: string | null) {
+  const next = startFen ? new Chess(startFen) : new Chess();
   for (const move of moves) {
     try {
       next.move({
@@ -112,8 +119,30 @@ function createNavigationSnapshot(overrides: Partial<NavigationSnapshot> = {}): 
     selectedPlanId: null,
     firstOpponentMove: null,
     historyUci: [],
+    importedFen: null,
     ...overrides
   };
+}
+
+function dataUrlToBase64(dataUrl: string) {
+  const commaIndex = dataUrl.indexOf(",");
+  return commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
+}
+
+function fenWithSideToMove(fen: string, sideToMove: "white" | "black") {
+  const parts = fen.split(" ");
+  if (parts.length < 6) return fen;
+  parts[1] = sideToMove === "white" ? "w" : "b";
+  return parts.join(" ");
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(new Error("Lecture de l'image impossible."));
+    reader.readAsDataURL(file);
+  });
 }
 
 function urlForSnapshot(snapshot: NavigationSnapshot) {
@@ -141,6 +170,7 @@ function isAbortError(error: unknown) {
 
 export default function HomePage() {
   const [game, setGame] = useState(() => new Chess());
+  const [baseFen, setBaseFen] = useState<string | null>(null);
   const [appStage, setAppStage] = useState<AppStage>("side-selection");
   const [userSide, setUserSide] = useState<UserSide>("white");
   const [orientation, setOrientation] = useState<Orientation>("white");
@@ -165,6 +195,10 @@ export default function HomePage() {
   const [redoStack, setRedoStack] = useState<TimelineMove[]>([]);
   const [adaptiveBoost, setAdaptiveBoost] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [imageImporting, setImageImporting] = useState(false);
+  const [imageImportError, setImageImportError] = useState<string | null>(null);
+  const [imageImportDraft, setImageImportDraft] = useState<ImageImportDraft | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
   const navigationReady = useRef(false);
   const skipNextHistoryReplace = useRef(false);
   const lastEloAdjustmentPly = useRef<number | null>(null);
@@ -237,9 +271,10 @@ export default function HomePage() {
         selectedPlanId,
         firstOpponentMove,
         historyUci,
+        importedFen: baseFen,
         ...overrides
       }),
-    [appStage, firstOpponentMove, historyUci, mode, orientation, selectedPlanId, userSide]
+    [appStage, baseFen, firstOpponentMove, historyUci, mode, orientation, selectedPlanId, userSide]
   );
 
   const writeNavigationSnapshot = useCallback((snapshot: NavigationSnapshot, action: "push" | "replace") => {
@@ -255,7 +290,9 @@ export default function HomePage() {
   const restoreNavigationSnapshot = useCallback((snapshot: NavigationSnapshot) => {
     const restoredMoveSources: MoveSource[] = snapshot.historyUci.map(() => "manual");
     timelineRef.current = { historyUci: snapshot.historyUci, moveSources: restoredMoveSources, redoStack: [] };
-    setGame(buildGameFromHistory(snapshot.historyUci));
+    const importedFen = snapshot.importedFen ?? null;
+    setBaseFen(importedFen);
+    setGame(buildGameFromHistory(snapshot.historyUci, importedFen));
     setAppStage(snapshot.appStage);
     setUserSide(snapshot.userSide);
     setOrientation(snapshot.orientation);
@@ -281,6 +318,9 @@ export default function HomePage() {
     setBotError(null);
     setBotStrategyState({});
     setHighlightedMove(null);
+    setImageImportError(null);
+    setImageImportDraft(null);
+    setImageImporting(false);
     setMenuOpen(false);
   }, []);
 
@@ -392,6 +432,7 @@ export default function HomePage() {
     getPlanRecommendations({
       fen,
       selectedPlanId,
+      userSide: userSide === "both" ? null : userSide,
       elo: effectiveCoachElo,
       skillLevel: activeSkillLevel,
       moveHistoryUci: historyUci,
@@ -661,6 +702,7 @@ export default function HomePage() {
   function resetBoardOnly() {
     timelineRef.current = { historyUci: [], moveSources: [], redoStack: [] };
     botPausedByTimelineNavigation.current = false;
+    setBaseFen(null);
     setGame(new Chess());
     setMoveSources([]);
     setRedoStack([]);
@@ -679,7 +721,7 @@ export default function HomePage() {
 
     timelineRef.current = { historyUci: timeline.historyUci, moveSources: timeline.moveSources, redoStack: timeline.redoStack };
     botPausedByTimelineNavigation.current = true;
-    setGame(buildGameFromHistory(timeline.historyUci));
+    setGame(buildGameFromHistory(timeline.historyUci, baseFen));
     setMoveSources(timeline.moveSources);
     setRedoStack(timeline.redoStack);
     clearPositionDerivedState();
@@ -698,7 +740,7 @@ export default function HomePage() {
     if (!timeline.nextMove || boardLocked) return;
 
     const { moveUci, source } = timeline.nextMove;
-    const baseGame = buildGameFromHistory(currentTimeline.historyUci);
+    const baseGame = buildGameFromHistory(currentTimeline.historyUci, baseFen);
     const result = tryMove(baseGame, moveUci.slice(0, 2), moveUci.slice(2, 4), moveUci.slice(4) || undefined);
     if (!result) {
       timelineRef.current = { ...currentTimeline, redoStack: [] };
@@ -741,13 +783,111 @@ export default function HomePage() {
     setLastMessage(`${label} copie.`);
   }
 
+  function openImageImport() {
+    setImageImportError(null);
+    imageInputRef.current?.click();
+  }
+
+  async function handleImageFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      setImageImportError("Image non supportee. Utilise PNG, JPEG ou WebP.");
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setImageImportError("Image trop lourde. Envoie une capture sous 8 Mo.");
+      return;
+    }
+
+    setImageImporting(true);
+    setImageImportError(null);
+    try {
+      const previewUrl = await readFileAsDataUrl(file);
+      const result = await importPositionImage({
+        imageData: dataUrlToBase64(previewUrl),
+        mimeType: file.type,
+        fileName: file.name
+      });
+      setImageImportDraft({
+        previewUrl,
+        result,
+        sideToMove: result.sideToMove
+      });
+    } catch (error) {
+      setImageImportError(error instanceof Error ? error.message : "Impossible de lire cette image.");
+    } finally {
+      setImageImporting(false);
+    }
+  }
+
+  function confirmImageImport(side: "white" | "black") {
+    if (!imageImportDraft) return;
+    const importedFen = fenWithSideToMove(imageImportDraft.result.fen, imageImportDraft.sideToMove);
+    let importedGame: Chess;
+    try {
+      importedGame = new Chess(importedFen);
+    } catch {
+      setImageImportError("La position detectee n'est pas valide.");
+      return;
+    }
+
+    const keepSelectedPlan = selectedPlan?.side === side || selectedPlan?.side === "universal";
+    timelineRef.current = { historyUci: [], moveSources: [], redoStack: [] };
+    botPausedByTimelineNavigation.current = false;
+    setBaseFen(importedFen);
+    setGame(importedGame);
+    setMoveSources([]);
+    setRedoStack([]);
+    setSelectedSquare(null);
+    setPendingPromotion(null);
+    setHighlightedMove(null);
+    setLastMessage("Position importee depuis l'image.");
+    setPlanRecommendations(null);
+    setPlanError(null);
+    setBotError(null);
+    botRequestInFlight.current = false;
+    setBotThinking(false);
+    setBotStrategyState({});
+    resetAdaptiveBoost();
+    setAppStage("coach");
+    setUserSide(side);
+    setOrientation(side);
+    setSelectedPlanId(keepSelectedPlan ? selectedPlanId : null);
+    setFirstOpponentMove(null);
+    setImageImportDraft(null);
+    setImageImportError(null);
+    writeNavigationSnapshot(
+      makeNavigationSnapshot({
+        appStage: "coach",
+        userSide: side,
+        orientation: side,
+        selectedPlanId: keepSelectedPlan ? selectedPlanId : null,
+        firstOpponentMove: null,
+        historyUci: [],
+        importedFen
+      }),
+      "push"
+    );
+  }
+
   function handleHistoryClick(_ply: number, move: Move) {
     setHighlightedMove({ from: move.from, to: move.to });
   }
 
   const renderShell = (content: ReactNode) => (
     <>
-      <SiteHeader status={appStage === "side-selection" ? null : status} menuOpen={menuOpen} onHome={goHome} onToggleMenu={() => setMenuOpen((open) => !open)} />
+      <input ref={imageInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={handleImageFileChange} />
+      <SiteHeader
+        status={appStage === "side-selection" ? null : status}
+        menuOpen={menuOpen}
+        imageImporting={imageImporting}
+        onHome={goHome}
+        onImportImage={openImageImport}
+        onToggleMenu={() => setMenuOpen((open) => !open)}
+      />
       {menuOpen ? (
         <SiteMenu status={status} onHome={goHome} onClose={() => setMenuOpen(false)}>
           {appStage === "side-selection" ? null : (
@@ -768,6 +908,19 @@ export default function HomePage() {
             />
           )}
         </SiteMenu>
+      ) : null}
+      {imageImportError ? (
+        <div className="image-import-toast" role="alert">
+          {imageImportError}
+        </div>
+      ) : null}
+      {imageImportDraft ? (
+        <ImageImportConfirmDialog
+          draft={imageImportDraft}
+          onSideToMoveChange={(sideToMove) => setImageImportDraft((current) => current ? { ...current, sideToMove } : current)}
+          onCancel={() => setImageImportDraft(null)}
+          onConfirm={confirmImageImport}
+        />
       ) : null}
       {content}
     </>
@@ -800,9 +953,7 @@ export default function HomePage() {
         </section>
         <section className="first-move-brief">
           <article className="first-move-card">
-            <p>Je joue les noirs</p>
-            <h1>Premier coup blanc.</h1>
-            <p className="answer-line">Joue le coup blanc sur le plateau. Les reponses noires apparaissent juste apres.</p>
+            <h1>Premier coup blanc</h1>
           </article>
         </section>
       </main>
@@ -903,6 +1054,16 @@ export default function HomePage() {
         <div className="coach-board-controls">
           <button
             type="button"
+            onClick={openImageImport}
+            className="control-button icon-control"
+            disabled={imageImporting}
+            aria-label="Importer une position depuis une image"
+            title="Importer une position"
+          >
+            <ImageUp size={18} />
+          </button>
+          <button
+            type="button"
             onClick={undo}
             className="control-button icon-control"
             disabled={!canStepBackward || botThinking}
@@ -941,15 +1102,87 @@ export default function HomePage() {
   );
 }
 
+function ImageImportConfirmDialog({
+  draft,
+  onSideToMoveChange,
+  onCancel,
+  onConfirm
+}: {
+  draft: ImageImportDraft;
+  onSideToMoveChange: (side: "white" | "black") => void;
+  onCancel: () => void;
+  onConfirm: (side: "white" | "black") => void;
+}) {
+  return (
+    <div className="image-import-layer" role="dialog" aria-modal="true" aria-label="Importer une position">
+      <button type="button" className="image-import-backdrop" aria-label="Annuler l'import" onClick={onCancel} />
+      <section className="image-import-panel">
+        <div className="image-import-preview">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={draft.previewUrl} alt="" />
+        </div>
+        <div className="image-import-content">
+          <p className="image-import-eyebrow">Position detectee</p>
+          <h2>Tu joues quel camp ?</h2>
+          <div className="image-import-confidence">
+            <span>Confiance</span>
+            <strong>{draft.result.confidence}%</strong>
+          </div>
+
+          <div className="image-import-turn">
+            <span>Trait</span>
+            <div>
+              <button
+                type="button"
+                className={draft.sideToMove === "white" ? "is-active" : ""}
+                onClick={() => onSideToMoveChange("white")}
+              >
+                Blancs
+              </button>
+              <button
+                type="button"
+                className={draft.sideToMove === "black" ? "is-active" : ""}
+                onClick={() => onSideToMoveChange("black")}
+              >
+                Noirs
+              </button>
+            </div>
+          </div>
+
+          {draft.result.warnings.length ? (
+            <p className="image-import-warning">{draft.result.warnings[0]}</p>
+          ) : null}
+
+          <div className="image-import-actions">
+            <button type="button" className="control-button" onClick={() => onConfirm("white")}>
+              Je joue les blancs
+            </button>
+            <button type="button" className="control-button" onClick={() => onConfirm("black")}>
+              Je joue les noirs
+            </button>
+            <button type="button" className="control-button is-muted" onClick={onCancel}>
+              Annuler
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function SiteHeader({
   status,
   menuOpen,
+  imageImporting,
   onHome,
+  onImportImage,
   onToggleMenu
 }: {
   status: string | null;
   menuOpen: boolean;
+  imageImporting: boolean;
   onHome: () => void;
+  onImportImage: () => void;
   onToggleMenu: () => void;
 }) {
   return (
@@ -963,6 +1196,16 @@ function SiteHeader({
         </button>
         <div className="site-header-actions">
           {status ? <span className="site-status">{status}</span> : null}
+          <button
+            type="button"
+            onClick={onImportImage}
+            className="site-menu-button"
+            aria-label="Importer une position depuis une image"
+            title="Importer une position"
+            disabled={imageImporting}
+          >
+            <ImageUp size={19} strokeWidth={2.1} />
+          </button>
           <button type="button" onClick={onToggleMenu} className="site-menu-button" aria-label={menuOpen ? "Fermer le menu" : "Ouvrir le menu"} aria-expanded={menuOpen}>
             {menuOpen ? <X size={20} strokeWidth={2.1} /> : <Menu size={20} strokeWidth={2.1} />}
           </button>

@@ -287,3 +287,13 @@ export type LivePlanInsightResponse = {
   analysisProvider: AnalysisProvider;
   analysisKind: AnalysisKind;
 };
+
+export type ImportPositionImageResponse = {
+  fen: string;
+  sideToMove: "white" | "black";
+  boardOrientation: "white_bottom" | "black_bottom" | "unknown";
+  confidence: number;
+  warnings: string[];
+  provider: string;
+  model: string;
+};

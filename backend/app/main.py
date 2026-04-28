@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import time
+import hashlib
 from collections import defaultdict, deque
 
 import chess
@@ -18,6 +19,7 @@ from .ai_providers.selection import configured_provider_name
 from .cache import MemoryCache
 from .elo_ranker import rank_candidates
 from .explanation_service import explain_candidate, explain_move
+from .image_import_service import import_position_image
 from .live_plan_service import live_plan_insight
 from .opening_coach import build_position_plan
 from .review_service import review_move
@@ -31,6 +33,8 @@ from .schemas import (
     ExplainCandidateResponse,
     ExplainRequest,
     ExplainResponse,
+    ImportPositionImageRequest,
+    ImportPositionImageResponse,
     LivePlanInsightRequest,
     LivePlanInsightResponse,
     PositionPlanRequest,
@@ -94,7 +98,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-EXPENSIVE_PATHS = {"/analyze", "/plan-recommendations", "/bot-move", "/review-move", "/explain-candidate", "/live-plan-insight"}
+EXPENSIVE_PATHS = {"/analyze", "/plan-recommendations", "/bot-move", "/review-move", "/explain-candidate", "/live-plan-insight", "/import-position-image"}
 JSON_BODY_PATHS = EXPENSIVE_PATHS | {"/position-plan", "/explain"}
 rate_limit_window_seconds = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
 rate_limit_per_window = int(os.getenv("RATE_LIMIT_PER_WINDOW", "45"))
@@ -149,6 +153,7 @@ plan_cache: MemoryCache[PositionPlanResponse] = MemoryCache(ttl_seconds=300)
 plan_recommendations_cache: MemoryCache[PlanRecommendationsResponse] = MemoryCache(ttl_seconds=300)
 live_plan_insight_cache: MemoryCache[LivePlanInsightResponse] = MemoryCache(ttl_seconds=900)
 bot_move_cache: MemoryCache[BotMoveResponse] = MemoryCache(ttl_seconds=120)
+image_import_cache: MemoryCache[ImportPositionImageResponse] = MemoryCache(ttl_seconds=1800)
 
 
 @app.get("/health")
@@ -299,6 +304,25 @@ def position_plan_endpoint(request: PositionPlanRequest) -> PositionPlanResponse
     return response
 
 
+@app.post("/import-position-image", response_model=ImportPositionImageResponse)
+def import_position_image_endpoint(request: ImportPositionImageRequest) -> ImportPositionImageResponse:
+    image_hash = hashlib.sha256(request.image_data.encode("utf-8")).hexdigest()
+    cache_key = f"{request.mime_type}|{image_hash}|{os.getenv('GEMINI_MODEL', 'gemini-2.5-flash-lite')}"
+    cached = image_import_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    try:
+        response = import_position_image(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Impossible de lire une position d'echecs valide sur cette image.") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Import image indisponible: {type(exc).__name__}") from exc
+
+    image_import_cache.set(cache_key, response)
+    return response
+
+
 @app.get("/available-plans", response_model=AvailablePlansResponse)
 def available_plans(
     side: str | None = None,
@@ -314,7 +338,7 @@ def available_plans(
 @app.post("/plan-recommendations", response_model=PlanRecommendationsResponse)
 def plan_recommendations_endpoint(request: PlanRecommendationsRequest) -> PlanRecommendationsResponse:
     cache_key = (
-        f"{request.fen}|{request.selected_plan_id}|{request.elo}|{request.skill_level}|{request.max_moves}|"
+        f"{request.fen}|{request.selected_plan_id}|{request.user_side}|{request.elo}|{request.skill_level}|{request.max_moves}|"
         f"{request.engine_depth}|{','.join(request.move_history_uci)}|{os.getenv('AI_RERANK_PROVIDER', 'gemini')}|"
         f"{os.getenv('AI_RERANK_MODEL') or os.getenv('GEMINI_MODEL', 'gemini-2.5-flash-lite')}"
     )
@@ -326,6 +350,7 @@ def plan_recommendations_endpoint(request: PlanRecommendationsRequest) -> PlanRe
             get_plan_recommendations(
                 fen=request.fen,
                 selected_plan_id=request.selected_plan_id,
+                user_side=request.user_side,
                 elo=request.elo,
                 skill_level=request.skill_level,
                 move_history=request.move_history_uci,

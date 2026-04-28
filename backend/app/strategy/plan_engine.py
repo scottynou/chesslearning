@@ -32,6 +32,7 @@ def get_plan_recommendations(
     skill_level: str | None = None,
     max_moves: int = 10,
     engine_depth: int = 10,
+    user_side: str | None = None,
 ) -> dict[str, Any]:
     board = chess.Board(fen)
     selected_plan = get_plan(selected_plan_id)
@@ -46,8 +47,10 @@ def get_plan_recommendations(
     raw_plan_moves = get_next_plan_steps(active_plan["id"], move_history) if active_plan and phase == "opening" else []
     plan_moves = [move for move in raw_plan_moves if _is_legal_uci(board, move)]
     plan_color = color_for_plan(active_plan)
+    if plan_color is None:
+        plan_color = color_for_side(user_side)
     game_over = board.is_game_over()
-    opponent_turn = not game_over and active_plan is not None and plan_color is not None and board.turn != plan_color
+    opponent_turn = not game_over and plan_color is not None and board.turn != plan_color
     player_turn = not game_over and not opponent_turn
     level_settings = skill_level_settings(skill_level, elo, max_moves)
 
@@ -187,7 +190,7 @@ def get_plan_recommendations(
     plan_state = {
         "selectedPlanId": active_plan.get("id") if active_plan else None,
         "planName": active_plan.get("nameFr") if active_plan else None,
-        "side": active_plan.get("side") if active_plan else ("white" if board.turn == chess.WHITE else "black"),
+            "side": active_plan.get("side") if active_plan else (user_side or ("white" if board.turn == chess.WHITE else "black")),
         "phase": phase,
         "status": status,
         "currentStepIndex": min(len(move_history), len(active_plan.get("mainLineUci", []))) if active_plan else 0,
@@ -201,7 +204,7 @@ def get_plan_recommendations(
     }
     turn_context = {
         "sideToMove": "white" if board.turn == chess.WHITE else "black",
-        "planSide": active_plan.get("side") if active_plan else None,
+        "planSide": active_plan.get("side") if active_plan else user_side,
         "playerTurn": player_turn,
         "opponentTurn": opponent_turn,
         "gameOver": game_over,
@@ -333,6 +336,14 @@ def color_for_plan(plan: dict[str, Any] | None) -> chess.Color | None:
     if plan.get("side") == "white":
         return chess.WHITE
     if plan.get("side") == "black":
+        return chess.BLACK
+    return None
+
+
+def color_for_side(side: str | None) -> chess.Color | None:
+    if side == "white":
+        return chess.WHITE
+    if side == "black":
         return chess.BLACK
     return None
 

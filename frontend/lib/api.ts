@@ -3,6 +3,7 @@ import type {
   BotMoveResponse,
   CandidateMove,
   ExplainResponse,
+  ImportPositionImageResponse,
   LivePlanInsightResponse,
   PlanRecommendationsResponse,
   PositionPlanResponse,
@@ -124,6 +125,7 @@ export function listAvailablePlans(side?: string, elo?: number, firstMove?: stri
 export function getPlanRecommendations(params: {
   fen: string;
   selectedPlanId?: string | null;
+  userSide?: "white" | "black" | null;
   elo: number;
   skillLevel?: SkillLevel;
   moveHistoryUci: string[];
@@ -136,6 +138,16 @@ export function getPlanRecommendations(params: {
     ...body,
     engineDepth: body.engineDepth ?? 10
   }, signal);
+}
+
+export function importPositionImage(params: {
+  imageData: string;
+  mimeType: string;
+  fileName?: string;
+  signal?: AbortSignal;
+}): Promise<ImportPositionImageResponse> {
+  const { signal, ...body } = params;
+  return requestJson<ImportPositionImageResponse>("/import-position-image", body, signal);
 }
 
 export function getLivePlanInsight(params: {

@@ -17,6 +17,7 @@ OpeningState = Literal["on_track", "recoverable", "completed", "abandoned"]
 PlanStatus = Literal["on_plan", "transposed", "opponent_deviated", "out_of_book", "plan_completed"]
 AnalysisProvider = Literal["heuristic", "openai", "gemini", "ollama"]
 AnalysisKind = Literal["ai", "heuristic"]
+BoardOrientation = Literal["white_bottom", "black_bottom", "unknown"]
 
 
 class AnalyzeRequest(BaseModel):
@@ -317,11 +318,57 @@ class AvailablePlansResponse(BaseModel):
     plans: list[dict[str, Any]]
 
 
+class ImportPositionImageRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    image_data: str = Field(alias="imageData", min_length=64, max_length=12_000_000)
+    mime_type: str = Field(default="image/png", alias="mimeType")
+    file_name: str | None = Field(default=None, alias="fileName")
+
+    @field_validator("mime_type")
+    @classmethod
+    def validate_mime_type(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"image/png", "image/jpeg", "image/webp"}:
+            raise ValueError("Unsupported image type")
+        return normalized
+
+    @field_validator("image_data")
+    @classmethod
+    def validate_image_data(cls, value: str) -> str:
+        compact = value.strip()
+        if compact.startswith("data:"):
+            compact = compact.split(",", 1)[-1]
+        return compact
+
+
+class ImportPositionImageResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    fen: str
+    side_to_move: SideToMove = Field(alias="sideToMove")
+    board_orientation: BoardOrientation = Field(alias="boardOrientation")
+    confidence: int = Field(ge=0, le=100)
+    warnings: list[str] = Field(default_factory=list)
+    provider: str
+    model: str
+
+    @field_validator("fen")
+    @classmethod
+    def validate_fen(cls, value: str) -> str:
+        try:
+            chess.Board(value)
+        except ValueError as exc:
+            raise ValueError("Invalid FEN") from exc
+        return value
+
+
 class PlanRecommendationsRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     fen: str
     selected_plan_id: str | None = Field(default=None, alias="selectedPlanId")
+    user_side: SideToMove | None = Field(default=None, alias="userSide")
     elo: int = Field(default=1200, ge=600, le=3200)
     skill_level: SkillLevel | None = Field(default=None, alias="skillLevel")
     move_history_uci: list[str] = Field(default_factory=list, alias="moveHistoryUci")

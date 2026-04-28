@@ -304,6 +304,32 @@ def test_opponent_turn_returns_expected_move_without_recommendation(monkeypatch)
     assert data["expectedOpponentMove"]["moveUci"] == "d2d4"
 
 
+def test_free_imported_position_uses_user_side_for_turn_context(monkeypatch) -> None:
+    import app.strategy.plan_engine as plan_engine
+
+    monkeypatch.setattr(plan_engine, "StockfishEngine", lambda: FakePlanStockfish())
+    client = TestClient(app)
+    board = chess.Board()
+    board.push_uci("e2e4")
+    response = client.post(
+        "/plan-recommendations",
+        json={
+            "fen": board.fen(),
+            "selectedPlanId": None,
+            "userSide": "white",
+            "elo": 1200,
+            "moveHistoryUci": [],
+            "maxMoves": 5,
+            "engineDepth": 1,
+        },
+    )
+    data = response.json()
+    assert data["turnContext"]["playerTurn"] is False
+    assert data["turnContext"]["opponentTurn"] is True
+    assert data["expectedOpponentMove"] is not None
+    assert data["mergedRecommendations"] == []
+
+
 def test_skill_level_changes_visible_technical_window(monkeypatch) -> None:
     import app.strategy.plan_engine as plan_engine
 
