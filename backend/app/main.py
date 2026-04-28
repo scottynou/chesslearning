@@ -308,7 +308,8 @@ def position_plan_endpoint(request: PositionPlanRequest) -> PositionPlanResponse
 @app.post("/import-position-image", response_model=ImportPositionImageResponse)
 def import_position_image_endpoint(request: ImportPositionImageRequest) -> ImportPositionImageResponse:
     image_hash = hashlib.sha256(request.image_data.encode("utf-8")).hexdigest()
-    cache_key = f"{request.mime_type}|{image_hash}|{os.getenv('GEMINI_MODEL', 'gemini-2.5-flash-lite')}"
+    import_model = os.getenv("IMAGE_IMPORT_MODEL") or os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
+    cache_key = f"{request.mime_type}|{image_hash}|{import_model}"
     cached = image_import_cache.get(cache_key)
     if cached is not None:
         return cached

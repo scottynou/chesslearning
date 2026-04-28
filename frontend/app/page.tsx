@@ -52,6 +52,10 @@ const BOT_ENGINE_DEPTH = 14;
 const NAVIGATION_KEY = "chess-learning-navigation";
 const PLAYER_ARROW_FALLBACKS = ["rgba(224,185,118,0.82)", "rgba(125,183,154,0.78)", "rgba(126,166,224,0.76)"];
 const OPPONENT_EXPECTED_ARROW = "rgba(239,118,118,0.78)";
+const IMAGE_IMPORT_MAX_SOURCE_BYTES = 28 * 1024 * 1024;
+const IMAGE_IMPORT_TARGET_BYTES = 3.5 * 1024 * 1024;
+const IMAGE_IMPORT_DIMENSIONS = [1800, 1500, 1200, 960];
+const IMAGE_IMPORT_QUALITIES = [0.86, 0.76, 0.66];
 
 function buildGameFromHistory(moves: string[], startFen?: string | null) {
   const next = startFen ? new Chess(startFen) : new Chess();
@@ -143,6 +147,86 @@ function readFileAsDataUrl(file: File) {
     reader.onerror = () => reject(new Error("Lecture de l'image impossible."));
     reader.readAsDataURL(file);
   });
+}
+
+async function prepareImageForImport(file: File) {
+  const browserReadableType = file.type ? file.type.toLowerCase() : "image/jpeg";
+  if (!browserReadableType.startsWith("image/")) {
+    throw new Error("Fichier non supporte. Envoie une photo ou une capture d'ecran.");
+  }
+  if (file.size > IMAGE_IMPORT_MAX_SOURCE_BYTES) {
+    throw new Error("Image trop lourde pour le telephone. Fais une capture d'ecran plus simple du plateau.");
+  }
+
+  const sourceDataUrl = await readFileAsDataUrl(file);
+  const compressedDataUrl = await compressImageDataUrl(sourceDataUrl);
+  return {
+    previewUrl: compressedDataUrl,
+    imageData: dataUrlToBase64(compressedDataUrl),
+    mimeType: mimeTypeFromDataUrl(compressedDataUrl) || "image/jpeg",
+    fileName: file.name || "position.jpg"
+  };
+}
+
+async function compressImageDataUrl(dataUrl: string) {
+  const image = await loadImage(dataUrl);
+  let fallbackDataUrl = dataUrl;
+
+  for (const maxDimension of IMAGE_IMPORT_DIMENSIONS) {
+    const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height));
+    const width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
+    const height = Math.max(1, Math.round((image.naturalHeight || image.height) * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d", { alpha: false });
+    if (!context) throw new Error("Compression image indisponible sur ce navigateur.");
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, width, height);
+    context.drawImage(image, 0, 0, width, height);
+
+    for (const quality of IMAGE_IMPORT_QUALITIES) {
+      const blob = await canvasToBlob(canvas, "image/jpeg", quality);
+      if (!blob) continue;
+      const nextDataUrl = await blobToDataUrl(blob);
+      fallbackDataUrl = nextDataUrl;
+      if (blob.size <= IMAGE_IMPORT_TARGET_BYTES) {
+        return nextDataUrl;
+      }
+    }
+  }
+
+  return fallbackDataUrl;
+}
+
+function loadImage(dataUrl: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.decoding = "async";
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Cette photo n'est pas lisible. Essaie une capture d'ecran PNG ou JPEG du plateau."));
+    image.src = dataUrl;
+  });
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number) {
+  return new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), type, quality);
+  });
+}
+
+function blobToDataUrl(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(new Error("Compression image impossible."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function mimeTypeFromDataUrl(dataUrl: string) {
+  const match = /^data:([^;,]+)[;,]/.exec(dataUrl);
+  return match?.[1] ?? null;
 }
 
 function urlForSnapshot(snapshot: NavigationSnapshot) {
@@ -793,26 +877,22 @@ export default function HomePage() {
     event.target.value = "";
     if (!file) return;
 
-    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
-      setImageImportError("Image non supportee. Utilise PNG, JPEG ou WebP.");
-      return;
-    }
-    if (file.size > 8 * 1024 * 1024) {
-      setImageImportError("Image trop lourde. Envoie une capture sous 8 Mo.");
+    if (file.type && !file.type.toLowerCase().startsWith("image/")) {
+      setImageImportError("Fichier non supporte. Utilise une photo ou une capture d'ecran.");
       return;
     }
 
     setImageImporting(true);
     setImageImportError(null);
     try {
-      const previewUrl = await readFileAsDataUrl(file);
+      const prepared = await prepareImageForImport(file);
       const result = await importPositionImage({
-        imageData: dataUrlToBase64(previewUrl),
-        mimeType: file.type,
-        fileName: file.name
+        imageData: prepared.imageData,
+        mimeType: prepared.mimeType,
+        fileName: prepared.fileName
       });
       setImageImportDraft({
-        previewUrl,
+        previewUrl: prepared.previewUrl,
         result,
         sideToMove: result.sideToMove
       });
@@ -879,7 +959,7 @@ export default function HomePage() {
 
   const renderShell = (content: ReactNode) => (
     <>
-      <input ref={imageInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={handleImageFileChange} />
+      <input ref={imageInputRef} type="file" accept="image/*" className="sr-only" onChange={handleImageFileChange} />
       <SiteHeader
         status={appStage === "side-selection" ? null : status}
         menuOpen={menuOpen}

@@ -32,7 +32,11 @@ async function requestJson<T>(path: string, body: unknown, signal?: AbortSignal)
     let message = "Le backend n'a pas répondu correctement.";
     try {
       const data = await response.json();
-      message = typeof data.detail === "string" ? data.detail : message;
+      if (typeof data.detail === "string") {
+        message = data.detail;
+      } else if (Array.isArray(data.detail) && data.detail[0]?.msg) {
+        message = String(data.detail[0].msg);
+      }
     } catch {
       message = response.statusText || message;
     }
