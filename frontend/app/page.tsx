@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chess, Move, Square } from "chess.js";
-import { Menu, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
 import { ChessCoachBoard } from "@/components/ChessCoachBoard";
 import { GameControls } from "@/components/GameControls";
 import { GlossaryPanel } from "@/components/GlossaryPanel";
@@ -12,8 +12,7 @@ import { MoveHistory } from "@/components/MoveHistory";
 import { OpeningRepertoirePanel } from "@/components/OpeningRepertoirePanel";
 import { PlanFirstPanel } from "@/components/PlanFirstPanel";
 import { SideSelectionPanel } from "@/components/SideSelectionPanel";
-import { getPlanRecommendations, listAvailablePlans, requestBotMove, reviewMove } from "@/lib/api";
-import { notationFromUci } from "@/lib/beginnerNotation";
+import { getLivePlanInsight, getPlanRecommendations, listAvailablePlans, requestBotMove, reviewMove } from "@/lib/api";
 import { canMoveInMode, gameStatus, isPromotionAttempt, tryMove } from "@/lib/chess";
 import {
   DEFAULT_BASE_ELO,
@@ -22,10 +21,12 @@ import {
   nextStablePlyCount,
   skillLevelForElo
 } from "@/lib/eloAdaptation";
+import { canStepBack, redoTimeline, undoTimeline, type MoveSource, type TimelineMove } from "@/lib/moveTimeline";
 import { getOpeningImageSrc } from "@/lib/openingVisuals";
 import type {
   Orientation,
-  PlanRecommendation,
+  LivePlanInsightResponse,
+  PlanEvent,
   PlanRecommendationsResponse,
   PlayMode,
   ReviewMoveResponse,
@@ -47,7 +48,7 @@ type LastMoveForReview = {
   fenAfter: string;
   moveUci: string;
   ply: number;
-  source: "manual" | "bot";
+  source: MoveSource;
   selectedPlanId: string | null;
   moveHistoryUci: string[];
 };
@@ -206,18 +207,23 @@ export default function HomePage() {
   const [planRecommendations, setPlanRecommendations] = useState<PlanRecommendationsResponse | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
+  const [liveInsight, setLiveInsight] = useState<LivePlanInsightResponse | null>(null);
+  const [liveInsightLoading, setLiveInsightLoading] = useState(false);
+  const [liveInsightError, setLiveInsightError] = useState<string | null>(null);
+  const [coachEvents, setCoachEvents] = useState<PlanEvent[]>([]);
+  const [toastEvent, setToastEvent] = useState<PlanEvent | null>(null);
   const [lastReview, setLastReview] = useState<ReviewMoveResponse | null>(null);
   const [reviewsByPly, setReviewsByPly] = useState<Record<number, ReviewMoveResponse>>({});
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [lastMoveForReview, setLastMoveForReview] = useState<LastMoveForReview | null>(null);
   const [lastUserMoveForReview, setLastUserMoveForReview] = useState<LastMoveForReview | null>(null);
-  const [openOpponentReviewPly, setOpenOpponentReviewPly] = useState<number | null>(null);
   const [botThinking, setBotThinking] = useState(false);
   const [botError, setBotError] = useState<string | null>(null);
   const [highlightedMove, setHighlightedMove] = useState<{ from: string; to: string } | null>(null);
-  const [highlightedRecommendationUci, setHighlightedRecommendationUci] = useState<string | null>(null);
   const [botStrategyState, setBotStrategyState] = useState<Record<string, unknown>>({});
+  const [moveSources, setMoveSources] = useState<MoveSource[]>([]);
+  const [redoStack, setRedoStack] = useState<TimelineMove[]>([]);
   const [adaptiveBoost, setAdaptiveBoost] = useState(0);
   const [stableEloPlyCount, setStableEloPlyCount] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -230,12 +236,23 @@ export default function HomePage() {
   const preloadReviewController = useRef<AbortController | null>(null);
   const preloadingReviewPly = useRef<number | null>(null);
   const botRequestInFlight = useRef(false);
+  const liveInsightCache = useRef<Map<string, LivePlanInsightResponse>>(new Map());
 
   const fen = game.fen();
   const history = useMemo(() => game.history({ verbose: true }) as VerboseMove[], [game]);
   const status = useMemo(() => gameStatus(game), [game]);
   const pgn = useMemo(() => game.pgn(), [game]);
   const historyUci = useMemo(() => history.map((move) => `${move.from}${move.to}${move.promotion ?? ""}`), [history]);
+  const historyKey = useMemo(() => historyUci.join(","), [historyUci]);
+  const checkmateResult = useMemo(() => {
+    if (!game.isCheckmate()) return null;
+    const winner = game.turn() === "w" ? "Les noirs" : "Les blancs";
+    const matedKing = game.turn() === "w" ? "blanc" : "noir";
+    return {
+      winner,
+      detail: `Le roi ${matedKing} n'a plus d'echappatoire.`
+    };
+  }, [game]);
   const effectiveCoachElo = useMemo(() => effectiveElo(DEFAULT_BASE_ELO, adaptiveBoost), [adaptiveBoost]);
   const activeSkillLevel = useMemo(() => skillLevelForElo(effectiveCoachElo), [effectiveCoachElo]);
   const lastBoardMove = useMemo(() => {
@@ -246,26 +263,10 @@ export default function HomePage() {
     return plans.find((plan) => plan.id === selectedPlanId) ?? (planRecommendations?.selectedPlan as StrategyPlan | null) ?? null;
   }, [plans, planRecommendations?.selectedPlan, selectedPlanId]);
   const boardLocked = appStage === "black-plan-selection" || appStage === "white-plan-selection" || appStage === "plan-intro" || appStage === "side-selection";
+  const protectedTimelinePlyCount = appStage === "coach" && userSide === "black" && firstOpponentMove ? 1 : 0;
+  const canStepBackward = canStepBack(historyUci.length, protectedTimelinePlyCount);
+  const canStepForward = !boardLocked && redoStack.length > 0;
   const firstMoveLabel = firstOpponentMove ? history[0]?.san ?? firstOpponentMove : null;
-  const expectedReply = useMemo(() => {
-    const primary = planRecommendations?.primaryMove;
-    const line = selectedPlan?.mainLineUci;
-    const linePly = planRecommendations?.planProgress?.linePly ?? historyUci.length;
-    if (!primary || !line || line[linePly] !== primary.moveUci) return null;
-    const replyUci = line[linePly + 1];
-    if (!replyUci) return null;
-    const afterPrimary = new Chess(fen);
-    try {
-      afterPrimary.move({
-        from: primary.moveUci.slice(0, 2),
-        to: primary.moveUci.slice(2, 4),
-        ...(primary.moveUci.slice(4) ? { promotion: primary.moveUci.slice(4) } : {})
-      });
-      return { moveUci: replyUci, label: notationFromUci(afterPrimary.fen(), replyUci).beginnerLabel };
-    } catch {
-      return { moveUci: replyUci, label: `${replyUci.slice(0, 2)} -> ${replyUci.slice(2, 4)}` };
-    }
-  }, [fen, historyUci.length, planRecommendations?.planProgress?.linePly, planRecommendations?.primaryMove, selectedPlan?.mainLineUci]);
   const latestOpponentReviewMove = useMemo(() => {
     if (appStage !== "coach" || !lastMoveForReview || !selectedPlan) return null;
     return isOpponentMoveForPlan(lastMoveForReview, selectedPlan) ? lastMoveForReview : null;
@@ -274,9 +275,7 @@ export default function HomePage() {
     if (appStage !== "coach" || !lastUserMoveForReview) return null;
     return lastUserMoveForReview;
   }, [appStage, lastUserMoveForReview]);
-  const latestOpponentReview = latestOpponentReviewMove ? reviewsByPly[latestOpponentReviewMove.ply] ?? null : null;
   const latestUserReview = latestUserReviewMove ? reviewsByPly[latestUserReviewMove.ply] ?? null : null;
-  const opponentReviewOpen = Boolean(latestOpponentReviewMove && openOpponentReviewPly === latestOpponentReviewMove.ply);
   const visibleRecommendations = useMemo(
     () => planRecommendations?.mergedRecommendations ?? [],
     [planRecommendations?.mergedRecommendations]
@@ -300,6 +299,14 @@ export default function HomePage() {
     },
     [planRecommendations?.expectedOpponentMove, visibleRecommendations]
   );
+  const registerCoachEvent = useCallback((event?: PlanEvent | null) => {
+    if (!event) return;
+    setCoachEvents((current) => {
+      if (current.some((item) => item.id === event.id)) return current;
+      return [event, ...current].slice(0, 5);
+    });
+    setToastEvent(event);
+  }, []);
 
   const makeNavigationSnapshot = useCallback(
     (overrides: Partial<NavigationSnapshot> = {}) =>
@@ -334,6 +341,8 @@ export default function HomePage() {
     setMode(snapshot.mode);
     setSelectedPlanId(snapshot.selectedPlanId);
     setFirstOpponentMove(snapshot.firstOpponentMove);
+    setMoveSources(snapshot.historyUci.map(() => "manual"));
+    setRedoStack([]);
     setAdaptiveBoost(0);
     setStableEloPlyCount(0);
     lastEloAdjustmentPly.current = null;
@@ -347,6 +356,11 @@ export default function HomePage() {
     setPlansError(null);
     setPlanRecommendations(null);
     setPlanError(null);
+    setLiveInsight(null);
+    setLiveInsightLoading(false);
+    setLiveInsightError(null);
+    setCoachEvents([]);
+    setToastEvent(null);
     setLastReview(null);
     setReviewsByPly({});
     preloadingReviewPlies.current.clear();
@@ -358,12 +372,10 @@ export default function HomePage() {
     setReviewError(null);
     setLastMoveForReview(null);
     setLastUserMoveForReview(null);
-    setOpenOpponentReviewPly(null);
     setBotThinking(false);
     setBotError(null);
     setBotStrategyState({});
     setHighlightedMove(null);
-    setHighlightedRecommendationUci(null);
     setMenuOpen(false);
   }, []);
 
@@ -418,11 +430,9 @@ export default function HomePage() {
     const primaryUci = planRecommendations?.primaryMove?.moveUci ?? null;
     const hintUci = primaryUci ?? planRecommendations?.expectedOpponentMove?.moveUci ?? null;
     if (appStage !== "coach" || !hintUci) {
-      setHighlightedRecommendationUci(null);
       setHighlightedMove(null);
       return;
     }
-    setHighlightedRecommendationUci(hintUci);
     setHighlightedMove({ from: hintUci.slice(0, 2), to: hintUci.slice(2, 4) });
   }, [appStage, planRecommendations?.expectedOpponentMove?.moveUci, planRecommendations?.primaryMove?.moveUci]);
 
@@ -478,6 +488,7 @@ export default function HomePage() {
   useEffect(() => {
     if (appStage !== "coach") {
       setPlanRecommendations(null);
+      setLiveInsightLoading(false);
       return;
     }
     if (!selectedPlanId && userSide !== "both") {
@@ -518,13 +529,82 @@ export default function HomePage() {
     };
   }, [activeSkillLevel, appStage, effectiveCoachElo, fen, historyUci, selectedPlanId, userSide]);
 
+  useEffect(() => {
+    if (appStage !== "coach" || !planRecommendations) {
+      setLiveInsightLoading(false);
+      return;
+    }
+
+    registerCoachEvent(planRecommendations.planEvent);
+
+    const cacheKey = [
+      fen,
+      selectedPlanId ?? "",
+      historyKey,
+      planRecommendations.phase,
+      planRecommendations.openingState,
+      planRecommendations.primaryMove?.moveUci ?? "",
+      planRecommendations.expectedOpponentMove?.moveUci ?? ""
+    ].join("|");
+    const cached = liveInsightCache.current.get(cacheKey);
+    if (cached) {
+      setLiveInsight(cached);
+      setLiveInsightLoading(false);
+      setLiveInsightError(null);
+      registerCoachEvent(cached.event);
+      return;
+    }
+
+    let active = true;
+    const controller = new AbortController();
+    setLiveInsightLoading(true);
+    setLiveInsightError(null);
+
+    getLivePlanInsight({
+      fen,
+      selectedPlanId,
+      moveHistoryUci: historyUci,
+      phase: planRecommendations.phase,
+      openingState: planRecommendations.openingState,
+      strategicPlan: planRecommendations.strategicPlan,
+      primaryMove: planRecommendations.primaryMove,
+      expectedOpponentMove: planRecommendations.expectedOpponentMove,
+      planEvent: planRecommendations.planEvent,
+      signal: controller.signal
+    })
+      .then((response) => {
+        if (!active) return;
+        liveInsightCache.current.set(cacheKey, response);
+        setLiveInsight(response);
+        registerCoachEvent(response.event);
+      })
+      .catch((error: Error) => {
+        if (isAbortError(error) || !active) return;
+        setLiveInsightError(error.message || "Le plan vivant n'a pas pu etre mis a jour.");
+      })
+      .finally(() => {
+        if (active) setLiveInsightLoading(false);
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [appStage, fen, historyKey, historyUci, planRecommendations, registerCoachEvent, selectedPlanId]);
+
+  useEffect(() => {
+    if (!toastEvent) return;
+    const timeout = window.setTimeout(() => setToastEvent(null), 4200);
+    return () => window.clearTimeout(timeout);
+  }, [toastEvent]);
+
   const legalTargets = useMemo(() => {
     if (!selectedSquare || boardLocked) return [];
     return game.moves({ square: selectedSquare as Square, verbose: true }).map((move) => move.to);
   }, [boardLocked, game, selectedSquare]);
 
   const rememberMoveForReview = useCallback(
-    (fenBefore: string, fenAfter: string, moveUci: string, ply: number, source: "manual" | "bot", nextHistoryUci: string[]) => {
+    (fenBefore: string, fenAfter: string, moveUci: string, ply: number, source: MoveSource, nextHistoryUci: string[]) => {
       const storedMove = { fenBefore, fenAfter, moveUci, ply, source, selectedPlanId, moveHistoryUci: nextHistoryUci };
       setLastMoveForReview(storedMove);
       if (source === "manual") {
@@ -532,13 +612,12 @@ export default function HomePage() {
       }
       setLastReview(null);
       setReviewError(null);
-      setOpenOpponentReviewPly(null);
     },
     [selectedPlanId]
   );
 
   const applyMove = useCallback(
-    (from: string, to: string, promotion?: string, source: "manual" | "bot" = "manual") => {
+    (from: string, to: string, promotion?: string, source: MoveSource = "manual") => {
       if (boardLocked) {
         setLastMessage("Choisis d'abord ton plan avant de continuer la partie.");
         return false;
@@ -559,11 +638,12 @@ export default function HomePage() {
       const ply = history.length + 1;
       const nextHistoryUci = [...historyUci, moveUci];
       setGame(result.game);
+      setMoveSources((current) => [...current.slice(0, history.length), source]);
+      setRedoStack([]);
       setSelectedSquare(null);
       setPendingPromotion(null);
       setBotError(null);
       setHighlightedMove(null);
-      setHighlightedRecommendationUci(null);
       rememberMoveForReview(fenBefore, result.game.fen(), moveUci, ply, source, nextHistoryUci);
 
       if (appStage === "black-first-move" && history.length === 0 && source === "manual") {
@@ -646,8 +726,9 @@ export default function HomePage() {
         setBotStrategyState(response.updatedStrategyState);
         const nextHistoryUci = [...historyUci, response.move.moveUci];
         setGame(result.game);
+        setMoveSources((current) => [...current.slice(0, history.length), "bot"]);
+        setRedoStack([]);
         setHighlightedMove(null);
-        setHighlightedRecommendationUci(null);
         rememberMoveForReview(fenBefore, result.game.fen(), response.move.moveUci, ply, "bot", nextHistoryUci);
       })
       .catch((error: Error) => {
@@ -774,16 +855,6 @@ export default function HomePage() {
     );
   }, [firstOpponentMove, historyUci, makeNavigationSnapshot, navigateToSnapshot, userSide]);
 
-  const handlePlanRecommendationToggle = useCallback((recommendation: PlanRecommendation) => {
-    if (highlightedRecommendationUci === recommendation.moveUci) {
-      setHighlightedRecommendationUci(null);
-      setHighlightedMove(null);
-      return;
-    }
-    setHighlightedRecommendationUci(recommendation.moveUci);
-    setHighlightedMove({ from: recommendation.moveUci.slice(0, 2), to: recommendation.moveUci.slice(2, 4) });
-  }, [highlightedRecommendationUci]);
-
   const requestStoredReview = useCallback(
     (move: LastMoveForReview, signal?: AbortSignal) =>
       reviewMove({
@@ -891,46 +962,17 @@ export default function HomePage() {
     lastEloAdjustmentPly.current = null;
   }, []);
 
-  function resetBoardOnly() {
-    setGame(new Chess());
+  function clearPositionDerivedState() {
     setSelectedSquare(null);
     setPendingPromotion(null);
     setHighlightedMove(null);
-    setHighlightedRecommendationUci(null);
-    setReviewsByPly({});
-    preloadingReviewPlies.current.clear();
-    failedPreloadReviewPlies.current.clear();
-    preloadReviewController.current?.abort();
-    preloadReviewController.current = null;
-    preloadingReviewPly.current = null;
-    setLastReview(null);
-    setLastMoveForReview(null);
-    setLastUserMoveForReview(null);
-    setOpenOpponentReviewPly(null);
     setLastMessage(null);
     setPlanRecommendations(null);
-    resetAdaptiveBoost();
-  }
-
-  function undo() {
-    const nextHistory = historyUci.slice(0, -1);
-    const next = new Chess();
-    for (const move of nextHistory) {
-      next.move({
-        from: move.slice(0, 2),
-        to: move.slice(2, 4),
-        ...(move.slice(4) ? { promotion: move.slice(4) } : {})
-      });
-    }
-    setGame(next);
-    setSelectedSquare(null);
-    setHighlightedMove(null);
-    setHighlightedRecommendationUci(null);
-    setLastMessage(null);
+    setPlanError(null);
+    setLastReview(null);
     setLastMoveForReview(null);
     setLastUserMoveForReview(null);
-    setOpenOpponentReviewPly(null);
-    setLastReview(null);
+    setReviewLoading(false);
     setReviewError(null);
     setReviewsByPly({});
     preloadingReviewPlies.current.clear();
@@ -938,14 +980,76 @@ export default function HomePage() {
     preloadReviewController.current?.abort();
     preloadReviewController.current = null;
     preloadingReviewPly.current = null;
-    setStableEloPlyCount(0);
-    lastEloAdjustmentPly.current = null;
-    if (userSide === "black" && nextHistory.length === 0) {
+    botRequestInFlight.current = false;
+    setBotThinking(false);
+    setBotError(null);
+    setBotStrategyState({});
+    resetAdaptiveBoost();
+  }
+
+  function resetBoardOnly() {
+    setGame(new Chess());
+    setMoveSources([]);
+    setRedoStack([]);
+    setSelectedSquare(null);
+    setPendingPromotion(null);
+    setHighlightedMove(null);
+    setReviewsByPly({});
+    preloadingReviewPlies.current.clear();
+    failedPreloadReviewPlies.current.clear();
+    preloadReviewController.current?.abort();
+    preloadReviewController.current = null;
+    preloadingReviewPly.current = null;
+    setLastReview(null);
+    setLastMoveForReview(null);
+    setLastUserMoveForReview(null);
+    setLastMessage(null);
+    setPlanRecommendations(null);
+    setLiveInsight(null);
+    setLiveInsightLoading(false);
+    setLiveInsightError(null);
+    setCoachEvents([]);
+    setToastEvent(null);
+    resetAdaptiveBoost();
+  }
+
+  function undo() {
+    const timeline = undoTimeline(historyUci, moveSources, redoStack, protectedTimelinePlyCount);
+    if (!timeline.undoneMove) return;
+
+    setGame(buildGameFromHistory(timeline.historyUci));
+    setMoveSources(timeline.moveSources);
+    setRedoStack(timeline.redoStack);
+    clearPositionDerivedState();
+
+    if (userSide === "black" && timeline.historyUci.length === 0 && appStage !== "coach") {
       setSelectedPlanId(null);
       setFirstOpponentMove(null);
       setPlans([]);
       setAppStage("black-first-move");
     }
+  }
+
+  function redo() {
+    const timeline = redoTimeline(redoStack);
+    if (!timeline.nextMove || boardLocked) return;
+
+    const { moveUci, source } = timeline.nextMove;
+    const fenBefore = game.fen();
+    const result = tryMove(game, moveUci.slice(0, 2), moveUci.slice(2, 4), moveUci.slice(4) || undefined);
+    if (!result) {
+      setRedoStack([]);
+      setLastMessage("Le coup suivant ne correspond plus a cette position.");
+      return;
+    }
+
+    const ply = history.length + 1;
+    const nextHistoryUci = [...historyUci, moveUci];
+    setGame(result.game);
+    setMoveSources((current) => [...current.slice(0, history.length), source]);
+    setRedoStack(timeline.redoStack);
+    clearPositionDerivedState();
+    rememberMoveForReview(fenBefore, result.game.fen(), moveUci, ply, source, nextHistoryUci);
   }
 
   function reset() {
@@ -975,7 +1079,6 @@ export default function HomePage() {
   function handleHistoryClick(ply: number, move: Move) {
     const review = reviewsByPly[ply];
     setHighlightedMove({ from: move.from, to: move.to });
-    setHighlightedRecommendationUci(null);
     if (review) {
       setLastReview(review);
       setMenuOpen(true);
@@ -1128,6 +1231,12 @@ export default function HomePage() {
 
   return renderShell(
     <>
+      {toastEvent ? (
+        <div className={`coach-toast is-${toastEvent.severity}`} role="status" aria-live="polite">
+          <strong>{toastEvent.title}</strong>
+          <span>{toastEvent.message}</span>
+        </div>
+      ) : null}
       <main className="coach-live-shell">
         <section className="coach-board-column">
           <div className="coach-board-stage">
@@ -1144,6 +1253,14 @@ export default function HomePage() {
               onDrop={requestMove}
               onSquareClick={handleSquareClick}
             />
+
+            {checkmateResult ? (
+              <div className="checkmate-overlay" role="status" aria-live="polite">
+                <span>&Eacute;chec et mat</span>
+                <strong>{checkmateResult.winner} gagnent</strong>
+                <p>{checkmateResult.detail}</p>
+              </div>
+            ) : null}
 
             {pendingPromotion ? (
               <div className="promotion-popover" role="dialog" aria-label="Choisir une promotion">
@@ -1170,7 +1287,26 @@ export default function HomePage() {
           </div>
 
           <div className="coach-board-controls">
-            <button type="button" onClick={undo} className="control-button">Annuler</button>
+            <button
+              type="button"
+              onClick={undo}
+              className="control-button icon-control"
+              disabled={!canStepBackward || botThinking}
+              aria-label="Coup precedent"
+              title="Coup precedent"
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <button
+              type="button"
+              onClick={redo}
+              className="control-button icon-control"
+              disabled={!canStepForward || botThinking}
+              aria-label="Coup suivant"
+              title="Coup suivant"
+            >
+              <ChevronRight size={18} />
+            </button>
             <button type="button" onClick={reset} className="control-button">Reset</button>
             <button type="button" onClick={() => setOrientation(orientation === "white" ? "black" : "white")} className="control-button">Tourner</button>
           </div>
@@ -1184,121 +1320,16 @@ export default function HomePage() {
           <PlanFirstPanel
             selectedPlan={selectedPlan}
             recommendations={planRecommendations}
+            liveInsight={liveInsight}
+            liveInsightLoading={liveInsightLoading}
+            liveInsightError={liveInsightError}
+            events={coachEvents}
             loading={planLoading}
             error={planError}
-            highlightedMoveUci={highlightedRecommendationUci}
-            expectedReplyLabel={expectedReply?.label ?? null}
-            onToggleRecommendation={handlePlanRecommendationToggle}
           />
-          {latestOpponentReviewMove ? (
-            <OpponentMoveInsight
-              open={opponentReviewOpen}
-              review={latestOpponentReview}
-              loading={reviewLoading && !latestOpponentReview}
-              error={reviewError}
-              onOpen={() => {
-                setOpenOpponentReviewPly(latestOpponentReviewMove.ply);
-                if (!latestOpponentReview && !reviewLoading) {
-                  reviewStoredMove(latestOpponentReviewMove);
-                }
-              }}
-              onClose={() => setOpenOpponentReviewPly(null)}
-              onRetry={() => reviewStoredMove(latestOpponentReviewMove)}
-            />
-          ) : null}
         </section>
       </main>
     </>
-  );
-}
-
-function OpponentMoveInsight({
-  open,
-  review,
-  loading,
-  error,
-  onRetry,
-  onOpen,
-  onClose
-}: {
-  open: boolean;
-  review: ReviewMoveResponse | null;
-  loading: boolean;
-  error: string | null;
-  onRetry: () => void;
-  onOpen: () => void;
-  onClose: () => void;
-}) {
-  if (!open) {
-    return (
-      <button type="button" onClick={onOpen} className="opponent-review-trigger">
-        Comprendre le coup adverse
-      </button>
-    );
-  }
-
-  return (
-    <section className="opponent-review-card is-inline" aria-labelledby="opponent-review-title">
-      <div className="opponent-review-head">
-        <p>Coup adverse</p>
-        <h2 id="opponent-review-title">Ce que ca change</h2>
-      </div>
-
-        {loading && !review ? (
-          <div className="opponent-review-loading" role="status">
-            <span className="coach-spinner" aria-hidden="true" />
-            <p>Analyse du coup adverse...</p>
-          </div>
-        ) : null}
-
-        {error ? (
-          <div className="opponent-review-error">
-            <p>{error}</p>
-            <button type="button" onClick={onRetry} className="opening-detail-toggle">
-              Reessayer
-            </button>
-          </div>
-        ) : null}
-
-        {review ? (
-          <div className="opponent-review-body">
-            <div className="opponent-review-summary">
-              <span>Coup joue</span>
-              <strong>{review.moveLabel}</strong>
-              <small>{review.qualityLabel} - {review.playedMoveEvalLabel} - {review.analysisProvider}</small>
-            </div>
-
-            <ReviewNote title="Analyse coach" body={review.coachNarrative} />
-
-            {review.bestMoveWasDifferent ? (
-              <div className="opponent-review-best">
-                <span>Meilleur repere adverse</span>
-                <strong>{review.bestMoveLabel}</strong>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        <div className="opponent-review-actions">
-          {!review && !loading ? (
-            <button type="button" onClick={onRetry} className="control-button">
-              Analyser ce coup
-            </button>
-          ) : null}
-          <button type="button" onClick={onClose} className="opening-detail-toggle">
-            Fermer
-          </button>
-        </div>
-    </section>
-  );
-}
-
-function ReviewNote({ title, body }: { title: string; body: string }) {
-  return (
-    <article className="opponent-review-note">
-      <h3>{title}</h3>
-      <p>{body}</p>
-    </article>
   );
 }
 

@@ -9,9 +9,12 @@ import httpx
 from .base import (
     BEGINNER_SYSTEM_PROMPT,
     EXPLAIN_CANDIDATE_SCHEMA,
+    LIVE_PLAN_SCHEMA,
+    LIVE_PLAN_SYSTEM_PROMPT,
     REVIEW_MOVE_SCHEMA,
     REVIEW_SYSTEM_PROMPT,
     AiProvider,
+    build_live_plan_prompt,
     build_review_prompt,
     build_user_prompt,
 )
@@ -29,6 +32,24 @@ class OllamaProvider(AiProvider):
                 "prompt": build_user_prompt(context),
                 "stream": False,
                 "format": EXPLAIN_CANDIDATE_SCHEMA,
+            },
+            timeout=timeout_seconds,
+        )
+        response.raise_for_status()
+        content = response.json().get("response", "{}")
+        return json.loads(content)
+
+    def live_plan(self, context: dict[str, Any], timeout_seconds: float) -> dict[str, Any]:
+        base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+        model = os.getenv("OLLAMA_MODEL", "qwen3:8b")
+        response = httpx.post(
+            f"{base_url}/api/generate",
+            json={
+                "model": model,
+                "system": LIVE_PLAN_SYSTEM_PROMPT,
+                "prompt": build_live_plan_prompt(context),
+                "stream": False,
+                "format": LIVE_PLAN_SCHEMA,
             },
             timeout=timeout_seconds,
         )

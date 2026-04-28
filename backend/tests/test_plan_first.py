@@ -429,3 +429,76 @@ def test_black_plan_menu_filters_after_flexible_first_moves() -> None:
 def test_phase_detector_detects_simple_endgame() -> None:
     fen = "8/8/8/8/8/8/4K3/6k1 w - - 0 1"
     assert detect_game_phase(fen, []) == "endgame"
+
+
+def test_phase_detector_does_not_treat_early_queen_trade_as_endgame() -> None:
+    moves = ["e2e4", "e7e5", "d1h5", "b8c6", "h5e5", "c6e5"]
+    board = chess.Board()
+    for move in moves:
+        board.push_uci(move)
+
+    assert detect_game_phase(board.fen(), moves) == "opening"
+
+
+def test_opening_deviation_can_be_abandoned_and_create_event(monkeypatch) -> None:
+    import app.strategy.plan_engine as plan_engine
+
+    monkeypatch.setattr(plan_engine, "StockfishEngine", lambda: FakePlanStockfish())
+    client = TestClient(app)
+    moves = ["e2e4", "c7c5", "g1f3", "d7d6", "f1c4", "g8f6"]
+    board = chess.Board()
+    for move in moves:
+        board.push_uci(move)
+
+    response = client.post(
+        "/plan-recommendations",
+        json={
+            "fen": board.fen(),
+            "selectedPlanId": "italian_game_beginner",
+            "elo": 1200,
+            "skillLevel": "beginner",
+            "moveHistoryUci": moves,
+            "maxMoves": 5,
+            "engineDepth": 1,
+        },
+    )
+
+    data = response.json()
+    assert response.status_code == 200
+    assert data["openingState"] in {"recoverable", "abandoned"}
+    assert data["strategicPlan"]["title"]
+    if data["openingState"] == "abandoned":
+        assert data["phaseDisplay"]["key"] == "middlegame"
+        assert data["planEvent"]["title"] == "Plan initial abandonne"
+
+
+def test_live_plan_insight_returns_heuristic_fallback(monkeypatch) -> None:
+    monkeypatch.setenv("AI_PROVIDER", "heuristic")
+    client = TestClient(app)
+    board = chess.Board()
+    response = client.post(
+        "/live-plan-insight",
+        json={
+            "fen": board.fen(),
+            "selectedPlanId": "italian_game_beginner",
+            "moveHistoryUci": [],
+            "phase": "opening",
+            "openingState": "on_track",
+            "strategicPlan": {
+                "title": "Partie italienne",
+                "goal": "Developper vite et viser le centre.",
+                "reason": "Le plan est encore coherent.",
+                "nextObjective": "Jouer un coup simple de developpement.",
+            },
+            "primaryMove": None,
+            "expectedOpponentMove": None,
+            "planEvent": None,
+        },
+    )
+
+    data = response.json()
+    assert response.status_code == 200
+    assert data["analysisProvider"] == "heuristic"
+    assert data["analysisKind"] == "heuristic"
+    assert data["headline"]
+    assert data["currentPlan"]

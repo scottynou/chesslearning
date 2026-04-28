@@ -3,6 +3,7 @@ import type {
   BotMoveResponse,
   CandidateMove,
   ExplainResponse,
+  LivePlanInsightResponse,
   PlanRecommendationsResponse,
   PositionPlanResponse,
   ReviewMoveResponse,
@@ -135,4 +136,20 @@ export function getPlanRecommendations(params: {
     ...body,
     engineDepth: body.engineDepth ?? 10
   }, signal);
+}
+
+export function getLivePlanInsight(params: {
+  fen: string;
+  selectedPlanId?: string | null;
+  moveHistoryUci: string[];
+  phase: PlanRecommendationsResponse["phase"];
+  openingState: PlanRecommendationsResponse["openingState"];
+  strategicPlan: PlanRecommendationsResponse["strategicPlan"];
+  primaryMove: PlanRecommendationsResponse["primaryMove"];
+  expectedOpponentMove: PlanRecommendationsResponse["expectedOpponentMove"];
+  planEvent: PlanRecommendationsResponse["planEvent"];
+  signal?: AbortSignal;
+}): Promise<LivePlanInsightResponse> {
+  const { signal, ...body } = params;
+  return requestJson<LivePlanInsightResponse>("/live-plan-insight", body, signal);
 }

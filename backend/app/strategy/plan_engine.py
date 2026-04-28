@@ -88,12 +88,38 @@ def get_plan_recommendations(
         move_history=move_history,
         primary_move=primary_move,
     )
-    if phase_status == "opening_success":
+    opening_state = opening_state_for(
+        board=board,
+        plan=active_plan,
+        status=status,
+        phase=phase,
+        phase_status=phase_status,
+        move_history=move_history,
+        plan_moves=plan_moves,
+        primary_move=primary_move,
+        deviation=deviation,
+    )
+    if opening_state == "completed":
         phase = "middlegame"
         status = "plan_completed"
+        phase_status = "opening_success"
         visible_plan_items = []
         strategic_pool = [item for item in visible_merged if item["source"] == "engine"] or visible_merged
         primary_move = choose_primary_move([], strategic_pool)
+    elif opening_state == "abandoned" and phase == "opening":
+        phase = "middlegame"
+        phase_status = "fallback"
+        visible_plan_items = []
+        visible_merged = [item for item in visible_merged if item["source"] != "plan"] or visible_merged
+        primary_move = choose_primary_move([], visible_merged)
+        if player_turn and primary_move is None and not game_over:
+            visible_merged = fallback_legal_recommendations(
+                board=board,
+                plan_name=active_plan.get("nameFr") if active_plan else None,
+                phase=phase,
+                limit=int(level_settings["technical_limit"]),
+            )
+            primary_move = choose_primary_move([], visible_merged)
 
     phase_display = phase_display_for(phase, phase_status)
     visible_recommendations = visible_recommendations_for(
@@ -112,6 +138,19 @@ def get_plan_recommendations(
     last_event = last_event_for(move_history)
     what_changed = what_changed_for(active_plan, status, phase_status, deviation, primary_move)
     next_objective = current_objective
+    phase_coach_context = phase_coach(fen, phase)
+    strategic_plan = strategic_plan_for(
+        plan=active_plan,
+        phase=phase,
+        opening_state=opening_state,
+        current_objective=current_objective,
+        what_changed=what_changed,
+        coach_context=phase_coach_context,
+        primary_move=primary_move,
+        expected_opponent_move=expected_opponent_move,
+    )
+    plan_event = plan_event_for(active_plan, phase, opening_state, strategic_plan)
+    phase_reason = phase_reason_for(phase, opening_state, active_plan, progress, phase_coach_context)
     pedagogical_summary = pedagogical_summary_for(coach_message, what_changed, next_objective)
     response_move_complexity = str(primary_move.get("moveComplexity", "simple")) if primary_move else "simple"
 
@@ -148,13 +187,17 @@ def get_plan_recommendations(
             "detectedOpening": detected_plan,
             "transposition": transposed_plan if selected_plan and transposed_plan and transposed_plan["id"] != selected_plan["id"] else None,
             "adaptations": suggest_adaptation_after_deviation(fen, plan_state, engine_candidates),
-            "phaseCoach": phase_coach(fen, phase),
+            "phaseCoach": phase_coach_context,
             "skillLevel": level_settings,
         },
         "selectedPlan": active_plan,
         "phase": phase,
         "phaseDisplay": phase_display,
         "phaseStatus": phase_status,
+        "openingState": opening_state,
+        "phaseReason": phase_reason,
+        "planEvent": plan_event,
+        "strategicPlan": strategic_plan,
         "planProgress": progress,
         "openingBrief": opening_brief,
         "currentObjective": current_objective,
@@ -490,6 +533,10 @@ def phase_status_for(
 ) -> str:
     if not plan:
         return "fallback"
+    if status == "opponent_deviated":
+        return "adapted"
+    if status == "transposed":
+        return "transposed"
     success = detect_opening_success(board, plan, move_history, primary_move)
     progress = opening_progress_details_for(board, plan, move_history, success)
     line = plan.get("mainLineUci", [])
@@ -497,11 +544,155 @@ def phase_status_for(
     enough_plan_moves = int(progress["planMovesPlayed"]) >= int(progress["planMovesTarget"])
     if int(progress["percent"]) >= 82 and enough_plan_moves and success["completed"] >= 3 and len(move_history) >= minimum_ply:
         return "opening_success"
-    if status == "opponent_deviated":
-        return "adapted"
-    if status == "transposed":
-        return "transposed"
     return "opening_in_progress"
+
+
+def opening_state_for(
+    *,
+    board: chess.Board,
+    plan: dict[str, Any] | None,
+    status: str,
+    phase: str,
+    phase_status: str,
+    move_history: list[str],
+    plan_moves: list[str],
+    primary_move: dict[str, Any] | None,
+    deviation: dict[str, Any] | None,
+) -> str:
+    if not plan:
+        return "recoverable"
+    if phase_status == "opening_success" or status == "plan_completed":
+        return "completed"
+    if phase == "endgame":
+        return "completed" if len(move_history) >= 8 else "recoverable"
+    if status == "on_plan":
+        return "on_track"
+
+    progress = opening_progress_details_for(board, plan, move_history)
+    playable_plan_move = bool(plan_moves)
+    severe_warning = primary_move is not None and _is_severe_warning(primary_move)
+    low_progress = int(progress["percent"]) < 45 and len(move_history) >= 8
+    no_realistic_line = deviation is not None and not playable_plan_move and len(move_history) >= 6
+
+    if severe_warning or no_realistic_line or (phase in {"transition", "middlegame"} and low_progress):
+        return "abandoned"
+    return "recoverable"
+
+
+def strategic_plan_for(
+    *,
+    plan: dict[str, Any] | None,
+    phase: str,
+    opening_state: str,
+    current_objective: str,
+    what_changed: str,
+    coach_context: dict[str, Any],
+    primary_move: dict[str, Any] | None,
+    expected_opponent_move: dict[str, Any] | None,
+) -> dict[str, str]:
+    plan_name = str(plan.get("nameFr")) if plan else "Plan general"
+    if expected_opponent_move:
+        return {
+            "title": "Observer la reponse adverse",
+            "goal": f"L'adversaire devrait surtout jouer {expected_opponent_move['beginnerLabel']}.",
+            "reason": "C'est a l'autre camp de jouer, donc ton plan attend sa decision.",
+            "nextObjective": "Regarde si sa reponse confirme le plan ou force une adaptation.",
+        }
+    if opening_state == "abandoned":
+        goal = _first_coach_goal(coach_context) or "Stabiliser la position avant de chercher une attaque."
+        return {
+            "title": "Nouveau plan de jeu",
+            "goal": goal,
+            "reason": f"{plan_name} n'est plus realiste comme ligne d'ouverture sans prendre trop de risques.",
+            "nextObjective": current_objective or "Ameliore ta pire piece et garde le roi en securite.",
+        }
+    if opening_state == "completed":
+        goal = _first_coach_goal(coach_context) or (plan.get("middlegamePlan", ["Ameliorer les pieces."])[0] if plan else "Ameliorer les pieces.")
+        return {
+            "title": "Plan de milieu de partie",
+            "goal": str(goal),
+            "reason": "L'ouverture a rempli assez de criteres : le coach passe aux objectifs strategiques.",
+            "nextObjective": current_objective,
+        }
+    if opening_state == "recoverable":
+        return {
+            "title": "Ouverture adaptee",
+            "goal": current_objective,
+            "reason": what_changed,
+            "nextObjective": "Garde l'idee du plan, mais ne force pas une ligne qui n'existe plus.",
+        }
+    if phase == "endgame":
+        return {
+            "title": "Plan de finale",
+            "goal": _first_coach_goal(coach_context) or "Activer le roi et convertir sans contre-jeu.",
+            "reason": "Il reste peu de materiel : les objectifs changent.",
+            "nextObjective": current_objective,
+        }
+    return {
+        "title": plan_name,
+        "goal": current_objective,
+        "reason": what_changed,
+        "nextObjective": current_objective,
+    }
+
+
+def plan_event_for(plan: dict[str, Any] | None, phase: str, opening_state: str, strategic_plan: dict[str, str]) -> dict[str, str] | None:
+    plan_id = str(plan.get("id")) if plan else "general"
+    if opening_state == "abandoned":
+        return {
+            "id": f"opening-abandoned-{plan_id}",
+            "severity": "warning",
+            "title": "Plan initial abandonne",
+            "message": strategic_plan["reason"],
+        }
+    if opening_state == "completed":
+        return {
+            "id": f"opening-completed-{plan_id}",
+            "severity": "success",
+            "title": "Ouverture terminee",
+            "message": "On passe maintenant au plan de milieu de partie.",
+        }
+    if phase == "endgame":
+        return {
+            "id": "phase-endgame",
+            "severity": "info",
+            "title": "Finale",
+            "message": "Le plan devient conversion, securite du roi et pions passes.",
+        }
+    return None
+
+
+def phase_reason_for(
+    phase: str,
+    opening_state: str,
+    plan: dict[str, Any] | None,
+    progress: dict[str, Any],
+    coach_context: dict[str, Any],
+) -> str:
+    if opening_state == "abandoned":
+        return "La ligne d'ouverture choisie n'est plus realiste dans cette position."
+    if opening_state == "completed":
+        return "Les criteres d'ouverture sont assez remplis pour passer au milieu de partie."
+    if phase == "endgame":
+        return "Le materiel restant indique une finale."
+    if phase in {"transition", "middlegame"}:
+        return str(coach_context.get("mainGoal") or "La position demande un plan strategique plutot qu'une ligne d'ouverture.")
+    if plan:
+        return str(progress.get("impact") or "Le coach verifie si l'ouverture peut encore etre construite.")
+    return "Le coach applique les principes d'ouverture generaux."
+
+
+def _first_coach_goal(coach_context: dict[str, Any]) -> str | None:
+    for key in ("currentPriorities", "conversionPlan"):
+        values = coach_context.get(key)
+        if isinstance(values, list) and values:
+            return str(values[0])
+    candidate_plans = coach_context.get("candidatePlans")
+    if isinstance(candidate_plans, list) and candidate_plans:
+        first = candidate_plans[0]
+        if isinstance(first, dict):
+            return str(first.get("name") or first.get("why") or "")
+    return None
 
 
 def plan_progress_for(board: chess.Board, plan: dict[str, Any] | None, move_history: list[str], phase_status: str) -> dict[str, Any]:

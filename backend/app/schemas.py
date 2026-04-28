@@ -13,6 +13,7 @@ Quality = Literal["excellent", "good", "playable", "inaccurate", "mistake", "blu
 BotStyle = Literal["balanced", "safe", "aggressive", "solid", "educational"]
 SkillLevel = Literal["beginner", "intermediate", "pro"]
 PlanPhase = Literal["opening", "transition", "middlegame", "endgame"]
+OpeningState = Literal["on_track", "recoverable", "completed", "abandoned"]
 PlanStatus = Literal["on_plan", "transposed", "opponent_deviated", "out_of_book", "plan_completed"]
 AnalysisProvider = Literal["heuristic", "openai", "gemini", "ollama"]
 AnalysisKind = Literal["ai", "heuristic"]
@@ -388,6 +389,24 @@ class OpeningBrief(BaseModel):
     completion: str
 
 
+class PlanEvent(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    severity: Literal["info", "success", "warning", "critical"]
+    title: str
+    message: str
+
+
+class StrategicPlan(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    title: str
+    goal: str
+    reason: str
+    next_objective: str = Field(alias="nextObjective")
+
+
 class PlanRecommendationsResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -400,6 +419,10 @@ class PlanRecommendationsResponse(BaseModel):
     phase: PlanPhase = "opening"
     phase_display: PhaseDisplay = Field(alias="phaseDisplay")
     phase_status: str = Field(default="opening_in_progress", alias="phaseStatus")
+    opening_state: OpeningState = Field(default="on_track", alias="openingState")
+    phase_reason: str = Field(default="", alias="phaseReason")
+    plan_event: PlanEvent | None = Field(default=None, alias="planEvent")
+    strategic_plan: StrategicPlan = Field(alias="strategicPlan")
     plan_progress: dict[str, Any] = Field(default_factory=dict, alias="planProgress")
     opening_brief: OpeningBrief = Field(alias="openingBrief")
     current_objective: str = Field(default="", alias="currentObjective")
@@ -417,3 +440,38 @@ class PlanRecommendationsResponse(BaseModel):
     turn_context: TurnContext = Field(alias="turnContext")
     technical_details: dict[str, Any] = Field(default_factory=dict, alias="technicalDetails")
     technical_engine_moves: list[CandidateMove] = Field(default_factory=list, alias="technicalEngineMoves")
+
+
+class LivePlanInsightRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    fen: str
+    selected_plan_id: str | None = Field(default=None, alias="selectedPlanId")
+    move_history_uci: list[str] = Field(default_factory=list, alias="moveHistoryUci")
+    phase: PlanPhase
+    opening_state: OpeningState = Field(alias="openingState")
+    strategic_plan: dict[str, Any] = Field(alias="strategicPlan")
+    primary_move: dict[str, Any] | None = Field(default=None, alias="primaryMove")
+    expected_opponent_move: dict[str, Any] | None = Field(default=None, alias="expectedOpponentMove")
+    plan_event: dict[str, Any] | None = Field(default=None, alias="planEvent")
+
+    @field_validator("fen")
+    @classmethod
+    def validate_fen(cls, value: str) -> str:
+        try:
+            chess.Board(value)
+        except ValueError as exc:
+            raise ValueError("Invalid FEN") from exc
+        return value
+
+
+class LivePlanInsightResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    headline: str
+    current_plan: str = Field(alias="currentPlan")
+    why_changed: str = Field(alias="whyChanged")
+    next_goal: str = Field(alias="nextGoal")
+    event: PlanEvent | None = None
+    analysis_provider: AnalysisProvider = Field(alias="analysisProvider")
+    analysis_kind: AnalysisKind = Field(alias="analysisKind")

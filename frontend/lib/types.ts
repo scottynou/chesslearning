@@ -3,6 +3,9 @@ export type PlayMode = "both" | "white" | "black" | "friend";
 export type SkillLevel = "beginner" | "intermediate" | "pro";
 export type Difficulty = "easy" | "medium" | "hard";
 export type Risk = "low" | "medium" | "high";
+export type OpeningState = "on_track" | "recoverable" | "completed" | "abandoned";
+export type AnalysisProvider = "heuristic" | "openai" | "gemini" | "ollama";
+export type AnalysisKind = "ai" | "heuristic";
 
 export type CandidateMove = {
   rank: number;
@@ -178,6 +181,20 @@ export type GamePlanState = {
   statusExplanation: string;
 };
 
+export type PlanEvent = {
+  id: string;
+  severity: "info" | "success" | "warning" | "critical";
+  title: string;
+  message: string;
+};
+
+export type StrategicPlan = {
+  title: string;
+  goal: string;
+  reason: string;
+  nextObjective: string;
+};
+
 export type PlanRecommendationsResponse = {
   planState: GamePlanState;
   planMoves: PlanRecommendation[];
@@ -194,6 +211,10 @@ export type PlanRecommendationsResponse = {
     maxVisibleMoves: number;
   };
   phaseStatus: string;
+  openingState: OpeningState;
+  phaseReason: string;
+  planEvent: PlanEvent | null;
+  strategicPlan: StrategicPlan;
   planProgress: {
     percent?: number;
     completed?: number;
@@ -239,4 +260,14 @@ export type PlanRecommendationsResponse = {
   };
   technicalDetails?: Record<string, unknown>;
   technicalEngineMoves: CandidateMove[];
+};
+
+export type LivePlanInsightResponse = {
+  headline: string;
+  currentPlan: string;
+  whyChanged: string;
+  nextGoal: string;
+  event: PlanEvent | null;
+  analysisProvider: AnalysisProvider;
+  analysisKind: AnalysisKind;
 };

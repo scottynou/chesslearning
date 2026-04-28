@@ -18,6 +18,7 @@ from .ai_providers.selection import configured_provider_name
 from .cache import MemoryCache
 from .elo_ranker import rank_candidates
 from .explanation_service import explain_candidate, explain_move
+from .live_plan_service import live_plan_insight
 from .opening_coach import build_position_plan
 from .review_service import review_move
 from .schemas import (
@@ -30,6 +31,8 @@ from .schemas import (
     ExplainCandidateResponse,
     ExplainRequest,
     ExplainResponse,
+    LivePlanInsightRequest,
+    LivePlanInsightResponse,
     PositionPlanRequest,
     PositionPlanResponse,
     PlanRecommendationsRequest,
@@ -91,7 +94,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-EXPENSIVE_PATHS = {"/analyze", "/plan-recommendations", "/bot-move", "/review-move", "/explain-candidate"}
+EXPENSIVE_PATHS = {"/analyze", "/plan-recommendations", "/bot-move", "/review-move", "/explain-candidate", "/live-plan-insight"}
 JSON_BODY_PATHS = EXPENSIVE_PATHS | {"/position-plan", "/explain"}
 rate_limit_window_seconds = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
 rate_limit_per_window = int(os.getenv("RATE_LIMIT_PER_WINDOW", "45"))
@@ -144,6 +147,7 @@ explain_candidate_cache: MemoryCache[ExplainCandidateResponse] = MemoryCache(ttl
 review_cache: MemoryCache[ReviewMoveResponse] = MemoryCache(ttl_seconds=900)
 plan_cache: MemoryCache[PositionPlanResponse] = MemoryCache(ttl_seconds=300)
 plan_recommendations_cache: MemoryCache[PlanRecommendationsResponse] = MemoryCache(ttl_seconds=300)
+live_plan_insight_cache: MemoryCache[LivePlanInsightResponse] = MemoryCache(ttl_seconds=900)
 bot_move_cache: MemoryCache[BotMoveResponse] = MemoryCache(ttl_seconds=120)
 
 
@@ -240,6 +244,21 @@ def review_move_endpoint(request: ReviewMoveRequest) -> ReviewMoveResponse:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     review_cache.set(cache_key, response)
+    return response
+
+
+@app.post("/live-plan-insight", response_model=LivePlanInsightResponse)
+def live_plan_insight_endpoint(request: LivePlanInsightRequest) -> LivePlanInsightResponse:
+    cache_key = (
+        f"{request.fen}|{request.selected_plan_id}|{','.join(request.move_history_uci)}|"
+        f"{request.phase}|{request.opening_state}|{configured_provider_name()}"
+    )
+    cached = live_plan_insight_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    response = live_plan_insight(request)
+    live_plan_insight_cache.set(cache_key, response)
     return response
 
 

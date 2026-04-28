@@ -1,7 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 import { PlanFirstPanel } from "./PlanFirstPanel";
-import type { PlanRecommendation, PlanRecommendationsResponse } from "@/lib/types";
+import type { LivePlanInsightResponse, PlanEvent, PlanRecommendation, PlanRecommendationsResponse } from "@/lib/types";
 
 const recommendation: PlanRecommendation = {
   moveUci: "g8f6",
@@ -22,6 +22,23 @@ const recommendation: PlanRecommendation = {
   moveComplexity: "simple",
   warning: null,
   candidate: null
+};
+
+const event: PlanEvent = {
+  id: "opening-completed-caro",
+  severity: "success",
+  title: "Ouverture terminee",
+  message: "On passe maintenant au plan de milieu de partie."
+};
+
+const insight: LivePlanInsightResponse = {
+  headline: "Plan simple",
+  currentPlan: "Finir le developpement sans forcer une attaque.",
+  whyChanged: "La structure est stable et le centre est controle.",
+  nextGoal: "Roquer puis placer une tour sur une colonne utile.",
+  event: null,
+  analysisProvider: "heuristic",
+  analysisKind: "heuristic"
 };
 
 const response: PlanRecommendationsResponse = {
@@ -54,6 +71,15 @@ const response: PlanRecommendationsResponse = {
     maxVisibleMoves: 1
   },
   phaseStatus: "opening_in_progress",
+  openingState: "on_track",
+  phaseReason: "Le plan avance normalement.",
+  planEvent: null,
+  strategicPlan: {
+    title: "Caro-Kann",
+    goal: "Installer c6 puis d5.",
+    reason: "Le plan est encore coherent.",
+    nextObjective: "Developper une piece."
+  },
   planProgress: { percent: 25, impact: "Ce coup fait avancer la ligne principale de l'ouverture." },
   openingBrief: {
     summary: "Caro-Kann consiste a repondre a e4 avec c6 puis d5.",
@@ -83,20 +109,21 @@ const response: PlanRecommendationsResponse = {
 };
 
 describe("PlanFirstPanel", () => {
-  it("shows the educational explanation directly in the move card", () => {
-    render(<PlanFirstPanel recommendations={response} onToggleRecommendation={() => undefined} highlightedMoveUci="g8f6" expectedReplyLabel="Pion d2 -> d4" />);
-    expect(screen.getByText("Impact")).toBeTruthy();
-    expect(screen.getByText("Terminee lorsque c6 et d5 sont installes.")).toBeTruthy();
-    expect(screen.getByText("Reponse attendue")).toBeTruthy();
-    expect(screen.getByText("Joue Cavalier g8 -> f6. Le cavalier controle le centre et garde le plan lisible.")).toBeTruthy();
-    expect(screen.queryByText("Comprendre ce coup")).toBeNull();
+  it("shows the live plan instead of a move explanation in the cockpit", () => {
+    render(<PlanFirstPanel recommendations={response} liveInsight={insight} />);
+    expect(screen.getByText("Plan actuel")).toBeTruthy();
+    expect(screen.getByText("Plan simple")).toBeTruthy();
+    expect(screen.getByText("Finir le developpement sans forcer une attaque.")).toBeTruthy();
+    expect(screen.getByText("Coup recommande")).toBeTruthy();
+    expect(screen.getByText("Cavalier g8 -> f6")).toBeTruthy();
+    expect(screen.queryByText("Focus plateau")).toBeNull();
   });
 
-  it("highlights a recommendation on demand without opening a separate explanation panel", () => {
-    const onSelect = vi.fn();
-    render(<PlanFirstPanel recommendations={response} onToggleRecommendation={onSelect} highlightedMoveUci={null} />);
-    fireEvent.click(screen.getByText("Focus plateau"));
-    expect(onSelect).toHaveBeenCalledWith(recommendation);
+  it("keeps evaluation only inside advanced details", () => {
+    render(<PlanFirstPanel recommendations={response} />);
+    expect(screen.getByText("Details avances")).toBeTruthy();
+    expect(screen.getByText("Evaluation : Position equilibree")).toBeTruthy();
+    expect(screen.queryByText("Joue Cavalier g8 -> f6. Le cavalier controle le centre et garde le plan lisible.")).toBeNull();
   });
 
   it("does not turn an opponent reply into the player's recommendation", () => {
@@ -108,6 +135,12 @@ describe("PlanFirstPanel", () => {
           planMoves: [],
           mergedRecommendations: [],
           expectedOpponentMove: recommendation,
+          strategicPlan: {
+            title: "Observer la reponse adverse",
+            goal: "Regarder la reponse noire.",
+            reason: "C'est a l'autre camp de jouer.",
+            nextObjective: "Adapter le plan ensuite."
+          },
           turnContext: {
             ...response.turnContext,
             sideToMove: "white",
@@ -115,16 +148,14 @@ describe("PlanFirstPanel", () => {
             opponentTurn: true
           }
         }}
-        onToggleRecommendation={() => undefined}
-        highlightedMoveUci={null}
       />
     );
     expect(screen.getAllByText("Coup adverse attendu").length).toBeGreaterThan(0);
-    expect(screen.getByText("Fleche rouge : Cavalier g8 -> f6.")).toBeTruthy();
+    expect(screen.getByText("Cavalier g8 -> f6")).toBeTruthy();
     expect(screen.queryByText("Aucun coup de plan clair. Joue un coup legal simple ou consulte les details.")).toBeNull();
   });
 
-  it("shows ranked choices after the opening", () => {
+  it("shows ranked choices and event feed after the opening", () => {
     const alternative = { ...recommendation, moveUci: "b8c6", beginnerLabel: "Cavalier b8 -> c6", displayRole: "Alternative saine" };
     const primary = { ...recommendation, displayRole: "Meilleur" };
     render(
@@ -139,16 +170,17 @@ describe("PlanFirstPanel", () => {
             recommendationStyle: "ranked",
             maxVisibleMoves: 3
           },
+          openingState: "completed",
           primaryMove: primary,
           mergedRecommendations: [primary, alternative],
           adaptedAlternatives: [alternative]
         }}
-        onToggleRecommendation={() => undefined}
-        highlightedMoveUci={null}
+        events={[event]}
       />
     );
     expect(screen.getByText("Choix strategiques")).toBeTruthy();
     expect(screen.getByText("Meilleur")).toBeTruthy();
     expect(screen.getByText("Alternative saine")).toBeTruthy();
+    expect(screen.getByText("Ouverture terminee")).toBeTruthy();
   });
 });

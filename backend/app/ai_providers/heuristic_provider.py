@@ -68,6 +68,34 @@ class HeuristicProvider(AiProvider):
             )
         }
 
+    def live_plan(self, context: dict[str, Any], timeout_seconds: float = 0) -> dict[str, Any]:
+        strategic = context.get("strategicPlan") or {}
+        event = context.get("planEvent")
+        phase = context.get("phaseLabel") or context.get("phase") or "la partie"
+        opening_state = context.get("openingState")
+        plan_name = (context.get("selectedPlan") or {}).get("nameFr") or "le plan choisi"
+
+        if opening_state == "abandoned":
+            headline = "Nouveau plan"
+            why_changed = f"{plan_name} n'est plus le chemin le plus sain dans cette position."
+        elif opening_state == "completed":
+            headline = "Ouverture terminee"
+            why_changed = "Les objectifs de depart sont assez remplis : on passe au plan de milieu de partie."
+        elif opening_state == "recoverable":
+            headline = "Plan adapte"
+            why_changed = "L'adversaire a change l'ordre ou la structure, mais les idees principales restent utilisables."
+        else:
+            headline = strategic.get("title") or f"Plan en {phase}"
+            why_changed = strategic.get("reason") or "La position reste coherente avec le plan actuel."
+
+        return {
+            "headline": headline,
+            "currentPlan": strategic.get("goal") or "Garder le roi en securite, finir les pieces utiles et clarifier le centre.",
+            "whyChanged": why_changed,
+            "nextGoal": strategic.get("nextObjective") or "Choisir un coup simple qui ameliore la position.",
+            "event": event,
+        }
+
 
 def _title_for(piece: str, to_square: str) -> str:
     if piece == "Cavalier":

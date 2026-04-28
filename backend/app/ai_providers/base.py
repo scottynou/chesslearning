@@ -23,6 +23,14 @@ REVIEW_SYSTEM_PROMPT = (
     "concret, sans jargon non explique, sans lignes UCI brutes, et sans inventer une autre evaluation."
 )
 
+LIVE_PLAN_SYSTEM_PROMPT = (
+    "Tu es un coach d'echecs en direct. Les coups recommandes sont deja calcules par le moteur et les regles "
+    "du produit : tu ne dois pas inventer un autre meilleur coup. Ton role est de resumer le plan vivant de la "
+    "position en phrases courtes, concretes et utiles pour un debutant. Explique si le plan d'ouverture est "
+    "encore jouable, termine ou abandonne, puis donne le prochain objectif strategique. Pas de variante UCI brute, "
+    "pas de longue lecon."
+)
+
 
 EXPLAIN_CANDIDATE_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -96,6 +104,34 @@ REVIEW_MOVE_SCHEMA: dict[str, Any] = {
     },
 }
 
+LIVE_PLAN_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["headline", "currentPlan", "whyChanged", "nextGoal", "event"],
+    "properties": {
+        "headline": {"type": "string"},
+        "currentPlan": {"type": "string"},
+        "whyChanged": {"type": "string"},
+        "nextGoal": {"type": "string"},
+        "event": {
+            "anyOf": [
+                {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["id", "severity", "title", "message"],
+                    "properties": {
+                        "id": {"type": "string"},
+                        "severity": {"type": "string"},
+                        "title": {"type": "string"},
+                        "message": {"type": "string"},
+                    },
+                },
+                {"type": "null"},
+            ]
+        },
+    },
+}
+
 
 class AiProviderError(RuntimeError):
     pass
@@ -107,6 +143,9 @@ class AiProvider(ABC):
         raise NotImplementedError
 
     def review_move(self, context: dict[str, Any], timeout_seconds: float) -> dict[str, Any]:
+        raise NotImplementedError
+
+    def live_plan(self, context: dict[str, Any], timeout_seconds: float) -> dict[str, Any]:
         raise NotImplementedError
 
 
@@ -125,5 +164,14 @@ def build_review_prompt(context: dict[str, Any]) -> str:
         "Le champ coachNarrative doit expliquer ce que l'adversaire a joue, si c'etait fort ou non, "
         "ce que cela change pour le plan du joueur, et quel meilleur repere l'adversaire pouvait choisir. "
         "Ne donne pas une liste; ecris un seul bloc lisible.\n\n"
+        + json.dumps(context, ensure_ascii=False)
+    )
+
+
+def build_live_plan_prompt(context: dict[str, Any]) -> str:
+    return (
+        "Produis uniquement un JSON conforme au schema. "
+        "Le champ headline doit tenir en quelques mots. currentPlan, whyChanged et nextGoal doivent faire une phrase courte chacun. "
+        "Si aucun vrai changement ne merite notification, event vaut null.\n\n"
         + json.dumps(context, ensure_ascii=False)
     )
