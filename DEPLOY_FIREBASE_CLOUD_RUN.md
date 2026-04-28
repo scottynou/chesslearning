@@ -43,9 +43,10 @@ Dans Firebase Console :
 
 1. Cree ou choisis ton projet.
 2. Active Firebase Hosting.
-3. Recupere le project id, par exemple `chesslearning-12345`.
-4. Copie `.firebaserc.example` vers `.firebaserc`.
-5. Remplace `TON_PROJECT_ID_FIREBASE` par ton vrai project id.
+3. Passe le projet sur le plan Blaze / active la facturation Google Cloud. Cloud Run et Cloud Build ne peuvent pas etre actives sans billing, meme si tu restes dans le free tier.
+4. Recupere le project id, par exemple `chesslearning-12345`.
+5. Copie `.firebaserc.example` vers `.firebaserc`.
+6. Remplace `TON_PROJECT_ID_FIREBASE` par ton vrai project id.
 
 ## Deployer le backend Cloud Run
 
