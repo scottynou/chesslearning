@@ -16,7 +16,8 @@ async function requestJson<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json"
+      // Keeps cross-origin POSTs CORS-simple; the API maps this body back to JSON.
+      "Content-Type": "text/plain"
     },
     body: JSON.stringify(body)
   });

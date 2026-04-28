@@ -91,6 +91,7 @@ app.add_middleware(
 )
 
 EXPENSIVE_PATHS = {"/analyze", "/plan-recommendations", "/bot-move", "/review-move", "/explain-candidate"}
+JSON_BODY_PATHS = EXPENSIVE_PATHS | {"/position-plan", "/explain"}
 rate_limit_window_seconds = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
 rate_limit_per_window = int(os.getenv("RATE_LIMIT_PER_WINDOW", "45"))
 rate_limit_hits: defaultdict[str, deque[float]] = defaultdict(deque)
@@ -123,6 +124,18 @@ async def cors_error_guard(request: Request, call_next):
         logger.exception("Unhandled API error on %s %s", request.method, request.url.path)
         response = JSONResponse(status_code=500, content={"detail": "Erreur serveur interne."})
     return _with_cors_headers(response, request.headers.get("origin"))
+
+
+@app.middleware("http")
+async def text_json_body_compat(request: Request, call_next):
+    content_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
+    if request.method == "POST" and request.url.path in JSON_BODY_PATHS and content_type == "text/plain":
+        # The frontend sends simple text/plain POSTs to avoid browser preflight failures on Render.
+        request.scope["headers"] = [
+            (key, b"application/json" if key == b"content-type" else value)
+            for key, value in request.scope["headers"]
+        ]
+    return await call_next(request)
 
 analyze_cache: MemoryCache[AnalyzeResponse] = MemoryCache(ttl_seconds=300)
 explain_cache: MemoryCache[ExplainResponse] = MemoryCache(ttl_seconds=900)

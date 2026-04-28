@@ -1,3 +1,5 @@
+import json
+
 import chess
 from fastapi.testclient import TestClient
 
@@ -54,6 +56,38 @@ def test_caro_kann_after_e4_proposes_c6(monkeypatch) -> None:
     assert data["phaseDisplay"]["key"] == "opening"
     assert data["phaseDisplay"]["maxVisibleMoves"] == 1
     assert data["expectedOpponentMove"] is None
+
+
+def test_plan_recommendations_accepts_text_json_without_preflight(monkeypatch) -> None:
+    import app.strategy.plan_engine as plan_engine
+
+    monkeypatch.setattr(plan_engine, "StockfishEngine", lambda: FakePlanStockfish())
+    client = TestClient(app)
+    board = chess.Board()
+    board.push_uci("e2e4")
+
+    response = client.post(
+        "/plan-recommendations",
+        content=json.dumps(
+            {
+                "fen": board.fen(),
+                "selectedPlanId": "caro_kann_beginner",
+                "elo": 1200,
+                "skillLevel": "beginner",
+                "moveHistoryUci": ["e2e4"],
+                "maxMoves": 5,
+                "engineDepth": 1,
+            }
+        ),
+        headers={
+            "Origin": "https://chess-elo-coach-web-bh95.onrender.com",
+            "Content-Type": "text/plain",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "https://chess-elo-coach-web-bh95.onrender.com"
+    assert response.json()["primaryMove"]["moveUci"] == "c7c6"
 
 
 def test_caro_kann_after_e4_c6_d4_proposes_d5(monkeypatch) -> None:
