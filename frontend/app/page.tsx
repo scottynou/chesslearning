@@ -9,13 +9,13 @@ import { GameControls } from "@/components/GameControls";
 import { GlossaryPanel } from "@/components/GlossaryPanel";
 import { LastMoveReviewPanel } from "@/components/LastMoveReviewPanel";
 import { MoveHistory } from "@/components/MoveHistory";
-import { OpeningMiniBoard } from "@/components/OpeningMiniBoard";
 import { OpeningRepertoirePanel } from "@/components/OpeningRepertoirePanel";
 import { PlanFirstPanel } from "@/components/PlanFirstPanel";
 import { SideSelectionPanel } from "@/components/SideSelectionPanel";
 import { getPlanRecommendations, listAvailablePlans, requestBotMove, reviewMove } from "@/lib/api";
 import { notationFromUci } from "@/lib/beginnerNotation";
 import { canMoveInMode, gameStatus, isPromotionAttempt, tryMove } from "@/lib/chess";
+import { getOpeningImageSrc } from "@/lib/openingVisuals";
 import type {
   Orientation,
   PlanRecommendation,
@@ -204,6 +204,10 @@ export default function HomePage() {
   const status = useMemo(() => gameStatus(game), [game]);
   const pgn = useMemo(() => game.pgn(), [game]);
   const historyUci = useMemo(() => history.map((move) => `${move.from}${move.to}${move.promotion ?? ""}`), [history]);
+  const lastBoardMove = useMemo(() => {
+    const move = history[history.length - 1];
+    return move ? { from: move.from, to: move.to } : null;
+  }, [history]);
   const selectedPlan = useMemo(() => {
     return plans.find((plan) => plan.id === selectedPlanId) ?? (planRecommendations?.selectedPlan as StrategyPlan | null) ?? null;
   }, [plans, planRecommendations?.selectedPlan, selectedPlanId]);
@@ -328,8 +332,17 @@ export default function HomePage() {
 
   useEffect(() => {
     function updateBoardWidth() {
-      const width = Math.min(window.innerWidth * 0.92, 560);
-      setBoardWidth(Math.floor(width));
+      const viewportWidth = Math.min(
+        window.innerWidth,
+        window.outerWidth || window.innerWidth,
+        document.documentElement.clientWidth || window.innerWidth,
+        window.visualViewport?.width ?? window.innerWidth
+      );
+      const mobileViewport = viewportWidth <= 540;
+      const horizontalReserve = mobileViewport ? 52 : 38;
+      const maxBoardWidth = mobileViewport ? 340 : 720;
+      const width = Math.min(viewportWidth - horizontalReserve, viewportWidth * 0.9, maxBoardWidth);
+      setBoardWidth(Math.floor(Math.max(240, width)));
     }
     updateBoardWidth();
     window.addEventListener("resize", updateBoardWidth);
@@ -793,8 +806,8 @@ export default function HomePage() {
 
   if (appStage === "black-first-move") {
     return renderShell(
-      <main className="mx-auto grid min-h-screen w-full max-w-[1800px] gap-5 px-4 py-4 md:px-6 lg:grid-cols-[minmax(0,600px)_minmax(0,1fr)] lg:py-6">
-        <section className="grid content-start gap-4">
+      <main className="first-move-shell">
+        <section className="first-move-board">
           <ChessCoachBoard
             fen={fen}
             boardWidth={boardWidth}
@@ -802,17 +815,18 @@ export default function HomePage() {
             selectedSquare={selectedSquare}
             legalTargets={legalTargets}
             highlightedMove={highlightedMove}
+            lastMove={lastBoardMove}
             onDrop={requestMove}
             onSquareClick={handleSquareClick}
           />
-          {lastMessage ? <div className="rounded border border-line bg-white px-3 py-2 text-sm text-night">{lastMessage}</div> : null}
+          {lastMessage ? <div className="quiet-alert">{lastMessage}</div> : null}
         </section>
-        <section className="panel self-start">
-          <p className="text-xs font-semibold uppercase text-clay">Je joue les noirs</p>
-          <h1 className="mt-1 text-2xl font-bold text-night">Entre le premier coup blanc</h1>
-          <p className="mt-2 text-sm leading-6 text-neutral-700">
-            Joue le premier coup des blancs sur l&apos;echiquier. Apres 1.e4, le coach proposera par exemple Caro-Kann, e5 classique, Francaise, Sicilienne ou Scandinave. Apres 1.d4, il proposera des plans dame-pion.
-          </p>
+        <section className="first-move-brief">
+          <article className="first-move-card">
+            <p>Je joue les noirs</p>
+            <h1>Premier coup blanc.</h1>
+            <p className="answer-line">Joue le coup blanc sur le plateau. Les reponses noires adaptees apparaissent juste apres.</p>
+          </article>
         </section>
       </main>
     );
@@ -821,45 +835,48 @@ export default function HomePage() {
   if (appStage === "white-plan-selection" || appStage === "black-plan-selection") {
     const isBlack = appStage === "black-plan-selection";
     return renderShell(
-      <main className="mx-auto min-h-screen w-full max-w-[1800px] px-4 py-4 md:px-8 lg:py-8">
-        <section className="grid content-start gap-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <button type="button" onClick={changePlan} className="rounded border border-line bg-white px-3 py-2 text-sm font-semibold text-night">
+      <main className="plan-selection-shell">
+        <div className="plan-selection-topbar">
+          <div className="selection-actions">
+            <button type="button" onClick={changePlan} className="selection-return-button">
               Retour au choix du camp
             </button>
-            {isBlack ? <span className="rounded bg-night px-3 py-2 text-sm font-semibold text-white">Premier coup : {history[0]?.san ?? firstOpponentMove}</span> : null}
           </div>
-          {isBlack ? (
-            <ChessCoachBoard
+        </div>
+        {isBlack ? (
+          <section className="plan-selection-board">
+              <ChessCoachBoard
               fen={fen}
-              boardWidth={Math.min(boardWidth, 360)}
+              boardWidth={Math.min(boardWidth, 220)}
               orientation={orientation}
               selectedSquare={null}
               legalTargets={[]}
               highlightedMove={highlightedMove}
+              lastMove={lastBoardMove}
+              locked
               onDrop={requestMove}
               onSquareClick={handleSquareClick}
             />
-          ) : null}
-          {plansLoading ? <div className="panel text-sm text-neutral-700">Chargement des plans...</div> : null}
-          {plansError ? <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{plansError}</div> : null}
-          <OpeningRepertoirePanel
+          </section>
+        ) : null}
+        {plansLoading ? <div className="quiet-alert">Chargement des plans...</div> : null}
+        {plansError ? <div className="error-alert">{plansError}</div> : null}
+        <OpeningRepertoirePanel
             plans={plans}
             selectedPlanId={selectedPlanId}
             onSelect={handlePlanSelect}
-            title={isBlack ? "Choisis ta reponse avec les noirs" : "Choisis ton ouverture avec les blancs"}
-            intro={isBlack ? "Ces plans sont filtres selon le premier coup blanc. Le plan choisi restera verrouille, puis le coach adaptera seulement les prochains coups." : "Choisis une ouverture blanche. Ensuite, le coach t'aide a atteindre le milieu de partie avec un plan clair."}
+            title={isBlack ? "Reponses noires" : "Ouvertures blanches"}
+            intro={isBlack ? "Choisis une structure simple a apprendre contre ce premier coup." : "Choisis un plan clair. Le coach l'installe ensuite coup par coup."}
             mode={isBlack ? "black-reply" : "opening"}
             firstMoveLabel={firstMoveLabel}
           />
-        </section>
       </main>
     );
   }
 
   if (appStage === "plan-intro") {
     return renderShell(
-      <main className="mx-auto grid min-h-screen w-full max-w-[1600px] place-items-center px-4 py-8 md:px-8">
+      <main className="plan-intro-page">
         <PlanIntroScreen
           plan={selectedPlan}
           loading={plansLoading}
@@ -876,16 +893,43 @@ export default function HomePage() {
   return renderShell(
     <main className="coach-live-shell">
       <section className="coach-board-column">
-        <ChessCoachBoard
-          fen={fen}
-          boardWidth={boardWidth}
-          orientation={orientation}
-          selectedSquare={selectedSquare}
-          legalTargets={legalTargets}
-          highlightedMove={highlightedMove}
-          onDrop={requestMove}
-          onSquareClick={handleSquareClick}
-        />
+        <div className="coach-board-stage">
+          <ChessCoachBoard
+            fen={fen}
+            boardWidth={boardWidth}
+            orientation={orientation}
+            selectedSquare={selectedSquare}
+            legalTargets={legalTargets}
+            highlightedMove={highlightedMove}
+            lastMove={lastBoardMove}
+            thinking={botThinking}
+            onDrop={requestMove}
+            onSquareClick={handleSquareClick}
+          />
+
+          {pendingPromotion ? (
+            <div className="promotion-popover" role="dialog" aria-label="Choisir une promotion">
+              <p>Promotion</p>
+              <div>
+                {[
+                  ["q", "Dame"],
+                  ["r", "Tour"],
+                  ["b", "Fou"],
+                  ["n", "Cavalier"]
+                ].map(([piece, label]) => (
+                  <button
+                    key={piece}
+                    type="button"
+                    onClick={() => applyMove(pendingPromotion.from, pendingPromotion.to, piece)}
+                    className="control-button"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
 
         <div className="coach-board-controls">
           <button type="button" onClick={undo} className="control-button">Annuler</button>
@@ -893,31 +937,7 @@ export default function HomePage() {
           <button type="button" onClick={() => setOrientation(orientation === "white" ? "black" : "white")} className="control-button">Tourner</button>
         </div>
 
-        {botThinking ? <div className="coach-board-note">Le bot reflechit...</div> : null}
         {botError ? <div className="coach-board-error">{botError}</div> : null}
-
-        {pendingPromotion ? (
-          <div className="panel">
-            <h2 className="panel-title">Promotion</h2>
-            <div className="grid grid-cols-4 gap-2">
-              {[
-                ["q", "Dame"],
-                ["r", "Tour"],
-                ["b", "Fou"],
-                ["n", "Cavalier"]
-              ].map(([piece, label]) => (
-                <button
-                  key={piece}
-                  type="button"
-                  onClick={() => applyMove(pendingPromotion.from, pendingPromotion.to, piece)}
-                  className="rounded border border-line bg-white px-3 py-2 text-sm font-semibold hover:border-clay"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
 
         {lastMessage ? <div className="coach-board-note">{lastMessage}</div> : null}
       </section>
@@ -952,7 +972,9 @@ function SiteHeader({
     <header className="site-header">
       <div className="site-header-inner">
         <button type="button" onClick={onHome} className="site-brand" aria-label="Retour a l'accueil Chess Learning">
-          <span className="site-brand-mark">CL</span>
+          <span className="site-brand-mark" aria-hidden="true">
+            <span className="site-brand-pawn" />
+          </span>
           <span className="site-brand-text">Chess Learning</span>
         </button>
         <div className="site-header-actions">
@@ -1052,11 +1074,10 @@ function PlanIntroScreen({
 
   const isBlackReply = userSide === "black";
   const teaching = buildPlanTeaching(plan, isBlackReply, firstMoveLabel);
-  const ideas = (plan.whatYouWillLearn ?? plan.coreIdeas).slice(0, 5);
-  const missions = plan.pieceMissions.slice(0, 5);
-  const successCriteria = (plan.successCriteria?.length ? plan.successCriteria : defaultSuccessCriteria()).slice(0, 5);
-  const middlegamePlan = (plan.middlegamePlan?.length ? plan.middlegamePlan : defaultMiddlegamePlan(plan)).slice(0, 4);
-  const endgamePlan = (plan.endgamePlan?.length ? plan.endgamePlan : defaultEndgamePlan()).slice(0, 3);
+  const ideas = (plan.whatYouWillLearn ?? plan.coreIdeas).slice(0, 3);
+  const missions = plan.pieceMissions.slice(0, 3);
+  const successCriteria = (plan.successCriteria?.length ? plan.successCriteria : defaultSuccessCriteria()).slice(0, 3);
+  const imageSrc = getOpeningImageSrc(plan);
 
   return (
     <section className="plan-intro-shell">
@@ -1071,10 +1092,10 @@ function PlanIntroScreen({
         <div className="plan-intro-copy">
           <p className="plan-intro-kicker">{isBlackReply ? "Reponse choisie" : "Ouverture choisie"}</p>
           <h1>{plan.nameFr}</h1>
-          <p className="plan-intro-lead">{teaching.lead}</p>
+          <p className="plan-intro-lead">{compactTeachingText(teaching.lead, 260)}</p>
 
           <div className="plan-intro-meta">
-            {plan.style.slice(0, 4).map((style) => (
+            {plan.style.slice(0, 3).map((style) => (
               <span key={style}>{style}</span>
             ))}
             {plan.eco.slice(0, 2).map((eco) => (
@@ -1083,100 +1104,38 @@ function PlanIntroScreen({
           </div>
         </div>
 
-        <div className="plan-intro-visual" aria-label={`Position typique de ${plan.nameFr}`}>
-          <div className="plan-intro-board">
-            <OpeningMiniBoard fen={plan.miniBoardFen} />
-          </div>
+        <div className="plan-intro-visual" aria-label={`Identite visuelle de ${plan.nameFr}`}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={imageSrc} alt="" className="plan-intro-image" />
           <div className="plan-intro-visual-note">
-            <span>Position guide</span>
+            <span>Plan</span>
             <strong>{plan.mainLineUci.length ? `${plan.mainLineUci.length} coups de repere` : "Plan flexible"}</strong>
           </div>
         </div>
       </article>
 
-      <div className="plan-intro-grid">
-        <section className="plan-story-card is-large">
-          <p className="plan-section-kicker">{isBlackReply ? "Pourquoi cette reponse" : "Ce que ce plan raconte"}</p>
+      <div className="plan-intro-grid is-compact">
+        <section className="plan-story-card">
+          <p className="plan-section-kicker">Objectif</p>
           <h2>{teaching.title}</h2>
-          <p>{teaching.story}</p>
+          <p>{compactTeachingText(plan.learningGoal ?? plan.beginnerGoal, 190)}</p>
         </section>
 
         <section className="plan-story-card">
-          <p className="plan-section-kicker">Objectif final</p>
-          <h2>La position que tu veux atteindre</h2>
-          <p>{plan.learningGoal ?? plan.beginnerGoal}</p>
-        </section>
-
-        <section className="plan-story-card">
-          <p className="plan-section-kicker">Question cle</p>
-          <h2>{teaching.question}</h2>
-          <p>{teaching.answer}</p>
-        </section>
-      </div>
-
-      <section className="plan-path-panel">
-        <div className="plan-path-heading">
-          <p className="plan-section-kicker">Fil conducteur</p>
-          <h2>Ce que tu dois construire, dans l&apos;ordre</h2>
-        </div>
-        <div className="plan-path-list">
-          {ideas.map((idea, index) => (
-            <article key={idea}>
-              <span>{index + 1}</span>
-              <p>{idea}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <div className="plan-intro-grid">
-        <section className="plan-story-card is-large">
-          <p className="plan-section-kicker">Missions des pieces</p>
-          <h2>Chaque piece doit avoir un travail clair</h2>
-          <div className="plan-mission-grid">
-            {missions.length ? (
-              missions.map((mission) => (
-                <p key={`${mission.piece}-${mission.mission}`}>
-                  <strong>{mission.piece}</strong>
-                  <span>{mission.mission}</span>
-                </p>
-              ))
-            ) : (
-              <p>
-                <strong>Pieces mineures</strong>
-                <span>Developper les cavaliers et les fous vers le centre avant de lancer une attaque.</span>
-              </p>
-            )}
-          </div>
-        </section>
-
-        <section className="plan-story-card">
-          <p className="plan-section-kicker">Ouverture reussie</p>
-          <h2>Comment tu sais que le debut est bon</h2>
+          <p className="plan-section-kicker">Reperes</p>
+          <h2>Garde seulement ces idees</h2>
           <ul className="plan-check-list">
-            {successCriteria.map((criterion) => (
-              <li key={criterion}>{criterion}</li>
-            ))}
-          </ul>
-        </section>
-      </div>
-
-      <div className="plan-intro-grid">
-        <section className="plan-story-card">
-          <p className="plan-section-kicker">Apres l&apos;ouverture</p>
-          <h2>Le plan de milieu de partie</h2>
-          <ul className="plan-check-list">
-            {middlegamePlan.map((item) => (
+            {ideas.map((item) => (
               <li key={item}>{item}</li>
             ))}
           </ul>
         </section>
 
         <section className="plan-story-card">
-          <p className="plan-section-kicker">Plus tard</p>
-          <h2>Si la partie arrive en finale</h2>
+          <p className="plan-section-kicker">Signal vert</p>
+          <h2>Tu es bien parti si...</h2>
           <ul className="plan-check-list">
-            {endgamePlan.map((item) => (
+            {successCriteria.map((item) => (
               <li key={item}>{item}</li>
             ))}
           </ul>
@@ -1184,10 +1143,27 @@ function PlanIntroScreen({
 
         <section className="plan-story-card">
           <p className="plan-section-kicker">A eviter</p>
-          <h2>Le piege classique du plan</h2>
-          <p>{teaching.warning}</p>
+          <h2>{teaching.question}</h2>
+          <p>{compactTeachingText(teaching.warning || teaching.answer, 180)}</p>
         </section>
       </div>
+
+      {missions.length ? (
+        <section className="plan-path-panel is-compact">
+          <div className="plan-path-heading">
+            <p className="plan-section-kicker">Pieces</p>
+            <h2>Missions utiles</h2>
+          </div>
+          <div className="plan-mission-grid">
+            {missions.map((mission) => (
+              <p key={`${mission.piece}-${mission.mission}`}>
+                <strong>{mission.piece}</strong>
+                <span>{mission.mission}</span>
+              </p>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <div className="plan-intro-actions">
         <button type="button" onClick={onBack} className="control-button">
@@ -1289,20 +1265,10 @@ function defaultSuccessCriteria() {
   ];
 }
 
-function defaultEndgamePlan() {
-  return [
-    "Activer le roi quand les dames disparaissent.",
-    "Creer ou bloquer un pion passe.",
-    "Echanger les pieces si cela simplifie un avantage."
-  ];
-}
-
-function defaultMiddlegamePlan(plan: StrategyPlan) {
-  return [
-    ...(plan.coreIdeas.slice(0, 2).length ? plan.coreIdeas.slice(0, 2) : [plan.beginnerGoal]),
-    "Ameliorer la piece la moins active.",
-    "Transformer l'ouverture en cible concrete."
-  ];
+function compactTeachingText(value: string, limit: number) {
+  const text = value.replace(/\s+/g, " ").trim();
+  if (text.length <= limit) return text;
+  return `${text.slice(0, limit).replace(/[\s,.;:!?]+\S*$/, "")}...`;
 }
 
 function introReasonForPlan(plan: StrategyPlan, isBlackReply: boolean, firstMoveLabel: string | null) {

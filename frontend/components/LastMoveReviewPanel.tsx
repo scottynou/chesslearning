@@ -10,31 +10,52 @@ type LastMoveReviewPanelProps = {
 
 export function LastMoveReviewPanel({ review, loading, error }: LastMoveReviewPanelProps) {
   return (
-    <section className="panel">
-      <h2 className="panel-title">Analyse du dernier coup</h2>
-      {loading ? <p className="text-sm text-clay">Analyse du coup joué...</p> : null}
-      {error ? <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
-      {!loading && !error && !review ? (
-        <p className="text-sm text-neutral-500">Joue un coup pour voir son idée et sa qualité.</p>
-      ) : null}
+    <section className="panel review-panel">
+      <div className="review-panel-head">
+        <p className="panel-eyebrow">Dernier coup</p>
+        <h2 className="panel-title">Analyse compacte</h2>
+      </div>
+
+      {loading ? <p className="review-loading">Analyse en cours...</p> : null}
+      {error ? <div className="error-alert">{error}</div> : null}
+      {!loading && !error && !review ? <p className="review-empty">Joue un coup. Le coach resume son idee, sa qualite et le risque principal.</p> : null}
+
       {review ? (
-        <div className="grid gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-lg font-semibold text-night">{review.moveLabel}</span>
-            <span className="rounded bg-sage px-2 py-1 text-xs font-semibold text-white">{review.qualityLabel}</span>
+        <div className="review-content">
+          <div className="review-score-card">
+            <div>
+              <span>Coup joue</span>
+              <strong>{review.moveLabel}</strong>
+            </div>
+            <div>
+              <span>Qualite</span>
+              <strong>{review.qualityLabel}</strong>
+            </div>
+            <div>
+              <span>Evaluation</span>
+              <strong>{review.playedMoveEvalLabel}</strong>
+            </div>
           </div>
-          <p className="text-sm text-neutral-700">Évaluation : {review.playedMoveEvalLabel}</p>
+
           {review.bestMoveWasDifferent ? (
-            <p className="text-sm text-neutral-700">Meilleur coup recommandé : {review.bestMoveLabel}</p>
+            <div className="review-best-move">
+              <span>Meilleur repere</span>
+              <strong>{review.bestMoveLabel}</strong>
+            </div>
           ) : null}
-          {review.connectionToPlan ? <ReviewItem title="Lien avec le plan" body={review.connectionToPlan} /> : null}
-          <ReviewItem title="Idée probable" body={review.explanation.probableIdea} />
-          <ReviewItem title="Ce que ça attaque ou défend" body={review.explanation.whatItDoes} />
-          {review.whatItAttacks?.length ? <ReviewItem title="Cases attaquées" body={review.whatItAttacks.join(", ")} /> : null}
-          <ReviewItem title="Ce que ça permet ensuite" body={review.explanation.whatItAllows} />
-          {review.whatItAllowsNext?.length ? <ReviewItem title="Prochaines étapes" body={review.whatItAllowsNext.join(" ")} /> : null}
-          <ReviewItem title="À surveiller" body={review.explanation.whatToWatch} />
-          <ReviewItem title="Différence avec le meilleur coup" body={review.explanation.comparisonWithBest} />
+
+          {review.connectionToPlan ? <ReviewItem title="Lien avec le plan" body={compactText(review.connectionToPlan, 260)} /> : null}
+          <ReviewItem title="Idee probable" body={compactText(review.explanation.probableIdea, 260)} />
+          <ReviewItem title="Risque principal" body={compactText(review.explanation.whatToWatch, 260)} />
+
+          <details className="review-details">
+            <summary>Analyse complete</summary>
+            <ReviewItem title="Ce que ça attaque ou défend" body={review.explanation.whatItDoes} />
+            {review.whatItAttacks?.length ? <ReviewItem title="Cases attaquées" body={review.whatItAttacks.join(", ")} /> : null}
+            <ReviewItem title="Ce que ça permet ensuite" body={review.explanation.whatItAllows} />
+            {review.whatItAllowsNext?.length ? <ReviewItem title="Prochaines étapes" body={review.whatItAllowsNext.join(" ")} /> : null}
+            <ReviewItem title="Différence avec le meilleur coup" body={review.explanation.comparisonWithBest} />
+          </details>
         </div>
       ) : null}
     </section>
@@ -43,9 +64,15 @@ export function LastMoveReviewPanel({ review, loading, error }: LastMoveReviewPa
 
 function ReviewItem({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded border border-line bg-stone-50 px-3 py-2">
-      <h3 className="text-sm font-semibold text-night">{title}</h3>
-      <p className="mt-1 text-sm leading-6 text-neutral-700">{body}</p>
+    <div className="review-item">
+      <h3>{title}</h3>
+      <p>{body}</p>
     </div>
   );
+}
+
+function compactText(value: string, limit: number) {
+  const text = value.replace(/\s+/g, " ").trim();
+  if (text.length <= limit) return text;
+  return `${text.slice(0, limit).replace(/[\s,.;:!?]+\S*$/, "")}…`;
 }

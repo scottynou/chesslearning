@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  assetPrefix: ".",
+  assetPrefix: process.env.NODE_ENV === "production" ? "." : undefined,
   output: "export",
   reactStrictMode: true,
   trailingSlash: true

@@ -23,16 +23,19 @@ export function MoveHistory({ moves, reviews = {}, onMoveClick }: MoveHistoryPro
   }
 
   return (
-    <section className="panel">
-      <h2 className="panel-title">Historique</h2>
-      <div className="coach-scroll max-h-40 overflow-auto text-sm">
+    <section className="panel history-panel">
+      <div className="history-head">
+        <h2 className="panel-title">Historique</h2>
+        <span>{moves.length} coups</span>
+      </div>
+      <div className="coach-scroll history-scroll">
         {pairs.length === 0 ? (
-          <p className="text-neutral-500">Aucun coup joué.</p>
+          <p className="history-empty">Aucun coup joue.</p>
         ) : (
-          <div className="grid gap-1">
+          <div className="history-grid">
             {pairs.map((pair) => (
-              <div key={pair.number} className="grid grid-cols-[2.5rem_1fr_1fr] gap-2 rounded bg-stone-50 px-2 py-1">
-                <span className="text-neutral-500">{pair.number}.</span>
+              <div key={pair.number} className="history-row">
+                <span className="history-number">{pair.number}.</span>
                 <HistoryMove move={pair.white} ply={pair.whitePly} review={reviews[pair.whitePly]} onMoveClick={onMoveClick} />
                 <HistoryMove move={pair.black} ply={pair.blackPly} review={reviews[pair.blackPly]} onMoveClick={onMoveClick} />
               </div>
@@ -55,17 +58,15 @@ function HistoryMove({
   review?: ReviewMoveResponse;
   onMoveClick?: (ply: number, move: Move) => void;
 }) {
-  if (!move) {
-    return <span />;
-  }
+  if (!move) return <span />;
   const notation = notationFromMove(move);
   return (
-    <button type="button" onClick={() => onMoveClick?.(ply, move)} className="grid rounded px-1 py-1 text-left hover:bg-white">
-      <span className="text-sm font-medium text-night">{notation.shortLabel}</span>
-      <span className="text-[11px] text-neutral-500">
+    <button type="button" onClick={() => onMoveClick?.(ply, move)} className="history-move">
+      <span>{notation.shortLabel}</span>
+      <small>
         {notation.san}
         {review ? ` · ${shortQuality(review.quality)}` : ""}
-      </span>
+      </small>
     </button>
   );
 }
@@ -75,7 +76,7 @@ function shortQuality(quality: ReviewMoveResponse["quality"]): string {
     excellent: "Excellent",
     good: "Bon",
     playable: "Jouable",
-    inaccurate: "Imprécis",
+    inaccurate: "Imprecis",
     mistake: "Erreur",
     blunder: "Grosse erreur"
   }[quality];

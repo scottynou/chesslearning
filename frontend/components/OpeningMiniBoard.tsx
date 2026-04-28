@@ -18,17 +18,11 @@ const PIECES: Record<string, string> = {
 export function OpeningMiniBoard({ fen }: { fen?: string }) {
   const rows = parseFen(fen);
   return (
-    <div className="aspect-square overflow-hidden rounded border border-line bg-white shadow-sm">
-      <div className="grid h-full grid-cols-8 grid-rows-8">
+    <div className="mini-board">
+      <div className="mini-board-grid">
         {rows.flatMap((row, rank) =>
           row.map((piece, file) => (
-            <div
-              key={`${rank}-${file}`}
-              className={clsx(
-                "grid place-items-center text-[0.7rem] sm:text-xs",
-                (rank + file) % 2 === 0 ? "bg-stone-100" : "bg-sage/25"
-              )}
-            >
+            <div key={`${rank}-${file}`} className={clsx("mini-board-square", (rank + file) % 2 === 0 ? "is-light" : "is-dark")}>
               {piece ? PIECES[piece] : null}
             </div>
           ))

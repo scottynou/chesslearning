@@ -38,7 +38,7 @@ export function PlanFirstPanel({
             {recommendations ? <span>{phaseLabel(recommendations.phase)}</span> : null}
           </div>
           <p className="live-coach-message">
-            {recommendations?.coachMessage ?? selectedPlan?.learningGoal ?? selectedPlan?.beginnerGoal ?? "Le coach relie les coups au plan choisi."}
+            {compactText(recommendations?.coachMessage ?? selectedPlan?.learningGoal ?? selectedPlan?.beginnerGoal ?? "Le coach relie le coup au plan choisi.", 230)}
           </p>
         </div>
         {typeof progress?.percent === "number" ? (
@@ -59,22 +59,18 @@ export function PlanFirstPanel({
               <span>{phaseStatusLabel(recommendations.phaseStatus)}</span>
               <span>{typeof progress?.percent === "number" ? `${progress.percent}%` : "En cours"}</span>
             </div>
-            <div className="live-progress-track">
-              <div style={{ width: `${progress?.percent ?? 0}%` }} />
-            </div>
+            <div className="live-progress-track"><div style={{ width: `${progress?.percent ?? 0}%` }} /></div>
             <div className="live-fact-grid">
-              <CoachFact title="Ce qui vient de se passer" value={recommendations.lastEvent || "La partie est prete."} />
-              <CoachFact title="Ce que cela change" value={recommendations.whatChanged || recommendations.coachMessage} />
-              <CoachFact title="Prochain objectif" value={recommendations.nextObjective || recommendations.currentObjective} />
-              {expectedReplyLabel ? (
-                <CoachFact title="Reponse attendue" value={`Si l'autre camp suit la ligne du plan : ${expectedReplyLabel}. S'il joue autre chose, on garde le plan et on adapte le prochain coup.`} />
-              ) : null}
+              <CoachFact title="Ce qui vient de se passer" value={compactText(recommendations.lastEvent || "La partie est prete.", 170)} />
+              <CoachFact title="Impact" value={compactText(recommendations.whatChanged || recommendations.coachMessage, 170)} />
+              <CoachFact title="Objectif" value={compactText(recommendations.nextObjective || recommendations.currentObjective, 170)} />
+              {expectedReplyLabel ? <CoachFact title="Reponse attendue" value={`Ligne du plan : ${expectedReplyLabel}. Sinon, on adapte.`} /> : null}
             </div>
           </div>
 
           {moves.length > 0 ? (
             <div className="live-move-section">
-              <h3>Coups pour suivre ou adapter le plan</h3>
+              <h3>Coup recommandé</h3>
               {moves.map((item, index) => (
                 <RecommendationCard
                   key={`${item.moveUci}-${index}`}
@@ -86,16 +82,10 @@ export function PlanFirstPanel({
               ))}
             </div>
           ) : (
-            <div className="live-empty">
-              Aucun coup de plan clair pour l&apos;instant. Verifie les details techniques ou joue un coup legal simple.
-            </div>
+            <div className="live-empty">Aucun coup de plan clair. Joue un coup legal simple ou consulte les details.</div>
           )}
 
-          {recommendations.blockedExpectedMove ? (
-            <div className="live-warning">
-              Un coup du plan est mis de cote : {recommendations.blockedExpectedMove.reason}
-            </div>
-          ) : null}
+          {recommendations.blockedExpectedMove ? <div className="live-warning">Coup de ligne mis de cote : {recommendations.blockedExpectedMove.reason}</div> : null}
         </>
       ) : loading ? (
         <CoachLoadingSkeleton />
@@ -119,7 +109,7 @@ function CoachUpdatingBanner({ stale }: { stale: boolean }) {
       <span className="coach-spinner" aria-hidden="true" />
       <div>
         <strong>Mise a jour du plan...</strong>
-        <p>{stale ? "Les conseils affiches datent du coup precedent. Le coach recalcule la position actuelle." : "Le coach analyse la position actuelle."}</p>
+        <p>{stale ? "Ancien conseil affiche pendant le recalcul." : "Analyse de la position actuelle."}</p>
       </div>
     </div>
   );
@@ -146,6 +136,8 @@ function RecommendationCard({
   highlighted?: boolean;
   onToggle: (item: PlanRecommendation) => void;
 }) {
+  const explanation = item.pedagogicalExplanation ?? [item.purpose, item.planConnection].filter(Boolean).join(" ");
+
   return (
     <article className={primary ? "live-move-card is-primary" : "live-move-card"}>
       <div className="live-move-head">
@@ -155,9 +147,7 @@ function RecommendationCard({
         </div>
         <strong>{item.beginnerLabel}</strong>
       </div>
-      <p className="live-move-explanation">
-        {item.pedagogicalExplanation ?? `${item.purpose} ${item.planConnection}`}
-      </p>
+      <p className="live-move-explanation">{compactText(explanation, 320)}</p>
       {item.warning ? <p className="live-move-warning">{item.warning}</p> : null}
       <div className="live-move-actions">
         <button type="button" onClick={() => onToggle(item)} className="opening-detail-toggle">
@@ -184,38 +174,24 @@ function RecommendationCard({
   );
 }
 
+function compactText(value: string, limit = 220) {
+  const text = value.replace(/\s+/g, " ").trim();
+  if (text.length <= limit) return text;
+  return `${text.slice(0, limit).replace(/[\s,.;:!?]+\S*$/, "")}…`;
+}
+
 function complexityLabel(complexity?: string) {
-  return {
-    simple: "simple",
-    moyen: "moyen",
-    complexe: "complexe"
-  }[complexity ?? "simple"] ?? "simple";
+  return { simple: "simple", moyen: "moyen", complexe: "complexe" }[complexity ?? "simple"] ?? "simple";
 }
 
 function sourceLabel(source: PlanRecommendation["source"]) {
-  return {
-    plan: "plan",
-    engine: "moteur",
-    plan_and_engine: "plan + moteur",
-    fallback_principle: "principe"
-  }[source];
+  return { plan: "plan", engine: "moteur", plan_and_engine: "plan + moteur", fallback_principle: "principe" }[source];
 }
 
 function phaseLabel(phase: string) {
-  return {
-    opening: "Ouverture",
-    transition: "Transition",
-    middlegame: "Milieu de partie",
-    endgame: "Finale"
-  }[phase] ?? phase;
+  return { opening: "Ouverture", transition: "Transition", middlegame: "Milieu de partie", endgame: "Finale" }[phase] ?? phase;
 }
 
 function phaseStatusLabel(status: string) {
-  return {
-    opening_in_progress: "Ouverture en cours",
-    opening_success: "Ouverture reussie",
-    adapted: "Plan adapte",
-    transposed: "Transposition signalee",
-    fallback: "Plan de secours"
-  }[status] ?? status;
+  return { opening_in_progress: "Ouverture en cours", opening_success: "Ouverture reussie", adapted: "Plan adapte", transposed: "Transposition signalee", fallback: "Plan de secours" }[status] ?? status;
 }

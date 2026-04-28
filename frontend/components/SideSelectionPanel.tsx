@@ -7,36 +7,20 @@ type SideSelectionPanelProps = {
 };
 
 export function SideSelectionPanel({ onChooseWhite, onChooseBlack, onChooseFreeMode }: SideSelectionPanelProps) {
-  const boardCells = Array.from({ length: 64 }, (_, index) => index);
-
   return (
-    <section className="landing-shell">
-      <div className="landing-hero">
-        <div className="landing-copy">
-          <p className="landing-kicker">Coach d&apos;ouverture plan-first</p>
-          <h1 className="landing-title">Choisis ton camp. Le plan vient ensuite.</h1>
-          <p className="landing-subtitle">
-            Une interface pour jouer sur ton echiquier interne, comprendre l&apos;idee du plan, puis t&apos;adapter sans te perdre dans une liste moteur.
-          </p>
-        </div>
-
-        <div className="landing-visual" aria-hidden="true">
-          <div className="landing-board-art">
-            {boardCells.map((cell) => (
-              <span key={cell} className={(Math.floor(cell / 8) + cell) % 2 === 0 ? "landing-board-cell" : "landing-board-cell is-dark"} />
-            ))}
-          </div>
-          <div className="landing-line one" />
-          <div className="landing-line two" />
-          <div className="landing-piece-mark king">K</div>
-          <div className="landing-piece-mark knight">N</div>
-        </div>
+    <section className="landing-shell" aria-label="Choisir un mode de jeu">
+      <div className="landing-backdrop" aria-hidden="true">
+        <picture>
+          <source media="(max-width: 700px)" srcSet="./landing/chessboard-luxe-bg-mobile.png" />
+          <img className="landing-backdrop-image" src="./landing/chessboard-luxe-bg-desktop.png" alt="" />
+        </picture>
       </div>
 
       <div className="landing-decision-panel">
+        <h1 className="sr-only">Choisis ton camp</h1>
         <div className="landing-choice-grid" aria-label="Choisir un camp">
-          <SideButton label="Je joue les blancs" meta="Construire ton ouverture et forcer les premiers objectifs." tone="light" onClick={onChooseWhite} />
-          <SideButton label="Je joue les noirs" meta="Entrer le premier coup blanc, puis choisir la meilleure reponse." tone="dark" onClick={onChooseBlack} />
+          <SideButton label="Blancs" accessibleLabel="Je joue les blancs" tone="light" onClick={onChooseWhite} />
+          <SideButton label="Noirs" accessibleLabel="Je joue les noirs" tone="dark" onClick={onChooseBlack} />
         </div>
 
         <button type="button" onClick={onChooseFreeMode} className="landing-free-button">
@@ -47,11 +31,10 @@ export function SideSelectionPanel({ onChooseWhite, onChooseBlack, onChooseFreeM
   );
 }
 
-function SideButton({ label, meta, tone, onClick }: { label: string; meta: string; tone: "light" | "dark"; onClick: () => void }) {
+function SideButton({ label, accessibleLabel, tone, onClick }: { label: string; accessibleLabel: string; tone: "light" | "dark"; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className={tone === "dark" ? "landing-side-button is-dark" : "landing-side-button"}>
+    <button type="button" onClick={onClick} className={tone === "dark" ? "landing-side-button is-dark" : "landing-side-button"} aria-label={accessibleLabel}>
       <span>{label}</span>
-      <small>{meta}</small>
     </button>
   );
 }

@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { OpeningRepertoirePanel } from "./OpeningRepertoirePanel";
 import type { StrategyPlan } from "@/lib/types";
 
@@ -35,29 +35,31 @@ const secondPlan: StrategyPlan = {
 };
 
 describe("OpeningRepertoirePanel", () => {
-  it("shows opening plan cards clearly", () => {
+  it("shows minimal opening plan cards", () => {
     render(<OpeningRepertoirePanel plans={[plan]} selectedPlanId={null} onSelect={() => undefined} />);
+
     expect(screen.getByText("Choisis ton plan")).toBeTruthy();
     expect(screen.getByText("Caro-Kann")).toBeTruthy();
     expect(screen.getByText("Intermediaire")).toBeTruthy();
-    expect(screen.getByText("Comprendre ce plan")).toBeTruthy();
+    expect(screen.queryByText("Recommande")).toBeNull();
+    expect(screen.queryByText("Comprendre ce plan")).toBeNull();
   });
 
   it("shows black reply cards as concise reasons", () => {
     render(<OpeningRepertoirePanel plans={[plan]} selectedPlanId={null} onSelect={() => undefined} mode="black-reply" firstMoveLabel="Nf3" />);
+
     expect(screen.getByText("Caro-Kann")).toBeTruthy();
-    expect(screen.getByText("Pourquoi ici")).toBeTruthy();
-    expect(screen.getByText(/milieu de partie clair/)).toBeTruthy();
-    expect(screen.getByText("Comprendre cette reponse")).toBeTruthy();
+    expect(screen.getByText("Reponse")).toBeTruthy();
+    expect(screen.getByText(/Apres Nf3/)).toBeTruthy();
+    expect(screen.queryByText("Comprendre cette reponse")).toBeNull();
   });
 
-  it("keeps multiple opening explanations expanded until each one is hidden", () => {
-    render(<OpeningRepertoirePanel plans={[plan, secondPlan]} selectedPlanId={null} onSelect={() => undefined} />);
-    const buttons = screen.getAllByText("Comprendre ce plan");
-    fireEvent.click(buttons[0]);
-    fireEvent.click(buttons[1]);
-    expect(screen.getAllByText("Ce que tu vas apprendre")).toHaveLength(2);
-    fireEvent.click(screen.getAllByText("Masquer")[0]);
-    expect(screen.getAllByText("Ce que tu vas apprendre")).toHaveLength(1);
+  it("selects a plan directly from the card", () => {
+    const onSelect = vi.fn();
+
+    render(<OpeningRepertoirePanel plans={[plan, secondPlan]} selectedPlanId={null} onSelect={onSelect} />);
+    fireEvent.click(screen.getByRole("button", { name: /Partie italienne/i }));
+
+    expect(onSelect).toHaveBeenCalledWith("italian_game_beginner");
   });
 });

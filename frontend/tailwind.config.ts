@@ -9,15 +9,19 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#161616",
-        panel: "#ffffff",
+        void: "#0d1117",
+        ink: "#202632",
+        panel: "#fffaf0",
         line: "#ded8cc",
-        sage: "#7c9173",
+        cream: "#f4ecdc",
+        gold: "#e7b96a",
+        sage: "#728a68",
         clay: "#b96745",
-        night: "#27313f"
+        night: "#17202d"
       },
       boxShadow: {
-        soft: "0 18px 60px rgba(22, 22, 22, 0.10)"
+        soft: "0 22px 70px rgba(13, 17, 23, 0.12)",
+        strong: "0 34px 120px rgba(13, 17, 23, 0.22)"
       }
     }
   },

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360" role="img">
+  <defs>
+    <linearGradient id="shade" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".18"/><stop offset=".48" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".42"/></linearGradient>
+    <radialGradient id="light" cx="42%" cy="28%" r="70%"><stop offset="0" stop-color="#fff8e6" stop-opacity=".34"/><stop offset=".48" stop-color="#e7b96a" stop-opacity=".08"/><stop offset="1" stop-color="#03050a" stop-opacity=".72"/></radialGradient>
+    <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="table" tableValues="0 .13"/></feComponentTransfer></filter>
+  </defs>
+  <rect width="640" height="360" fill="#123c69"/><rect x="174" width="64" height="360" fill="#f8efe1"/><rect y="148" width="640" height="64" fill="#f8efe1"/><rect x="190" width="32" height="360" fill="#d22131"/><rect y="164" width="640" height="32" fill="#d22131"/>
+  <rect width="640" height="360" fill="url(#light)"/>
+  <rect width="640" height="360" filter="url(#grain)" opacity=".55"/>
+  <rect x="18" y="18" width="604" height="324" rx="28" fill="none" stroke="#f7efe0" stroke-opacity=".18"/>
+</svg>
