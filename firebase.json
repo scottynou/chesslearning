@@ -104,6 +104,13 @@
         }
       },
       {
+        "source": "/import-position-image",
+        "run": {
+          "serviceId": "chess-elo-coach-api",
+          "region": "europe-west1"
+        }
+      },
+      {
         "source": "/live-plan-insight",
         "run": {
           "serviceId": "chess-elo-coach-api",
