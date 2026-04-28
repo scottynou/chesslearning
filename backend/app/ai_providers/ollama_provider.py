@@ -6,7 +6,15 @@ from typing import Any
 
 import httpx
 
-from .base import BEGINNER_SYSTEM_PROMPT, EXPLAIN_CANDIDATE_SCHEMA, AiProvider, build_user_prompt
+from .base import (
+    BEGINNER_SYSTEM_PROMPT,
+    EXPLAIN_CANDIDATE_SCHEMA,
+    REVIEW_MOVE_SCHEMA,
+    REVIEW_SYSTEM_PROMPT,
+    AiProvider,
+    build_review_prompt,
+    build_user_prompt,
+)
 
 
 class OllamaProvider(AiProvider):
@@ -21,6 +29,24 @@ class OllamaProvider(AiProvider):
                 "prompt": build_user_prompt(context),
                 "stream": False,
                 "format": EXPLAIN_CANDIDATE_SCHEMA,
+            },
+            timeout=timeout_seconds,
+        )
+        response.raise_for_status()
+        content = response.json().get("response", "{}")
+        return json.loads(content)
+
+    def review_move(self, context: dict[str, Any], timeout_seconds: float) -> dict[str, Any]:
+        base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+        model = os.getenv("OLLAMA_MODEL", "qwen3:8b")
+        response = httpx.post(
+            f"{base_url}/api/generate",
+            json={
+                "model": model,
+                "system": REVIEW_SYSTEM_PROMPT,
+                "prompt": build_review_prompt(context),
+                "stream": False,
+                "format": REVIEW_MOVE_SCHEMA,
             },
             timeout=timeout_seconds,
         )

@@ -75,6 +75,10 @@ def test_review_move_works_when_played_move_is_not_top_10(monkeypatch) -> None:
     )
 
     assert response.status_code == 200
+    data = response.json()
+    assert data["coachNarrative"]
+    assert data["analysisProvider"] == "heuristic"
+    assert data["analysisKind"] == "heuristic"
     assert response.json()["moveLabel"] == "♙ Pion h2 → h4"
     assert response.json()["bestMoveWasDifferent"] is True
 

@@ -46,6 +46,28 @@ class HeuristicProvider(AiProvider):
             "translatedPv": pv,
         }
 
+    def review_move(self, context: dict[str, Any], timeout_seconds: float = 0) -> dict[str, Any]:
+        move = context["playedMove"]
+        plan = context.get("plan") or {}
+        best = context.get("bestAlternative") or {}
+        quality = context.get("qualityLabel", "coup a verifier")
+        phase = context.get("phaseLabel", "la position")
+        plan_name = plan.get("nameFr") or "ton plan"
+        connection = context.get("connectionToPlan") or "Le plan reste le guide principal."
+        what_it_does = context.get("whatItDoes") or "Ce coup change les cases importantes."
+        best_label = best.get("moveLabel") or move.get("beginnerLabel")
+        comparison = context.get("comparisonWithBest") or "Compare ce coup au meilleur repere avant de choisir la suite."
+
+        return {
+            "coachNarrative": (
+                f"L'adversaire vient de jouer {move['beginnerLabel']}. Dans {phase}, ce coup est classe {quality.lower()} : "
+                f"{what_it_does} Pour {plan_name}, l'idee importante est simple : {connection} "
+                f"S'il voulait jouer plus precisement, le meilleur repere etait {best_label}. {comparison} "
+                "Pour toi, la bonne reaction n'est pas de chercher un piege tout de suite, mais de garder le centre lisible, "
+                "de finir le developpement utile et de choisir un coup qui rend ton plan plus facile a jouer."
+            )
+        }
+
 
 def _title_for(piece: str, to_square: str) -> str:
     if piece == "Cavalier":

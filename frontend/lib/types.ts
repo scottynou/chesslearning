@@ -59,6 +59,9 @@ export type ExplainResponse = {
 
 export type ReviewMoveResponse = {
   moveLabel: string;
+  coachNarrative: string;
+  analysisProvider: "heuristic" | "openai" | "gemini" | "ollama";
+  analysisKind: "ai" | "heuristic";
   quality: "excellent" | "good" | "playable" | "inaccurate" | "mistake" | "blunder";
   qualityLabel: string;
   playedMoveEvalLabel: string;
@@ -154,6 +157,9 @@ export type PlanRecommendation = {
   moveComplexity?: "simple" | "moyen" | "complexe";
   warning: string | null;
   candidate: CandidateMove | null;
+  displayRank?: number;
+  displayRole?: string;
+  arrowColor?: string;
 };
 
 export type GamePlanState = {
@@ -180,6 +186,13 @@ export type PlanRecommendationsResponse = {
   explanationContext: Record<string, unknown>;
   selectedPlan: StrategyPlan | null;
   phase: "opening" | "transition" | "middlegame" | "endgame";
+  phaseDisplay: {
+    key: "opening" | "middlegame" | "endgame";
+    label: string;
+    subtitle: string;
+    recommendationStyle: "single" | "ranked" | "conversion";
+    maxVisibleMoves: number;
+  };
   phaseStatus: string;
   planProgress: {
     percent?: number;

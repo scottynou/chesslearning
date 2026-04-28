@@ -76,13 +76,18 @@ def get_plan_recommendations(
     if phase_status == "opening_success":
         phase = "middlegame"
         status = "plan_completed"
+        visible_plan_items = []
+        strategic_pool = [item for item in visible_merged if item["source"] == "engine"] or visible_merged
+        primary_move = choose_primary_move([], strategic_pool)
 
-    adapted_alternatives = adapted_alternatives_for(
-        merged=visible_merged,
+    phase_display = phase_display_for(phase, phase_status)
+    visible_recommendations = visible_recommendations_for(
+        phase_display=phase_display,
         primary_move=primary_move,
-        status=status,
-        limit=int(level_settings["alternative_limit"]),
+        merged=visible_merged,
     )
+    primary_move = visible_recommendations[0] if visible_recommendations else None
+    adapted_alternatives = visible_recommendations[1:]
     blocked_expected_move = blocked_expected_move_for(primary_move, deviation)
     current_objective = current_objective_for(active_plan, phase, primary_move)
     progress = plan_progress_for(board, active_plan, move_history, phase_status)
@@ -112,9 +117,9 @@ def get_plan_recommendations(
 
     return {
         "planState": plan_state,
-        "planMoves": visible_plan_items,
+        "planMoves": visible_plan_items[:1] if phase_display["key"] == "opening" else [],
         "engineMoves": technical_moves,
-        "mergedRecommendations": visible_merged,
+        "mergedRecommendations": visible_recommendations,
         "explanationContext": {
             "opening": active_plan,
             "detectedOpening": detected_plan,
@@ -125,13 +130,14 @@ def get_plan_recommendations(
         },
         "selectedPlan": active_plan,
         "phase": phase,
+        "phaseDisplay": phase_display,
         "phaseStatus": phase_status,
         "planProgress": progress,
         "currentObjective": current_objective,
         "lastEvent": last_event,
         "whatChanged": what_changed,
         "nextObjective": next_objective,
-        "recommendedPlanMoves": visible_plan_items,
+        "recommendedPlanMoves": visible_recommendations,
         "primaryMove": primary_move,
         "expectedOpponentMove": expected_opponent_move,
         "adaptedAlternatives": adapted_alternatives,
@@ -229,6 +235,65 @@ def color_for_plan(plan: dict[str, Any] | None) -> chess.Color | None:
     if plan.get("side") == "black":
         return chess.BLACK
     return None
+
+
+def phase_display_for(phase: str, phase_status: str) -> dict[str, Any]:
+    display_phase = "middlegame" if phase in {"transition", "middlegame"} or phase_status == "opening_success" else phase
+    if display_phase == "endgame":
+        return {
+            "key": "endgame",
+            "label": "Finale",
+            "subtitle": "Convertis sans donner de contre-jeu.",
+            "recommendationStyle": "conversion",
+            "maxVisibleMoves": 2,
+        }
+    if display_phase == "middlegame":
+        return {
+            "key": "middlegame",
+            "label": "Milieu de partie",
+            "subtitle": "Choisis un plan humain : securite, activite, cible.",
+            "recommendationStyle": "ranked",
+            "maxVisibleMoves": 3,
+        }
+    return {
+        "key": "opening",
+        "label": "Ouverture",
+        "subtitle": "Un seul coup pour accomplir ton plan.",
+        "recommendationStyle": "single",
+        "maxVisibleMoves": 1,
+    }
+
+
+def visible_recommendations_for(
+    phase_display: dict[str, Any],
+    primary_move: dict[str, Any] | None,
+    merged: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if not primary_move:
+        return []
+    pool = [primary_move]
+    for item in merged:
+        if item["moveUci"] != primary_move["moveUci"] and not _is_severe_warning(item):
+            pool.append(item)
+    limit = int(phase_display["maxVisibleMoves"])
+    return decorate_recommendations(pool[:limit], str(phase_display["recommendationStyle"]))
+
+
+def decorate_recommendations(items: list[dict[str, Any]], style: str) -> list[dict[str, Any]]:
+    labels = {
+        "single": ["Coup du plan"],
+        "ranked": ["Meilleur", "Alternative saine", "Option pratique"],
+        "conversion": ["Conversion", "Securite"],
+    }.get(style, ["Meilleur", "Alternative saine", "Option pratique"])
+    colors = ["rgba(224,185,118,0.78)", "rgba(125,183,154,0.76)", "rgba(126,166,224,0.74)"]
+    decorated = []
+    for index, item in enumerate(items):
+        copy = dict(item)
+        copy["displayRank"] = index + 1
+        copy["displayRole"] = labels[min(index, len(labels) - 1)]
+        copy["arrowColor"] = colors[min(index, len(colors) - 1)]
+        decorated.append(copy)
+    return decorated
 
 
 def adapted_alternatives_for(

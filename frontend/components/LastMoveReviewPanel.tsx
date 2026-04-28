@@ -44,9 +44,7 @@ export function LastMoveReviewPanel({ review, loading, error }: LastMoveReviewPa
             </div>
           ) : null}
 
-          {review.connectionToPlan ? <ReviewItem title="Lien avec le plan" body={compactText(review.connectionToPlan, 260)} /> : null}
-          <ReviewItem title="Idee probable" body={compactText(review.explanation.probableIdea, 260)} />
-          <ReviewItem title="Risque principal" body={compactText(review.explanation.whatToWatch, 260)} />
+          <ReviewItem title="Analyse coach" body={compactText(review.coachNarrative || review.connectionToPlan || review.explanation.probableIdea, 420)} />
 
           <details className="review-details">
             <summary>Analyse complete</summary>

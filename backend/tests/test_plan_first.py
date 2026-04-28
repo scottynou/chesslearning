@@ -50,6 +50,9 @@ def test_caro_kann_after_e4_proposes_c6(monkeypatch) -> None:
     assert data["planState"]["status"] == "on_plan"
     assert data["planState"]["recommendedPlanMoves"] == ["c7c6"]
     assert data["mergedRecommendations"][0]["moveUci"] == "c7c6"
+    assert len(data["mergedRecommendations"]) == 1
+    assert data["phaseDisplay"]["key"] == "opening"
+    assert data["phaseDisplay"]["maxVisibleMoves"] == 1
     assert data["expectedOpponentMove"] is None
 
 
@@ -193,6 +196,58 @@ def test_opening_success_after_main_line(monkeypatch) -> None:
     data = response.json()
     assert data["phaseStatus"] == "opening_in_progress"
     assert 35 <= data["planProgress"]["percent"] < 100
+
+
+def test_completed_opening_switches_to_middlegame_ranked_choices(monkeypatch) -> None:
+    import app.strategy.plan_engine as plan_engine
+
+    monkeypatch.setattr(plan_engine, "StockfishEngine", lambda: FakePlanStockfish())
+    client = TestClient(app)
+    moves = ["e2e4", "c7c6", "d2d4", "d7d5", "b1c3", "d5e4", "c3e4", "g8f6", "e4f6", "e7f6", "g1f3"]
+    board = chess.Board()
+    for move in moves:
+        board.push_uci(move)
+    response = client.post(
+        "/plan-recommendations",
+        json={
+            "fen": board.fen(),
+            "selectedPlanId": "caro_kann_beginner",
+            "elo": 1800,
+            "skillLevel": "intermediate",
+            "moveHistoryUci": moves,
+            "maxMoves": 5,
+            "engineDepth": 1,
+        },
+    )
+    data = response.json()
+    assert data["phaseDisplay"]["key"] == "middlegame"
+    assert data["phaseDisplay"]["recommendationStyle"] == "ranked"
+    assert 1 <= len(data["mergedRecommendations"]) <= 3
+    assert data["mergedRecommendations"][0]["displayRole"] == "Meilleur"
+
+
+def test_simple_endgame_uses_conversion_display(monkeypatch) -> None:
+    import app.strategy.plan_engine as plan_engine
+
+    monkeypatch.setattr(plan_engine, "StockfishEngine", lambda: FakePlanStockfish())
+    client = TestClient(app)
+    fen = "8/8/8/8/8/8/4K3/6k1 w - - 0 1"
+    response = client.post(
+        "/plan-recommendations",
+        json={
+            "fen": fen,
+            "selectedPlanId": None,
+            "elo": 1800,
+            "skillLevel": "intermediate",
+            "moveHistoryUci": [],
+            "maxMoves": 5,
+            "engineDepth": 1,
+        },
+    )
+    data = response.json()
+    assert data["phaseDisplay"]["key"] == "endgame"
+    assert data["phaseDisplay"]["recommendationStyle"] == "conversion"
+    assert len(data["mergedRecommendations"]) <= 2
 
 
 def test_opening_data_main_menu_is_pedagogical() -> None:

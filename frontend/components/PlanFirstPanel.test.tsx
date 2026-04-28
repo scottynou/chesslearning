@@ -46,6 +46,13 @@ const response: PlanRecommendationsResponse = {
   explanationContext: {},
   selectedPlan: null,
   phase: "opening",
+  phaseDisplay: {
+    key: "opening",
+    label: "Ouverture",
+    subtitle: "Un seul coup pour accomplir ton plan.",
+    recommendationStyle: "single",
+    maxVisibleMoves: 1
+  },
   phaseStatus: "opening_in_progress",
   planProgress: { percent: 25 },
   currentObjective: "Developper une piece.",
@@ -67,7 +74,7 @@ const response: PlanRecommendationsResponse = {
 describe("PlanFirstPanel", () => {
   it("shows the educational explanation directly in the move card", () => {
     render(<PlanFirstPanel recommendations={response} onToggleRecommendation={() => undefined} highlightedMoveUci="g8f6" expectedReplyLabel="Pion d2 -> d4" />);
-    expect(screen.getByText("Ce qui vient de se passer")).toBeTruthy();
+    expect(screen.getByText("Dernier fait")).toBeTruthy();
     expect(screen.getByText("Reponse attendue")).toBeTruthy();
     expect(screen.getByText("Joue Cavalier g8 -> f6. Le cavalier controle le centre et garde le plan lisible.")).toBeTruthy();
     expect(screen.queryByText("Comprendre ce coup")).toBeNull();
@@ -76,7 +83,7 @@ describe("PlanFirstPanel", () => {
   it("highlights a recommendation on demand without opening a separate explanation panel", () => {
     const onSelect = vi.fn();
     render(<PlanFirstPanel recommendations={response} onToggleRecommendation={onSelect} highlightedMoveUci={null} />);
-    fireEvent.click(screen.getByText("Afficher la fleche"));
+    fireEvent.click(screen.getByText("Focus plateau"));
     expect(onSelect).toHaveBeenCalledWith(recommendation);
   });
 
@@ -88,13 +95,69 @@ describe("PlanFirstPanel", () => {
         highlightedMoveUci={null}
       />
     );
-    expect(screen.queryByText("Afficher la fleche")).toBeNull();
+    expect(screen.queryByText("Focus plateau")).toBeNull();
     expect(screen.getByText("A l'adversaire de jouer. Ligne attendue : Cavalier g8 -> f6.")).toBeTruthy();
   });
 
-  it("waits for the opponent review before showing the next player move", () => {
-    render(<PlanFirstPanel recommendations={response} suppressRecommendations onToggleRecommendation={() => undefined} highlightedMoveUci={null} />);
-    expect(screen.queryByText("Afficher la fleche")).toBeNull();
-    expect(screen.getByText("Valide l'analyse du coup adverse pour afficher ton prochain coup du plan.")).toBeTruthy();
+  it("shows ranked choices after the opening", () => {
+    const alternative = { ...recommendation, moveUci: "b8c6", beginnerLabel: "Cavalier b8 -> c6", displayRole: "Alternative saine" };
+    render(
+      <PlanFirstPanel
+        recommendations={{
+          ...response,
+          phase: "middlegame",
+          phaseDisplay: {
+            key: "middlegame",
+            label: "Milieu de partie",
+            subtitle: "Choisis un plan humain.",
+            recommendationStyle: "ranked",
+            maxVisibleMoves: 3
+          },
+          primaryMove: { ...recommendation, displayRole: "Meilleur" },
+          adaptedAlternatives: [alternative]
+        }}
+        onToggleRecommendation={() => undefined}
+        highlightedMoveUci={null}
+      />
+    );
+    expect(screen.getByText("Choix strategiques")).toBeTruthy();
+    expect(screen.getByText("Meilleur")).toBeTruthy();
+    expect(screen.getByText("Alternative saine")).toBeTruthy();
+  });
+
+  it("shows the adaptive Elo control and forwards changes", () => {
+    const onBaseEloChange = vi.fn();
+    const onAutoEnabledChange = vi.fn();
+    const onResetBoost = vi.fn();
+    render(
+      <PlanFirstPanel
+        recommendations={response}
+        onToggleRecommendation={() => undefined}
+        highlightedMoveUci={null}
+        eloControl={{
+          baseElo: 1200,
+          adaptiveBoost: 100,
+          effectiveElo: 1300,
+          autoEnabled: true,
+          onBaseEloChange,
+          onAutoEnabledChange,
+          onResetBoost
+        }}
+      />
+    );
+
+    expect(screen.getByText("Niveau coach")).toBeTruthy();
+    expect(screen.getByText("Niveau 1200")).toBeTruthy();
+    expect(screen.getByText("Auto +100")).toBeTruthy();
+    expect(screen.getByText("Effectif 1300")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Niveau Elo de base"), { target: { value: "1500" } });
+    expect(onBaseEloChange).toHaveBeenCalledWith(1500);
+
+    fireEvent.click(screen.getByText("Auto"));
+    expect(onAutoEnabledChange).toHaveBeenCalledWith(false);
+
+    fireEvent.click(screen.getByText("Reinitialiser boost"));
+    expect(onResetBoost).toHaveBeenCalled();
   });
 });

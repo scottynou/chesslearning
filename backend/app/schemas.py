@@ -14,6 +14,8 @@ BotStyle = Literal["balanced", "safe", "aggressive", "solid", "educational"]
 SkillLevel = Literal["beginner", "intermediate", "pro"]
 PlanPhase = Literal["opening", "transition", "middlegame", "endgame"]
 PlanStatus = Literal["on_plan", "transposed", "opponent_deviated", "out_of_book", "plan_completed"]
+AnalysisProvider = Literal["heuristic", "openai", "gemini", "ollama"]
+AnalysisKind = Literal["ai", "heuristic"]
 
 
 class AnalyzeRequest(BaseModel):
@@ -222,6 +224,9 @@ class ReviewMoveResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     move_label: str = Field(alias="moveLabel")
+    coach_narrative: str = Field(default="", alias="coachNarrative")
+    analysis_provider: AnalysisProvider = Field(default="heuristic", alias="analysisProvider")
+    analysis_kind: AnalysisKind = Field(default="heuristic", alias="analysisKind")
     quality: Quality
     quality_label: str = Field(alias="qualityLabel")
     played_move_eval_label: str = Field(alias="playedMoveEvalLabel")
@@ -358,6 +363,16 @@ class GamePlanState(BaseModel):
     status_explanation: str = Field(alias="statusExplanation")
 
 
+class PhaseDisplay(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    key: Literal["opening", "middlegame", "endgame"]
+    label: str
+    subtitle: str
+    recommendation_style: Literal["single", "ranked", "conversion"] = Field(alias="recommendationStyle")
+    max_visible_moves: int = Field(alias="maxVisibleMoves")
+
+
 class PlanRecommendationsResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -368,6 +383,7 @@ class PlanRecommendationsResponse(BaseModel):
     explanation_context: dict[str, Any] = Field(alias="explanationContext")
     selected_plan: dict[str, Any] | None = Field(default=None, alias="selectedPlan")
     phase: PlanPhase = "opening"
+    phase_display: PhaseDisplay = Field(alias="phaseDisplay")
     phase_status: str = Field(default="opening_in_progress", alias="phaseStatus")
     plan_progress: dict[str, Any] = Field(default_factory=dict, alias="planProgress")
     current_objective: str = Field(default="", alias="currentObjective")

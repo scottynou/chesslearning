@@ -8,6 +8,7 @@ import type { Orientation } from "@/lib/types";
 type BoardMove = {
   from: string;
   to: string;
+  color?: string;
 };
 
 type ChessCoachBoardProps = {
@@ -17,6 +18,7 @@ type ChessCoachBoardProps = {
   selectedSquare: string | null;
   legalTargets: string[];
   highlightedMove?: BoardMove | null;
+  recommendationArrows?: BoardMove[];
   lastMove?: BoardMove | null;
   locked?: boolean;
   thinking?: boolean;
@@ -31,6 +33,7 @@ export function ChessCoachBoard({
   selectedSquare,
   legalTargets,
   highlightedMove,
+  recommendationArrows = [],
   lastMove,
   locked = false,
   thinking = false,
@@ -39,6 +42,7 @@ export function ChessCoachBoard({
 }: ChessCoachBoardProps) {
   const customSquareStyles = buildSquareStyles(selectedSquare, legalTargets, lastMove, highlightedMove);
   const frameClassName = ["coach-board-frame", locked && "is-locked", thinking && "is-thinking"].filter(Boolean).join(" ");
+  const customArrows = buildArrows(recommendationArrows, highlightedMove);
 
   return (
     <div className={frameClassName}>
@@ -54,7 +58,7 @@ export function ChessCoachBoard({
           onPieceDrop={onDrop}
           onSquareClick={(square) => onSquareClick(square)}
           customSquareStyles={customSquareStyles}
-          customArrows={highlightedMove ? [[highlightedMove.from as Square, highlightedMove.to as Square, "rgba(224, 185, 118, 0.72)"]] : []}
+          customArrows={customArrows}
           customBoardStyle={{
             borderRadius: "12px",
             boxShadow: "0 46px 130px rgba(0, 0, 0, 0.52), 0 0 0 1px rgba(247, 239, 224, 0.22), inset 0 0 0 1px rgba(255,255,255,0.08)"
@@ -71,6 +75,22 @@ export function ChessCoachBoard({
       </div>
     </div>
   );
+}
+
+function buildArrows(recommendationArrows: BoardMove[], highlightedMove?: BoardMove | null) {
+  const arrows = recommendationArrows.map((move) => [
+    move.from as Square,
+    move.to as Square,
+    move.color ?? "rgba(224, 185, 118, 0.72)"
+  ]) as [Square, Square, string][];
+  if (highlightedMove && !arrows.some(([from, to]) => from === highlightedMove.from && to === highlightedMove.to)) {
+    arrows.push([
+      highlightedMove.from as Square,
+      highlightedMove.to as Square,
+      highlightedMove.color ?? "rgba(224, 185, 118, 0.72)"
+    ]);
+  }
+  return arrows;
 }
 
 function buildSquareStyles(selectedSquare: string | null, legalTargets: string[], lastMove?: BoardMove | null, highlightedMove?: BoardMove | null) {

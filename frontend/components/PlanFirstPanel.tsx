@@ -1,6 +1,17 @@
 "use client";
 
 import type { PlanRecommendation, PlanRecommendationsResponse, StrategyPlan } from "@/lib/types";
+import { ELO_MAX, ELO_MIN, ELO_STEP, formatEloLabel } from "@/lib/eloAdaptation";
+
+type EloControl = {
+  baseElo: number;
+  adaptiveBoost: number;
+  effectiveElo: number;
+  autoEnabled: boolean;
+  onBaseEloChange: (value: number) => void;
+  onAutoEnabledChange: (value: boolean) => void;
+  onResetBoost: () => void;
+};
 
 type PlanFirstPanelProps = {
   selectedPlan?: StrategyPlan | null;
@@ -9,7 +20,7 @@ type PlanFirstPanelProps = {
   error?: string | null;
   highlightedMoveUci?: string | null;
   expectedReplyLabel?: string | null;
-  suppressRecommendations?: boolean;
+  eloControl?: EloControl;
   onToggleRecommendation: (recommendation: PlanRecommendation) => void;
 };
 
@@ -20,15 +31,17 @@ export function PlanFirstPanel({
   error,
   highlightedMoveUci,
   expectedReplyLabel,
-  suppressRecommendations,
+  eloControl,
   onToggleRecommendation
 }: PlanFirstPanelProps) {
   const primary = recommendations?.primaryMove ?? null;
   const expectedOpponentMove = recommendations?.expectedOpponentMove ?? null;
   const alternatives = recommendations?.adaptedAlternatives ?? [];
   const progress = recommendations?.planProgress;
+  const phaseDisplay = recommendations?.phaseDisplay;
+  const isOpening = phaseDisplay?.key === "opening";
   const planName = recommendations?.selectedPlan?.nameFr ?? selectedPlan?.nameFr ?? "Plan general";
-  const moves = suppressRecommendations ? [] : ([primary, ...alternatives].filter(Boolean) as PlanRecommendation[]);
+  const moves = [primary, ...alternatives].filter(Boolean) as PlanRecommendation[];
   const hasStaleRecommendations = Boolean(loading && recommendations);
 
   return (
@@ -38,19 +51,21 @@ export function PlanFirstPanel({
           <p className="live-coach-kicker">Coach en direct</p>
           <div className="live-coach-title-row">
             <h2>{planName}</h2>
-            {recommendations ? <span>{phaseLabel(recommendations.phase)}</span> : null}
+            {phaseDisplay ? <span>{phaseDisplay.label}</span> : recommendations ? <span>{phaseLabel(recommendations.phase)}</span> : null}
           </div>
           <p className="live-coach-message">
-            {compactText(recommendations?.coachMessage ?? selectedPlan?.learningGoal ?? selectedPlan?.beginnerGoal ?? "Le coach relie le coup au plan choisi.", 230)}
+            {compactText(phaseDisplay?.subtitle ?? recommendations?.coachMessage ?? selectedPlan?.learningGoal ?? selectedPlan?.beginnerGoal ?? "Le coach relie le coup au plan choisi.", 180)}
           </p>
         </div>
-        {typeof progress?.percent === "number" ? (
+        {isOpening && typeof progress?.percent === "number" ? (
           <div className="live-progress-orb" aria-label={`Progression du plan ${progress.percent}%`}>
             <strong>{progress.percent}%</strong>
             <span>plan</span>
           </div>
         ) : null}
       </div>
+
+      {eloControl ? <EloControlPanel control={eloControl} /> : null}
 
       {loading ? <CoachUpdatingBanner stale={hasStaleRecommendations} /> : null}
       {error ? <div className="live-error">{error}</div> : null}
@@ -59,24 +74,21 @@ export function PlanFirstPanel({
         <>
           <div className="live-status-card">
             <div className="live-status-top">
-              <span>{phaseStatusLabel(recommendations.phaseStatus)}</span>
-              <span>{typeof progress?.percent === "number" ? `${progress.percent}%` : "En cours"}</span>
+              <span>{phaseDisplay?.label ?? phaseStatusLabel(recommendations.phaseStatus)}</span>
+              <span>{isOpening && typeof progress?.percent === "number" ? `${progress.percent}%` : "Objectif"}</span>
             </div>
-            <div className="live-progress-track"><div style={{ width: `${progress?.percent ?? 0}%` }} /></div>
+            {isOpening ? <div className="live-progress-track"><div style={{ width: `${progress?.percent ?? 0}%` }} /></div> : null}
             <div className="live-fact-grid">
-              <CoachFact title="Ce qui vient de se passer" value={compactText(recommendations.lastEvent || "La partie est prete.", 170)} />
-              <CoachFact title="Impact" value={compactText(recommendations.whatChanged || recommendations.coachMessage, 170)} />
-              <CoachFact title="Objectif" value={compactText(recommendations.nextObjective || recommendations.currentObjective, 170)} />
+              <CoachFact title={isOpening ? "Avancee" : "Plan actuel"} value={compactText(isOpening ? recommendations.whatChanged || recommendations.coachMessage : recommendations.nextObjective || recommendations.currentObjective, 170)} />
+              <CoachFact title="Dernier fait" value={compactText(recommendations.lastEvent || "La partie est prete.", 150)} />
               {expectedOpponentMove ? <CoachFact title="Reponse adverse attendue" value={`Ligne du plan : ${expectedOpponentMove.beginnerLabel}.`} /> : null}
               {expectedReplyLabel ? <CoachFact title="Reponse attendue" value={`Ligne du plan : ${expectedReplyLabel}. Sinon, on adapte.`} /> : null}
             </div>
           </div>
 
-          {suppressRecommendations ? (
-            <div className="live-empty">Valide l&apos;analyse du coup adverse pour afficher ton prochain coup du plan.</div>
-          ) : moves.length > 0 ? (
+          {moves.length > 0 ? (
             <div className="live-move-section">
-              <h3>Coup recommande</h3>
+              <h3>{phaseDisplay?.recommendationStyle === "ranked" ? "Choix strategiques" : "Coup recommande"}</h3>
               {moves.map((item, index) => (
                 <RecommendationCard
                   key={`${item.moveUci}-${index}`}
@@ -99,6 +111,56 @@ export function PlanFirstPanel({
         <CoachLoadingSkeleton />
       ) : null}
     </section>
+  );
+}
+
+function EloControlPanel({ control }: { control: EloControl }) {
+  const label = formatEloLabel({
+    baseElo: control.baseElo,
+    adaptiveBoost: control.adaptiveBoost,
+    autoEnabled: control.autoEnabled
+  });
+  const boostLabel = control.autoEnabled ? `Auto +${control.adaptiveBoost}` : "Auto off";
+
+  return (
+    <div className="elo-control" aria-label={label}>
+      <div className="elo-control-head">
+        <div>
+          <p>Niveau coach</p>
+          <strong>{control.effectiveElo}</strong>
+        </div>
+        <button
+          type="button"
+          className={control.autoEnabled ? "elo-auto-toggle is-active" : "elo-auto-toggle"}
+          onClick={() => control.onAutoEnabledChange(!control.autoEnabled)}
+          aria-pressed={control.autoEnabled}
+        >
+          Auto
+        </button>
+      </div>
+
+      <input
+        type="range"
+        min={ELO_MIN}
+        max={ELO_MAX}
+        step={ELO_STEP}
+        value={control.baseElo}
+        onChange={(event) => control.onBaseEloChange(Number(event.target.value))}
+        aria-label="Niveau Elo de base"
+      />
+
+      <div className="elo-control-meta">
+        <span>Niveau {control.baseElo}</span>
+        <span>{boostLabel}</span>
+        <span>Effectif {control.effectiveElo}</span>
+      </div>
+
+      {control.adaptiveBoost > 0 ? (
+        <button type="button" onClick={control.onResetBoost} className="elo-reset-button">
+          Reinitialiser boost
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -150,7 +212,7 @@ function RecommendationCard({
     <article className={primary ? "live-move-card is-primary" : "live-move-card"}>
       <div className="live-move-head">
         <div className="live-move-badges">
-          <span>{primary ? "Coup du plan" : "Alternative"}</span>
+          <span>{item.displayRole ?? (primary ? "Coup du plan" : "Alternative")}</span>
           <span>{complexityLabel(item.moveComplexity)}</span>
         </div>
         <strong>{item.beginnerLabel}</strong>
@@ -159,7 +221,7 @@ function RecommendationCard({
       {item.warning ? <p className="live-move-warning">{item.warning}</p> : null}
       <div className="live-move-actions">
         <button type="button" onClick={() => onToggle(item)} className="opening-detail-toggle">
-          {highlighted ? "Masquer la fleche" : "Afficher la fleche"}
+          {highlighted ? "Focus actif" : "Focus plateau"}
         </button>
         <span>Evaluation : {item.evalLabel}</span>
       </div>

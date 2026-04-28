@@ -15,6 +15,15 @@ import { SideSelectionPanel } from "@/components/SideSelectionPanel";
 import { getPlanRecommendations, listAvailablePlans, requestBotMove, reviewMove } from "@/lib/api";
 import { notationFromUci } from "@/lib/beginnerNotation";
 import { canMoveInMode, gameStatus, isPromotionAttempt, tryMove } from "@/lib/chess";
+import {
+  DEFAULT_BASE_ELO,
+  effectiveElo,
+  nextAdaptiveBoost,
+  nextStablePlyCount,
+  normalizeAdaptiveBoost,
+  normalizeBaseElo,
+  skillLevelForElo
+} from "@/lib/eloAdaptation";
 import { getOpeningImageSrc } from "@/lib/openingVisuals";
 import type {
   Orientation,
@@ -22,7 +31,6 @@ import type {
   PlanRecommendationsResponse,
   PlayMode,
   ReviewMoveResponse,
-  SkillLevel,
   StrategyPlan
 } from "@/lib/types";
 
@@ -57,13 +65,15 @@ type NavigationSnapshot = {
   selectedPlanId: string | null;
   firstOpponentMove: string | null;
   historyUci: string[];
+  baseElo: number;
+  adaptiveBoost: number;
+  autoEloEnabled: boolean;
 };
 
-const INTERNAL_SKILL_LEVEL: SkillLevel = "beginner";
-const INTERNAL_ELO = 1200;
 const INTERNAL_MAX_MOVES = 5;
 const INTERNAL_ENGINE_DEPTH = 8;
 const NAVIGATION_KEY = "chess-learning-navigation";
+const ELO_SETTINGS_KEY = "chess-learning-elo-settings";
 
 function buildGameFromHistory(moves: string[]) {
   const next = new Chess();
@@ -141,8 +151,28 @@ function createNavigationSnapshot(overrides: Partial<NavigationSnapshot> = {}): 
     selectedPlanId: null,
     firstOpponentMove: null,
     historyUci: [],
+    baseElo: DEFAULT_BASE_ELO,
+    adaptiveBoost: 0,
+    autoEloEnabled: true,
     ...overrides
   };
+}
+
+function readStoredEloSettings() {
+  if (typeof window === "undefined") {
+    return { baseElo: DEFAULT_BASE_ELO, autoEloEnabled: true };
+  }
+  try {
+    const raw = window.localStorage.getItem(ELO_SETTINGS_KEY);
+    if (!raw) return { baseElo: DEFAULT_BASE_ELO, autoEloEnabled: true };
+    const parsed = JSON.parse(raw) as { baseElo?: unknown; autoEloEnabled?: unknown };
+    return {
+      baseElo: normalizeBaseElo(typeof parsed.baseElo === "number" ? parsed.baseElo : DEFAULT_BASE_ELO),
+      autoEloEnabled: typeof parsed.autoEloEnabled === "boolean" ? parsed.autoEloEnabled : true
+    };
+  } catch {
+    return { baseElo: DEFAULT_BASE_ELO, autoEloEnabled: true };
+  }
 }
 
 function sideForPly(ply: number): "white" | "black" {
@@ -201,21 +231,31 @@ export default function HomePage() {
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [lastMoveForReview, setLastMoveForReview] = useState<LastMoveForReview | null>(null);
-  const [opponentReviewDismissedPly, setOpponentReviewDismissedPly] = useState<number | null>(null);
+  const [lastUserMoveForReview, setLastUserMoveForReview] = useState<LastMoveForReview | null>(null);
+  const [openOpponentReviewPly, setOpenOpponentReviewPly] = useState<number | null>(null);
   const [botThinking, setBotThinking] = useState(false);
   const [botError, setBotError] = useState<string | null>(null);
   const [highlightedMove, setHighlightedMove] = useState<{ from: string; to: string } | null>(null);
   const [highlightedRecommendationUci, setHighlightedRecommendationUci] = useState<string | null>(null);
   const [botStrategyState, setBotStrategyState] = useState<Record<string, unknown>>({});
+  const [baseElo, setBaseElo] = useState(DEFAULT_BASE_ELO);
+  const [adaptiveBoost, setAdaptiveBoost] = useState(0);
+  const [autoEloEnabled, setAutoEloEnabled] = useState(true);
+  const [stableEloPlyCount, setStableEloPlyCount] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const navigationReady = useRef(false);
   const skipNextHistoryReplace = useRef(false);
+  const skipNextEloPersist = useRef(true);
+  const lastEloAdjustmentPly = useRef<number | null>(null);
+  const previousEffectiveElo = useRef(DEFAULT_BASE_ELO);
 
   const fen = game.fen();
   const history = useMemo(() => game.history({ verbose: true }) as VerboseMove[], [game]);
   const status = useMemo(() => gameStatus(game), [game]);
   const pgn = useMemo(() => game.pgn(), [game]);
   const historyUci = useMemo(() => history.map((move) => `${move.from}${move.to}${move.promotion ?? ""}`), [history]);
+  const effectiveCoachElo = useMemo(() => effectiveElo(baseElo, autoEloEnabled ? adaptiveBoost : 0), [adaptiveBoost, autoEloEnabled, baseElo]);
+  const activeSkillLevel = useMemo(() => skillLevelForElo(effectiveCoachElo), [effectiveCoachElo]);
   const lastBoardMove = useMemo(() => {
     const move = history[history.length - 1];
     return move ? { from: move.from, to: move.to } : null;
@@ -244,12 +284,30 @@ export default function HomePage() {
       return `${replyUci.slice(0, 2)} -> ${replyUci.slice(2, 4)}`;
     }
   }, [fen, historyUci.length, planRecommendations?.planProgress?.linePly, planRecommendations?.primaryMove, selectedPlan?.mainLineUci]);
-  const pendingOpponentReviewMove = useMemo(() => {
+  const latestOpponentReviewMove = useMemo(() => {
     if (appStage !== "coach" || !lastMoveForReview || !selectedPlan) return null;
-    if (opponentReviewDismissedPly === lastMoveForReview.ply) return null;
     return isOpponentMoveForPlan(lastMoveForReview, selectedPlan) ? lastMoveForReview : null;
-  }, [appStage, lastMoveForReview, opponentReviewDismissedPly, selectedPlan]);
-  const pendingOpponentReview = pendingOpponentReviewMove ? reviewsByPly[pendingOpponentReviewMove.ply] ?? null : null;
+  }, [appStage, lastMoveForReview, selectedPlan]);
+  const latestUserReviewMove = useMemo(() => {
+    if (appStage !== "coach" || !lastUserMoveForReview) return null;
+    return lastUserMoveForReview;
+  }, [appStage, lastUserMoveForReview]);
+  const latestOpponentReview = latestOpponentReviewMove ? reviewsByPly[latestOpponentReviewMove.ply] ?? null : null;
+  const latestUserReview = latestUserReviewMove ? reviewsByPly[latestUserReviewMove.ply] ?? null : null;
+  const opponentReviewOpen = Boolean(latestOpponentReviewMove && openOpponentReviewPly === latestOpponentReviewMove.ply);
+  const visibleRecommendations = useMemo(() => {
+    const primary = planRecommendations?.primaryMove;
+    return primary ? [primary, ...(planRecommendations?.adaptedAlternatives ?? [])] : [];
+  }, [planRecommendations?.adaptedAlternatives, planRecommendations?.primaryMove]);
+  const recommendationArrows = useMemo(
+    () =>
+      visibleRecommendations.map((move) => ({
+        from: move.moveUci.slice(0, 2),
+        to: move.moveUci.slice(2, 4),
+        color: move.arrowColor
+      })),
+    [visibleRecommendations]
+  );
 
   const makeNavigationSnapshot = useCallback(
     (overrides: Partial<NavigationSnapshot> = {}) =>
@@ -261,9 +319,12 @@ export default function HomePage() {
         selectedPlanId,
         firstOpponentMove,
         historyUci,
+        baseElo,
+        adaptiveBoost,
+        autoEloEnabled,
         ...overrides
       }),
-    [appStage, firstOpponentMove, historyUci, mode, orientation, selectedPlanId, userSide]
+    [adaptiveBoost, appStage, autoEloEnabled, baseElo, firstOpponentMove, historyUci, mode, orientation, selectedPlanId, userSide]
   );
 
   const writeNavigationSnapshot = useCallback((snapshot: NavigationSnapshot, action: "push" | "replace") => {
@@ -277,6 +338,8 @@ export default function HomePage() {
   }, []);
 
   const restoreNavigationSnapshot = useCallback((snapshot: NavigationSnapshot) => {
+    const storedElo = readStoredEloSettings();
+    const snapshotWithElo = snapshot as Partial<NavigationSnapshot>;
     setGame(buildGameFromHistory(snapshot.historyUci));
     setAppStage(snapshot.appStage);
     setUserSide(snapshot.userSide);
@@ -284,6 +347,11 @@ export default function HomePage() {
     setMode(snapshot.mode);
     setSelectedPlanId(snapshot.selectedPlanId);
     setFirstOpponentMove(snapshot.firstOpponentMove);
+    setBaseElo(normalizeBaseElo(snapshotWithElo.baseElo ?? storedElo.baseElo));
+    setAutoEloEnabled(snapshotWithElo.autoEloEnabled ?? storedElo.autoEloEnabled);
+    setAdaptiveBoost(normalizeAdaptiveBoost(snapshotWithElo.adaptiveBoost ?? 0));
+    setStableEloPlyCount(0);
+    lastEloAdjustmentPly.current = null;
     setSelectedSquare(null);
     setPendingPromotion(null);
     setLastMessage(null);
@@ -298,7 +366,8 @@ export default function HomePage() {
     setReviewLoading(false);
     setReviewError(null);
     setLastMoveForReview(null);
-    setOpponentReviewDismissedPly(null);
+    setLastUserMoveForReview(null);
+    setOpenOpponentReviewPly(null);
     setBotThinking(false);
     setBotError(null);
     setBotStrategyState({});
@@ -316,9 +385,20 @@ export default function HomePage() {
   );
 
   useEffect(() => {
-    const initialSnapshot = isNavigationSnapshot(window.history.state) ? window.history.state : snapshotFromLocation();
-    restoreNavigationSnapshot(initialSnapshot);
-    writeNavigationSnapshot(initialSnapshot, "replace");
+    const historySnapshot = isNavigationSnapshot(window.history.state) ? window.history.state : null;
+    const initialSnapshot = historySnapshot ?? snapshotFromLocation();
+    const storedElo = readStoredEloSettings();
+    const hydratedSnapshot =
+      historySnapshot && typeof historySnapshot.baseElo === "number"
+        ? initialSnapshot
+        : {
+            ...initialSnapshot,
+            baseElo: storedElo.baseElo,
+            adaptiveBoost: 0,
+            autoEloEnabled: storedElo.autoEloEnabled
+          };
+    restoreNavigationSnapshot(hydratedSnapshot);
+    writeNavigationSnapshot(hydratedSnapshot, "replace");
     navigationReady.current = true;
     skipNextHistoryReplace.current = true;
 
@@ -341,14 +421,37 @@ export default function HomePage() {
   }, [makeNavigationSnapshot, writeNavigationSnapshot]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (skipNextEloPersist.current) {
+      skipNextEloPersist.current = false;
+      return;
+    }
+    window.localStorage.setItem(
+      ELO_SETTINGS_KEY,
+      JSON.stringify({
+        baseElo: normalizeBaseElo(baseElo),
+        autoEloEnabled
+      })
+    );
+  }, [autoEloEnabled, baseElo]);
+
+  useEffect(() => {
+    if (previousEffectiveElo.current === effectiveCoachElo) return;
+    previousEffectiveElo.current = effectiveCoachElo;
+    setReviewsByPly({});
+    setLastReview(null);
+    setReviewError(null);
+  }, [effectiveCoachElo]);
+
+  useEffect(() => {
     const primaryUci = planRecommendations?.primaryMove?.moveUci ?? null;
     const hintUci = primaryUci ?? planRecommendations?.expectedOpponentMove?.moveUci ?? null;
-    if (appStage !== "coach" || pendingOpponentReviewMove || !hintUci) {
+    if (appStage !== "coach" || !hintUci) {
       return;
     }
     setHighlightedRecommendationUci(hintUci);
     setHighlightedMove({ from: hintUci.slice(0, 2), to: hintUci.slice(2, 4) });
-  }, [appStage, pendingOpponentReviewMove, planRecommendations?.expectedOpponentMove?.moveUci, planRecommendations?.primaryMove?.moveUci]);
+  }, [appStage, planRecommendations?.expectedOpponentMove?.moveUci, planRecommendations?.primaryMove?.moveUci]);
 
   useEffect(() => {
     function updateBoardWidth() {
@@ -415,8 +518,8 @@ export default function HomePage() {
     getPlanRecommendations({
       fen,
       selectedPlanId,
-      elo: INTERNAL_ELO,
-      skillLevel: INTERNAL_SKILL_LEVEL,
+      elo: effectiveCoachElo,
+      skillLevel: activeSkillLevel,
       moveHistoryUci: historyUci,
       maxMoves: INTERNAL_MAX_MOVES,
       engineDepth: INTERNAL_ENGINE_DEPTH
@@ -436,7 +539,7 @@ export default function HomePage() {
     return () => {
       active = false;
     };
-  }, [appStage, fen, historyUci, selectedPlanId, userSide]);
+  }, [activeSkillLevel, appStage, effectiveCoachElo, fen, historyUci, selectedPlanId, userSide]);
 
   const legalTargets = useMemo(() => {
     if (!selectedSquare || boardLocked) return [];
@@ -445,10 +548,14 @@ export default function HomePage() {
 
   const rememberMoveForReview = useCallback(
     (fenBefore: string, fenAfter: string, moveUci: string, ply: number, source: "manual" | "bot", nextHistoryUci: string[]) => {
-      setLastMoveForReview({ fenBefore, fenAfter, moveUci, ply, source, selectedPlanId, moveHistoryUci: nextHistoryUci });
+      const storedMove = { fenBefore, fenAfter, moveUci, ply, source, selectedPlanId, moveHistoryUci: nextHistoryUci };
+      setLastMoveForReview(storedMove);
+      if (source === "manual") {
+        setLastUserMoveForReview(storedMove);
+      }
       setLastReview(null);
       setReviewError(null);
-      setOpponentReviewDismissedPly(null);
+      setOpenOpponentReviewPly(null);
     },
     [selectedPlanId]
   );
@@ -535,8 +642,8 @@ export default function HomePage() {
 
     requestBotMove({
       fen: fenBefore,
-      elo: INTERNAL_ELO,
-      skillLevel: INTERNAL_SKILL_LEVEL,
+      elo: effectiveCoachElo,
+      skillLevel: activeSkillLevel,
       maxMoves: INTERNAL_MAX_MOVES,
       engineDepth: INTERNAL_ENGINE_DEPTH,
       botStyle: "educational",
@@ -571,7 +678,7 @@ export default function HomePage() {
     return () => {
       cancelled = true;
     };
-  }, [appStage, botError, botStrategyState, botThinking, game, history.length, historyUci, mode, pendingPromotion, rememberMoveForReview, selectedPlanId]);
+  }, [activeSkillLevel, appStage, botError, botStrategyState, botThinking, effectiveCoachElo, game, history.length, historyUci, mode, pendingPromotion, rememberMoveForReview, selectedPlanId]);
 
   const handleSquareClick = useCallback(
     (square: string) => {
@@ -601,7 +708,7 @@ export default function HomePage() {
 
   function startWhiteFlow() {
     navigateToSnapshot(
-      createNavigationSnapshot({
+      makeNavigationSnapshot({
         appStage: "white-plan-selection",
         userSide: "white",
         orientation: "white"
@@ -611,7 +718,7 @@ export default function HomePage() {
 
   function startBlackFlow() {
     navigateToSnapshot(
-      createNavigationSnapshot({
+      makeNavigationSnapshot({
         appStage: "black-first-move",
         userSide: "black",
         orientation: "black"
@@ -621,7 +728,7 @@ export default function HomePage() {
 
   function startFreeMode() {
     navigateToSnapshot(
-      createNavigationSnapshot({
+      makeNavigationSnapshot({
         appStage: "coach",
         userSide: "both",
         orientation: "white"
@@ -670,7 +777,7 @@ export default function HomePage() {
       return;
     }
     navigateToSnapshot(
-      createNavigationSnapshot({
+      makeNavigationSnapshot({
         appStage: "white-plan-selection",
         userSide: "white",
         orientation: "white"
@@ -696,7 +803,7 @@ export default function HomePage() {
         fenBefore: move.fenBefore,
         fenAfter: move.fenAfter,
         moveUci: move.moveUci,
-        elo: INTERNAL_ELO,
+        elo: effectiveCoachElo,
         moveHistoryPgn: pgn,
         selectedPlanId: move.selectedPlanId,
         moveHistoryUci: move.moveHistoryUci
@@ -708,13 +815,68 @@ export default function HomePage() {
         .catch((error: Error) => setReviewError(error.message || "Impossible d'analyser ce coup."))
         .finally(() => setReviewLoading(false));
     },
-    [pgn]
+    [effectiveCoachElo, pgn]
   );
 
   useEffect(() => {
-    if (!pendingOpponentReviewMove || reviewsByPly[pendingOpponentReviewMove.ply] || reviewLoading) return;
-    reviewStoredMove(pendingOpponentReviewMove);
-  }, [pendingOpponentReviewMove, reviewLoading, reviewStoredMove, reviewsByPly]);
+    if (!latestUserReviewMove || reviewsByPly[latestUserReviewMove.ply] || reviewLoading) return;
+    reviewStoredMove(latestUserReviewMove);
+  }, [latestUserReviewMove, reviewLoading, reviewStoredMove, reviewsByPly]);
+
+  useEffect(() => {
+    if (!latestOpponentReviewMove || reviewsByPly[latestOpponentReviewMove.ply] || reviewLoading) return;
+    reviewStoredMove(latestOpponentReviewMove);
+  }, [latestOpponentReviewMove, reviewLoading, reviewStoredMove, reviewsByPly]);
+
+  useEffect(() => {
+    if (!autoEloEnabled || !latestUserReviewMove || !latestUserReview) return;
+
+    const primary = planRecommendations?.primaryMove;
+    const hasDanger = Boolean(planRecommendations?.blockedExpectedMove || primary?.warning);
+    const nextStableCount = nextStablePlyCount({
+      currentStablePlyCount: stableEloPlyCount,
+      quality: latestUserReview.quality,
+      hasDanger
+    });
+    const nextBoost = nextAdaptiveBoost({
+      currentBoost: adaptiveBoost,
+      autoEnabled: autoEloEnabled,
+      playerReviewQuality: latestUserReview.quality,
+      phaseStatus: planRecommendations?.phaseStatus,
+      primaryWarning: primary?.warning ?? planRecommendations?.blockedExpectedMove?.reason ?? null,
+      primaryEngineScore: primary?.engineScore ?? null,
+      primaryTacticalRisk: primary?.tacticalRisk ?? null,
+      stablePlyCount: nextStableCount,
+      currentPly: latestUserReviewMove.ply,
+      lastAdjustedPly: lastEloAdjustmentPly.current
+    });
+
+    if (lastEloAdjustmentPly.current === latestUserReviewMove.ply) return;
+    lastEloAdjustmentPly.current = latestUserReviewMove.ply;
+    setStableEloPlyCount(nextStableCount);
+    if (nextBoost !== adaptiveBoost) {
+      setAdaptiveBoost(nextBoost);
+    }
+  }, [adaptiveBoost, autoEloEnabled, latestUserReview, latestUserReviewMove, planRecommendations?.blockedExpectedMove, planRecommendations?.phaseStatus, planRecommendations?.primaryMove, stableEloPlyCount]);
+
+  const handleBaseEloChange = useCallback((value: number) => {
+    setBaseElo(normalizeBaseElo(value));
+  }, []);
+
+  const handleAutoEloEnabledChange = useCallback((enabled: boolean) => {
+    setAutoEloEnabled(enabled);
+    if (!enabled) {
+      setAdaptiveBoost(0);
+      setStableEloPlyCount(0);
+      lastEloAdjustmentPly.current = null;
+    }
+  }, []);
+
+  const resetAdaptiveBoost = useCallback(() => {
+    setAdaptiveBoost(0);
+    setStableEloPlyCount(0);
+    lastEloAdjustmentPly.current = null;
+  }, []);
 
   function resetBoardOnly() {
     setGame(new Chess());
@@ -725,9 +887,11 @@ export default function HomePage() {
     setReviewsByPly({});
     setLastReview(null);
     setLastMoveForReview(null);
-    setOpponentReviewDismissedPly(null);
+    setLastUserMoveForReview(null);
+    setOpenOpponentReviewPly(null);
     setLastMessage(null);
     setPlanRecommendations(null);
+    resetAdaptiveBoost();
   }
 
   function undo() {
@@ -746,7 +910,10 @@ export default function HomePage() {
     setHighlightedRecommendationUci(null);
     setLastMessage(null);
     setLastMoveForReview(null);
-    setOpponentReviewDismissedPly(null);
+    setLastUserMoveForReview(null);
+    setOpenOpponentReviewPly(null);
+    setStableEloPlyCount(0);
+    lastEloAdjustmentPly.current = null;
     if (userSide === "black" && nextHistory.length === 0) {
       setSelectedPlanId(null);
       setFirstOpponentMove(null);
@@ -766,7 +933,7 @@ export default function HomePage() {
   }
 
   function changePlan() {
-    navigateToSnapshot(createNavigationSnapshot());
+    navigateToSnapshot(makeNavigationSnapshot({ appStage: "side-selection", userSide: "white", orientation: "white", selectedPlanId: null, firstOpponentMove: null, historyUci: [] }));
   }
 
   function goHome() {
@@ -945,6 +1112,7 @@ export default function HomePage() {
               selectedSquare={selectedSquare}
               legalTargets={legalTargets}
               highlightedMove={highlightedMove}
+              recommendationArrows={recommendationArrows}
               lastMove={lastBoardMove}
               thinking={botThinking}
               onDrop={requestMove}
@@ -994,44 +1162,65 @@ export default function HomePage() {
             error={planError}
             highlightedMoveUci={highlightedRecommendationUci}
             expectedReplyLabel={expectedReplyLabel}
-            suppressRecommendations={Boolean(pendingOpponentReviewMove)}
+            eloControl={{
+              baseElo,
+              adaptiveBoost: autoEloEnabled ? adaptiveBoost : 0,
+              effectiveElo: effectiveCoachElo,
+              autoEnabled: autoEloEnabled,
+              onBaseEloChange: handleBaseEloChange,
+              onAutoEnabledChange: handleAutoEloEnabledChange,
+              onResetBoost: resetAdaptiveBoost
+            }}
             onToggleRecommendation={handlePlanRecommendationToggle}
           />
+          {latestOpponentReviewMove ? (
+            <OpponentMoveInsight
+              open={opponentReviewOpen}
+              review={latestOpponentReview}
+              loading={reviewLoading && !latestOpponentReview}
+              error={reviewError}
+              onOpen={() => setOpenOpponentReviewPly(latestOpponentReviewMove.ply)}
+              onClose={() => setOpenOpponentReviewPly(null)}
+              onRetry={() => reviewStoredMove(latestOpponentReviewMove)}
+            />
+          ) : null}
         </section>
       </main>
-      {pendingOpponentReviewMove ? (
-        <OpponentMoveReviewModal
-          review={pendingOpponentReview}
-          loading={reviewLoading}
-          error={reviewError}
-          onRetry={() => reviewStoredMove(pendingOpponentReviewMove)}
-          onClose={() => setOpponentReviewDismissedPly(pendingOpponentReviewMove.ply)}
-        />
-      ) : null}
     </>
   );
 }
 
-function OpponentMoveReviewModal({
+function OpponentMoveInsight({
+  open,
   review,
   loading,
   error,
   onRetry,
+  onOpen,
   onClose
 }: {
+  open: boolean;
   review: ReviewMoveResponse | null;
   loading: boolean;
   error: string | null;
   onRetry: () => void;
+  onOpen: () => void;
   onClose: () => void;
 }) {
+  if (!open) {
+    return (
+      <button type="button" onClick={onOpen} className="opponent-review-trigger">
+        Comprendre le coup adverse
+      </button>
+    );
+  }
+
   return (
-    <div className="opponent-review-backdrop" role="presentation">
-      <section className="opponent-review-dialog" role="dialog" aria-modal="true" aria-labelledby="opponent-review-title">
-        <div className="opponent-review-head">
-          <p>Coup adverse</p>
-          <h2 id="opponent-review-title">Ce que ca change</h2>
-        </div>
+    <section className="opponent-review-dialog is-inline" aria-labelledby="opponent-review-title">
+      <div className="opponent-review-head">
+        <p>Coup adverse</p>
+        <h2 id="opponent-review-title">Ce que ca change</h2>
+      </div>
 
         {loading && !review ? (
           <div className="opponent-review-loading" role="status">
@@ -1054,12 +1243,10 @@ function OpponentMoveReviewModal({
             <div className="opponent-review-summary">
               <span>Coup joue</span>
               <strong>{review.moveLabel}</strong>
-              <small>{review.qualityLabel} - {review.playedMoveEvalLabel}</small>
+              <small>{review.qualityLabel} - {review.playedMoveEvalLabel} - {review.analysisProvider}</small>
             </div>
 
-            <ReviewNote title="Effet sur ton plan" body={review.connectionToPlan ?? "Le coach adapte le prochain coup a cette reponse."} />
-            <ReviewNote title="Ce qu'il fait" body={review.explanation.whatItDoes} />
-            <ReviewNote title="Ce qu'il aurait pu faire" body={review.explanation.comparisonWithBest} />
+            <ReviewNote title="Analyse coach" body={review.coachNarrative} />
 
             {review.bestMoveWasDifferent ? (
               <div className="opponent-review-best">
@@ -1076,12 +1263,11 @@ function OpponentMoveReviewModal({
               Analyser ce coup
             </button>
           ) : null}
-          <button type="button" onClick={onClose} disabled={loading && !review} className="plan-start-button">
-            OK, afficher mon coup
+          <button type="button" onClick={onClose} className="opening-detail-toggle">
+            Fermer
           </button>
         </div>
-      </section>
-    </div>
+    </section>
   );
 }
 

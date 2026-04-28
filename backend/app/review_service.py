@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+import os
+
 import chess
 
+from .ai_providers.gemini_provider import GeminiProvider
+from .ai_providers.heuristic_provider import HeuristicProvider
+from .ai_providers.ollama_provider import OllamaProvider
+from .ai_providers.openai_provider import OpenAiProvider
 from .beginner_notation import beginner_notation_for_uci
 from .elo_ranker import _score_value, rank_candidates
 from .evaluation_label import evaluation_label
@@ -18,6 +24,13 @@ QUALITY_LABELS = {
     "inaccurate": "Imprecis",
     "mistake": "Erreur",
     "blunder": "Grosse erreur",
+}
+
+REVIEW_PROVIDERS = {
+    "heuristic": HeuristicProvider,
+    "openai": OpenAiProvider,
+    "ollama": OllamaProvider,
+    "gemini": GeminiProvider,
 }
 
 
@@ -74,9 +87,24 @@ def review_move(request: ReviewMoveRequest, depth: int = 10) -> ReviewMoveRespon
         quality=quality,
     )
     comparison = _comparison(best_label, best_different, quality)
+    narrative_context = _review_context(
+        request=request,
+        active_plan=active_plan,
+        move_label=played_notation.beginner_label,
+        quality_label=QUALITY_LABELS[quality],
+        played_eval_label=evaluation_label(played_eval_cp, played_mate),
+        best_label=best_label,
+        connection=connection,
+        comparison=comparison,
+        what_it_does=what_it_does,
+    )
+    coach_narrative, analysis_provider, analysis_kind = _coach_narrative(narrative_context)
 
     return ReviewMoveResponse(
         moveLabel=played_notation.beginner_label,
+        coachNarrative=coach_narrative,
+        analysisProvider=analysis_provider,
+        analysisKind=analysis_kind,
         quality=quality,
         qualityLabel=QUALITY_LABELS[quality],
         playedMoveEvalLabel=evaluation_label(played_eval_cp, played_mate),
@@ -99,6 +127,65 @@ def review_move(request: ReviewMoveRequest, depth: int = 10) -> ReviewMoveRespon
         },
         warning=_what_to_watch(piece, to_square, quality),
     )
+
+
+def _review_context(
+    *,
+    request: ReviewMoveRequest,
+    active_plan: dict | None,
+    move_label: str,
+    quality_label: str,
+    played_eval_label: str,
+    best_label: str,
+    connection: str,
+    comparison: str,
+    what_it_does: str,
+) -> dict:
+    return {
+        "fenBefore": request.fen_before,
+        "fenAfter": request.fen_after,
+        "moveHistoryUci": request.move_history_uci,
+        "moveHistoryPgn": request.move_history_pgn,
+        "phaseLabel": _phase_label(request.move_history_uci, request.fen_after),
+        "plan": active_plan,
+        "playedMove": {
+            "uci": request.move_uci,
+            "beginnerLabel": move_label,
+        },
+        "qualityLabel": quality_label,
+        "playedMoveEvalLabel": played_eval_label,
+        "bestAlternative": {
+            "moveLabel": best_label,
+        },
+        "connectionToPlan": connection,
+        "comparisonWithBest": comparison,
+        "whatItDoes": what_it_does,
+    }
+
+
+def _coach_narrative(context: dict) -> tuple[str, str, str]:
+    provider_name = os.getenv("AI_PROVIDER", "heuristic").lower()
+    provider_cls = REVIEW_PROVIDERS.get(provider_name, HeuristicProvider)
+    timeout = float(os.getenv("AI_TIMEOUT_SECONDS", "18"))
+
+    try:
+        data = provider_cls().review_move(context, timeout_seconds=timeout)
+        narrative = str(data.get("coachNarrative", "")).strip()
+        if narrative:
+            return narrative, provider_name if provider_name in REVIEW_PROVIDERS else "heuristic", "heuristic" if provider_name == "heuristic" else "ai"
+    except Exception:
+        pass
+
+    fallback = HeuristicProvider().review_move(context, timeout_seconds=0)
+    return str(fallback["coachNarrative"]), "heuristic", "heuristic"
+
+
+def _phase_label(move_history: list[str], fen_after: str) -> str:
+    if len(chess.Board(fen_after).piece_map()) <= 12:
+        return "la finale"
+    if len(move_history) <= 10:
+        return "l'ouverture"
+    return "le milieu de partie"
 
 
 def classify_quality(loss_cp: int) -> str:
