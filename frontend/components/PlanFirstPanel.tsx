@@ -31,6 +31,13 @@ export function PlanFirstPanel({
   const moves = primary && recommendations?.mergedRecommendations?.length
     ? recommendations.mergedRecommendations
     : ([primary, ...alternatives].filter(Boolean) as PlanRecommendation[]);
+  const expectedOpponentCard = expectedOpponentMove
+    ? {
+        ...expectedOpponentMove,
+        displayRole: expectedOpponentMove.displayRole ?? "Coup adverse attendu",
+        arrowColor: expectedOpponentMove.arrowColor ?? "rgba(239,118,118,0.78)"
+      }
+    : null;
   const hasStaleRecommendations = Boolean(loading && recommendations);
 
   return (
@@ -86,10 +93,20 @@ export function PlanFirstPanel({
                 />
               ))}
             </div>
-          ) : expectedOpponentMove ? (
-            <div className="live-empty">A l&apos;adversaire de jouer. Ligne attendue : {expectedOpponentMove.beginnerLabel}.</div>
+          ) : expectedOpponentCard ? (
+            <div className="live-move-section is-opponent-move">
+              <h3>Coup adverse attendu</h3>
+              <RecommendationCard
+                item={expectedOpponentCard}
+                primary
+                highlighted={highlightedMoveUci === expectedOpponentCard.moveUci}
+                onToggle={onToggleRecommendation}
+              />
+            </div>
+          ) : recommendations.turnContext?.gameOver ? (
+            <div className="live-empty">Partie terminee. Aucun coup legal a conseiller.</div>
           ) : (
-            <div className="live-empty">Aucun coup de plan clair. Joue un coup legal simple ou consulte les details.</div>
+            <div className="live-empty">Aucun coup legal clair pour cette position. Le plateau reste jouable.</div>
           )}
 
           {recommendations.blockedExpectedMove ? <div className="live-warning">Coup de ligne mis de cote : {recommendations.blockedExpectedMove.reason}</div> : null}

@@ -134,6 +134,88 @@ def test_plan_status_after_opponent_deviation(monkeypatch) -> None:
     assert response.json()["planState"]["status"] in {"opponent_deviated", "transposed"}
 
 
+def test_opponent_deviation_on_opponent_turn_returns_expected_engine_move(monkeypatch) -> None:
+    import app.strategy.plan_engine as plan_engine
+
+    monkeypatch.setattr(plan_engine, "StockfishEngine", lambda: FakePlanStockfish())
+    client = TestClient(app)
+    board = chess.Board()
+    moves = ["e2e4", "c7c5", "g1f3"]
+    for move in moves:
+        board.push_uci(move)
+    response = client.post(
+        "/plan-recommendations",
+        json={
+            "fen": board.fen(),
+            "selectedPlanId": "italian_game_beginner",
+            "elo": 1200,
+            "moveHistoryUci": moves,
+            "maxMoves": 5,
+            "engineDepth": 1,
+        },
+    )
+    data = response.json()
+    assert data["turnContext"]["opponentTurn"] is True
+    assert data["primaryMove"] is None
+    assert data["mergedRecommendations"] == []
+    assert data["expectedOpponentMove"] is not None
+    assert data["expectedOpponentMove"]["moveUci"] in {move.uci() for move in board.legal_moves}
+
+
+def test_player_turn_after_deviation_returns_primary_move(monkeypatch) -> None:
+    import app.strategy.plan_engine as plan_engine
+
+    monkeypatch.setattr(plan_engine, "StockfishEngine", lambda: FakePlanStockfish())
+    client = TestClient(app)
+    board = chess.Board()
+    moves = ["e2e4", "c7c5"]
+    for move in moves:
+        board.push_uci(move)
+    response = client.post(
+        "/plan-recommendations",
+        json={
+            "fen": board.fen(),
+            "selectedPlanId": "italian_game_beginner",
+            "elo": 1200,
+            "moveHistoryUci": moves,
+            "maxMoves": 5,
+            "engineDepth": 1,
+        },
+    )
+    data = response.json()
+    assert data["turnContext"]["playerTurn"] is True
+    assert data["primaryMove"] is not None
+    assert data["expectedOpponentMove"] is None
+    assert data["primaryMove"]["moveUci"] in {move.uci() for move in board.legal_moves}
+
+
+def test_game_over_does_not_force_recommendation(monkeypatch) -> None:
+    import app.strategy.plan_engine as plan_engine
+
+    monkeypatch.setattr(plan_engine, "StockfishEngine", lambda: FakePlanStockfish())
+    client = TestClient(app)
+    board = chess.Board()
+    moves = ["f2f3", "e7e5", "g2g4", "d8h4"]
+    for move in moves:
+        board.push_uci(move)
+    assert board.is_checkmate()
+    response = client.post(
+        "/plan-recommendations",
+        json={
+            "fen": board.fen(),
+            "selectedPlanId": "italian_game_beginner",
+            "elo": 1200,
+            "moveHistoryUci": moves,
+            "maxMoves": 5,
+            "engineDepth": 1,
+        },
+    )
+    data = response.json()
+    assert data["turnContext"]["gameOver"] is True
+    assert data["primaryMove"] is None
+    assert data["expectedOpponentMove"] is None
+
+
 def test_selected_plan_stays_locked_when_position_matches_another_plan(monkeypatch) -> None:
     import app.strategy.plan_engine as plan_engine
 

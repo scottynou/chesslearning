@@ -67,6 +67,13 @@ const response: PlanRecommendationsResponse = {
   coachMessage: "Tu suis la Caro-Kann.",
   pedagogicalSummary: "Tu suis la Caro-Kann.",
   moveComplexity: "simple",
+  turnContext: {
+    sideToMove: "black",
+    planSide: "black",
+    playerTurn: true,
+    opponentTurn: false,
+    gameOver: false
+  },
   technicalDetails: {},
   technicalEngineMoves: []
 };
@@ -90,13 +97,26 @@ describe("PlanFirstPanel", () => {
   it("does not turn an opponent reply into the player's recommendation", () => {
     render(
       <PlanFirstPanel
-        recommendations={{ ...response, primaryMove: null, planMoves: [], expectedOpponentMove: recommendation }}
+        recommendations={{
+          ...response,
+          primaryMove: null,
+          planMoves: [],
+          mergedRecommendations: [],
+          expectedOpponentMove: recommendation,
+          turnContext: {
+            ...response.turnContext,
+            sideToMove: "white",
+            playerTurn: false,
+            opponentTurn: true
+          }
+        }}
         onToggleRecommendation={() => undefined}
         highlightedMoveUci={null}
       />
     );
-    expect(screen.queryByText("Focus plateau")).toBeNull();
-    expect(screen.getByText("A l'adversaire de jouer. Ligne attendue : Cavalier g8 -> f6.")).toBeTruthy();
+    expect(screen.getAllByText("Coup adverse attendu").length).toBeGreaterThan(0);
+    expect(screen.getByText("Fleche rouge : Cavalier g8 -> f6.")).toBeTruthy();
+    expect(screen.queryByText("Aucun coup de plan clair. Joue un coup legal simple ou consulte les details.")).toBeNull();
   });
 
   it("shows ranked choices after the opening", () => {

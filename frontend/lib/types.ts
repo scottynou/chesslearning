@@ -221,6 +221,13 @@ export type PlanRecommendationsResponse = {
   coachMessage: string;
   pedagogicalSummary?: string;
   moveComplexity?: "simple" | "moyen" | "complexe";
+  turnContext: {
+    sideToMove: "white" | "black";
+    planSide: string | null;
+    playerTurn: boolean;
+    opponentTurn: boolean;
+    gameOver: boolean;
+  };
   technicalDetails?: Record<string, unknown>;
   technicalEngineMoves: CandidateMove[];
 };

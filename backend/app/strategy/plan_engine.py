@@ -44,11 +44,13 @@ def get_plan_recommendations(
     raw_plan_moves = get_next_plan_steps(active_plan["id"], move_history) if active_plan and phase == "opening" else []
     plan_moves = [move for move in raw_plan_moves if _is_legal_uci(board, move)]
     plan_color = color_for_plan(active_plan)
-    waiting_for_opponent = active_plan is not None and plan_color is not None and board.turn != plan_color and phase == "opening"
+    game_over = board.is_game_over()
+    opponent_turn = not game_over and active_plan is not None and plan_color is not None and board.turn != plan_color
+    player_turn = not game_over and not opponent_turn
     level_settings = skill_level_settings(skill_level, elo, max_moves)
 
     plan_can_drive_opening = phase == "opening" and status == "on_plan" and bool(plan_moves)
-    if waiting_for_opponent or plan_can_drive_opening:
+    if game_over or plan_can_drive_opening:
         engine_lines = []
         engine_candidates = []
     else:
@@ -67,10 +69,18 @@ def get_plan_recommendations(
     )
 
     plan_items = [item for item in merged if item["source"] in {"plan", "plan_and_engine"}]
-    expected_opponent_move = choose_primary_move(plan_items, merged) if waiting_for_opponent else None
-    visible_plan_items = [] if waiting_for_opponent else plan_items
-    visible_merged = [] if waiting_for_opponent else merged
-    primary_move = None if waiting_for_opponent else choose_primary_move(visible_plan_items, visible_merged)
+    expected_opponent_move = expected_opponent_move_for(choose_primary_move(plan_items, merged)) if opponent_turn else None
+    visible_plan_items = [] if opponent_turn else plan_items
+    visible_merged = [] if opponent_turn else merged
+    primary_move = None if opponent_turn else choose_primary_move(visible_plan_items, visible_merged)
+    if player_turn and primary_move is None and not game_over:
+        visible_merged = fallback_legal_recommendations(
+            board=board,
+            plan_name=active_plan.get("nameFr") if active_plan else None,
+            phase=phase,
+            limit=int(level_settings["technical_limit"]),
+        )
+        primary_move = choose_primary_move([], visible_merged)
     phase_status = phase_status_for(
         board=board,
         plan=active_plan,
@@ -114,10 +124,17 @@ def get_plan_recommendations(
         "currentGoals": active_plan.get("coreIdeas", [])[:3] if active_plan else fallback_goals(phase),
         "nextObjectives": next_objectives(active_plan, phase, visible_merged),
         "knownOpponentDeviation": deviation,
-        "recommendedPlanMoves": [] if waiting_for_opponent else plan_moves,
+        "recommendedPlanMoves": [] if opponent_turn else plan_moves,
         "fallbackPrinciples": fallback_goals(phase),
         "engineSafetyWarning": next((item["warning"] for item in visible_merged if item.get("warning")), None),
         "statusExplanation": coach_message,
+    }
+    turn_context = {
+        "sideToMove": "white" if board.turn == chess.WHITE else "black",
+        "planSide": active_plan.get("side") if active_plan else None,
+        "playerTurn": player_turn,
+        "opponentTurn": opponent_turn,
+        "gameOver": game_over,
     }
 
     return {
@@ -150,6 +167,7 @@ def get_plan_recommendations(
         "coachMessage": coach_message,
         "pedagogicalSummary": pedagogical_summary,
         "moveComplexity": response_move_complexity,
+        "turnContext": turn_context,
         "technicalDetails": {
             "engineDepth": engine_depth,
             "maxMoves": max_moves,
@@ -299,6 +317,96 @@ def decorate_recommendations(items: list[dict[str, Any]], style: str) -> list[di
         copy["arrowColor"] = colors[min(index, len(colors) - 1)]
         decorated.append(copy)
     return decorated
+
+
+def expected_opponent_move_for(item: dict[str, Any] | None) -> dict[str, Any] | None:
+    if item is None:
+        return None
+    copy = dict(item)
+    copy["displayRank"] = 1
+    copy["displayRole"] = "Coup adverse attendu"
+    copy["arrowColor"] = "rgba(239,118,118,0.78)"
+    return copy
+
+
+def fallback_legal_recommendations(
+    *,
+    board: chess.Board,
+    plan_name: str | None,
+    phase: str,
+    limit: int,
+) -> list[dict[str, Any]]:
+    fallback_moves = sorted(board.legal_moves, key=lambda move: fallback_move_score(board, move), reverse=True)
+    recommendations = []
+    for move in fallback_moves[: max(1, min(3, limit))]:
+        move_uci = move.uci()
+        notation = beginner_notation_for_uci(board.fen(), move_uci)
+        purpose = purpose_for_fallback_move(board, move, phase)
+        connection = (
+            f"On sort de la ligne exacte de {plan_name}, donc le coach choisit un coup legal simple qui garde la position jouable."
+            if plan_name
+            else "Le coach choisit un coup legal simple qui respecte les principes de base."
+        )
+        recommendations.append(
+            {
+                "moveUci": move_uci,
+                "moveSan": notation.san,
+                "beginnerLabel": notation.beginner_label,
+                "source": "fallback_principle",
+                "engineRank": None,
+                "planRank": None,
+                "planFitScore": 35,
+                "engineScore": 50,
+                "beginnerSimplicityScore": 72,
+                "tacticalRisk": 18,
+                "finalCoachScore": 58,
+                "evalLabel": "Coup legal simple",
+                "purpose": purpose,
+                "planConnection": connection,
+                "pedagogicalExplanation": f"Joue {notation.beginner_label}. {purpose} {connection}",
+                "moveComplexity": "simple",
+                "warning": None,
+                "candidate": None,
+            }
+        )
+    return recommendations
+
+
+def fallback_move_score(board: chess.Board, move: chess.Move) -> int:
+    piece = board.piece_at(move.from_square)
+    if piece is None:
+        return 0
+    score = 0
+    if board.is_castling(move):
+        score += 60
+    if board.is_capture(move):
+        score += 35
+    if board.gives_check(move):
+        score += 25
+    to_square = chess.square_name(move.to_square)
+    if to_square in {"d4", "e4", "d5", "e5"}:
+        score += 30
+    home_rank = 0 if piece.color == chess.WHITE else 7
+    if piece.piece_type in {chess.KNIGHT, chess.BISHOP} and chess.square_rank(move.from_square) == home_rank:
+        score += 28
+    if piece.piece_type == chess.QUEEN and board.fullmove_number <= 8:
+        score -= 24
+    return score
+
+
+def purpose_for_fallback_move(board: chess.Board, move: chess.Move, phase: str) -> str:
+    piece = board.piece_at(move.from_square)
+    piece_name = beginner_notation_for_uci(board.fen(), move.uci()).piece_name
+    to_square = chess.square_name(move.to_square)
+    if board.is_castling(move):
+        return "Le roque met le roi en securite et connecte les tours."
+    if board.is_capture(move):
+        return f"{piece_name} prend en {to_square} pour resoudre une tension concrete."
+    if phase == "opening" and piece and piece.piece_type in {chess.KNIGHT, chess.BISHOP}:
+        return f"{piece_name} va en {to_square} pour continuer le developpement."
+    if to_square in {"d4", "e4", "d5", "e5"}:
+        return f"{piece_name} va en {to_square} pour contester le centre."
+    return f"{piece_name} va en {to_square} pour ameliorer la position sans forcer une variante compliquee."
 
 
 def adapted_alternatives_for(

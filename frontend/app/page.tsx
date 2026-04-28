@@ -227,6 +227,8 @@ export default function HomePage() {
   const previousEffectiveElo = useRef(DEFAULT_BASE_ELO);
   const preloadingReviewPlies = useRef<Set<number>>(new Set());
   const failedPreloadReviewPlies = useRef<Set<number>>(new Set());
+  const preloadReviewController = useRef<AbortController | null>(null);
+  const preloadingReviewPly = useRef<number | null>(null);
   const botRequestInFlight = useRef(false);
 
   const fen = game.fen();
@@ -349,6 +351,9 @@ export default function HomePage() {
     setReviewsByPly({});
     preloadingReviewPlies.current.clear();
     failedPreloadReviewPlies.current.clear();
+    preloadReviewController.current?.abort();
+    preloadReviewController.current = null;
+    preloadingReviewPly.current = null;
     setReviewLoading(false);
     setReviewError(null);
     setLastMoveForReview(null);
@@ -402,6 +407,9 @@ export default function HomePage() {
     setReviewsByPly({});
     preloadingReviewPlies.current.clear();
     failedPreloadReviewPlies.current.clear();
+    preloadReviewController.current?.abort();
+    preloadReviewController.current = null;
+    preloadingReviewPly.current = null;
     setLastReview(null);
     setReviewError(null);
   }, [effectiveCoachElo]);
@@ -410,6 +418,8 @@ export default function HomePage() {
     const primaryUci = planRecommendations?.primaryMove?.moveUci ?? null;
     const hintUci = primaryUci ?? planRecommendations?.expectedOpponentMove?.moveUci ?? null;
     if (appStage !== "coach" || !hintUci) {
+      setHighlightedRecommendationUci(null);
+      setHighlightedMove(null);
       return;
     }
     setHighlightedRecommendationUci(hintUci);
@@ -552,7 +562,7 @@ export default function HomePage() {
       setSelectedSquare(null);
       setPendingPromotion(null);
       setBotError(null);
-      setHighlightedMove({ from, to });
+      setHighlightedMove(null);
       setHighlightedRecommendationUci(null);
       rememberMoveForReview(fenBefore, result.game.fen(), moveUci, ply, source, nextHistoryUci);
 
@@ -636,7 +646,7 @@ export default function HomePage() {
         setBotStrategyState(response.updatedStrategyState);
         const nextHistoryUci = [...historyUci, response.move.moveUci];
         setGame(result.game);
-        setHighlightedMove({ from, to });
+        setHighlightedMove(null);
         setHighlightedRecommendationUci(null);
         rememberMoveForReview(fenBefore, result.game.fen(), response.move.moveUci, ply, "bot", nextHistoryUci);
       })
@@ -775,7 +785,7 @@ export default function HomePage() {
   }, [highlightedRecommendationUci]);
 
   const requestStoredReview = useCallback(
-    (move: LastMoveForReview) =>
+    (move: LastMoveForReview, signal?: AbortSignal) =>
       reviewMove({
         fenBefore: move.fenBefore,
         fenAfter: move.fenAfter,
@@ -783,7 +793,8 @@ export default function HomePage() {
         elo: effectiveCoachElo,
         moveHistoryPgn: pgn,
         selectedPlanId: move.selectedPlanId,
-        moveHistoryUci: move.moveHistoryUci
+        moveHistoryUci: move.moveHistoryUci,
+        signal
       }),
     [effectiveCoachElo, pgn]
   );
@@ -807,31 +818,41 @@ export default function HomePage() {
   const preloadStoredMove = useCallback(
     (move: LastMoveForReview) => {
       if (preloadingReviewPlies.current.has(move.ply) || failedPreloadReviewPlies.current.has(move.ply)) return;
+      if (preloadReviewController.current && preloadingReviewPly.current !== move.ply) {
+        preloadReviewController.current.abort();
+        if (preloadingReviewPly.current != null) {
+          preloadingReviewPlies.current.delete(preloadingReviewPly.current);
+        }
+      }
+      const controller = new AbortController();
+      preloadReviewController.current = controller;
+      preloadingReviewPly.current = move.ply;
       preloadingReviewPlies.current.add(move.ply);
-      requestStoredReview(move)
+      requestStoredReview(move, controller.signal)
         .then((review) => {
           failedPreloadReviewPlies.current.delete(move.ply);
           setReviewsByPly((current) => ({ ...current, [move.ply]: review }));
         })
-        .catch(() => {
+        .catch((error: Error) => {
+          if (isAbortError(error)) return;
           failedPreloadReviewPlies.current.add(move.ply);
         })
         .finally(() => {
           preloadingReviewPlies.current.delete(move.ply);
+          if (preloadingReviewPly.current === move.ply) {
+            preloadReviewController.current = null;
+            preloadingReviewPly.current = null;
+          }
         });
     },
     [requestStoredReview]
   );
 
   useEffect(() => {
-    if (!latestUserReviewMove || reviewsByPly[latestUserReviewMove.ply]) return;
-    preloadStoredMove(latestUserReviewMove);
-  }, [latestUserReviewMove, preloadStoredMove, reviewsByPly]);
-
-  useEffect(() => {
-    if (!latestOpponentReviewMove || reviewsByPly[latestOpponentReviewMove.ply]) return;
-    preloadStoredMove(latestOpponentReviewMove);
-  }, [latestOpponentReviewMove, preloadStoredMove, reviewsByPly]);
+    const moveToPreload = latestOpponentReviewMove ?? latestUserReviewMove;
+    if (!moveToPreload || reviewsByPly[moveToPreload.ply]) return;
+    preloadStoredMove(moveToPreload);
+  }, [latestOpponentReviewMove, latestUserReviewMove, preloadStoredMove, reviewsByPly]);
 
   useEffect(() => {
     if (!latestUserReviewMove || !latestUserReview) return;
@@ -879,6 +900,9 @@ export default function HomePage() {
     setReviewsByPly({});
     preloadingReviewPlies.current.clear();
     failedPreloadReviewPlies.current.clear();
+    preloadReviewController.current?.abort();
+    preloadReviewController.current = null;
+    preloadingReviewPly.current = null;
     setLastReview(null);
     setLastMoveForReview(null);
     setLastUserMoveForReview(null);
@@ -911,6 +935,9 @@ export default function HomePage() {
     setReviewsByPly({});
     preloadingReviewPlies.current.clear();
     failedPreloadReviewPlies.current.clear();
+    preloadReviewController.current?.abort();
+    preloadReviewController.current = null;
+    preloadingReviewPly.current = null;
     setStableEloPlyCount(0);
     lastEloAdjustmentPly.current = null;
     if (userSide === "black" && nextHistory.length === 0) {

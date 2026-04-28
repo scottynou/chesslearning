@@ -373,6 +373,16 @@ class PhaseDisplay(BaseModel):
     max_visible_moves: int = Field(alias="maxVisibleMoves")
 
 
+class TurnContext(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    side_to_move: SideToMove = Field(alias="sideToMove")
+    plan_side: str | None = Field(default=None, alias="planSide")
+    player_turn: bool = Field(alias="playerTurn")
+    opponent_turn: bool = Field(alias="opponentTurn")
+    game_over: bool = Field(alias="gameOver")
+
+
 class PlanRecommendationsResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -398,5 +408,6 @@ class PlanRecommendationsResponse(BaseModel):
     coach_message: str = Field(default="", alias="coachMessage")
     pedagogical_summary: str = Field(default="", alias="pedagogicalSummary")
     move_complexity: str = Field(default="simple", alias="moveComplexity")
+    turn_context: TurnContext = Field(alias="turnContext")
     technical_details: dict[str, Any] = Field(default_factory=dict, alias="technicalDetails")
     technical_engine_moves: list[CandidateMove] = Field(default_factory=list, alias="technicalEngineMoves")
