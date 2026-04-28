@@ -8,7 +8,7 @@ Objectif : remplacer Render par une architecture plus stable.
 
 ## Pourquoi ce choix
 
-Render free peut dormir et provoquer des cold starts. Cloud Run peut aussi scale a zero, mais on peut fixer `min-instances=1` pour garder une instance chaude. Ce mode coute un peu plus, mais il est beaucoup plus stable pour une app avec Stockfish.
+Render free peut dormir et provoquer des cold starts. Cloud Run peut aussi scale a zero. Pour limiter le risque de paiement, le script de deploiement utilise par defaut `min-instances=0` et `max-instances=1`. Tu peux passer `min-instances=1` plus tard si tu acceptes de payer un petit minimum pour garder une instance chaude.
 
 ## Ce que j'ai prepare dans le repo
 
@@ -60,14 +60,14 @@ Par defaut :
 
 - service : `chess-elo-coach-api`
 - region : `europe-west1`
-- min instances : `1`
-- max instances : `3`
+- min instances : `0`
+- max instances : `1`
 - memoire : `1Gi`
 
-Si tu veux economiser et accepter les cold starts :
+Si tu veux plus de stabilite et moins de cold starts, mais avec un risque de cout minimum :
 
 ```powershell
-.\scripts\deploy-cloudrun.ps1 -ProjectId TON_PROJECT_ID_FIREBASE -MinInstances 0
+.\scripts\deploy-cloudrun.ps1 -ProjectId TON_PROJECT_ID_FIREBASE -MinInstances 1 -MaxInstances 2
 ```
 
 ## Deployer le frontend Firebase Hosting
@@ -109,7 +109,8 @@ Dans le navigateur, les appels comme `/plan-recommendations` et `/bot-move` doiv
 
 ## Notes importantes
 
+- `min-instances=0` est le reglage economie. C'est le plus prudent si tu ne veux pas payer.
 - `min-instances=1` est le reglage stabilite. Il garde une instance chaude, donc facture un minimum.
-- `min-instances=0` est le reglage economie. Moins cher, mais cold starts possibles.
+- Les budgets Google Cloud envoient des alertes, mais ne bloquent pas automatiquement les depenses. Pour rester prudent, garde aussi `max-instances=1`.
 - Firebase Hosting a un timeout de 60 secondes sur les rewrites Cloud Run. Ton API doit rester rapide, ce qui est l'objectif des optimisations Stockfish deja ajoutees.
 - Si tu changes la region ou le nom du service Cloud Run, modifie aussi `firebase.json`.

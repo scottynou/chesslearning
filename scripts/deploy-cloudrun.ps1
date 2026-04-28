@@ -4,8 +4,8 @@ param(
 
   [string]$Region = "europe-west1",
   [string]$ServiceName = "chess-elo-coach-api",
-  [int]$MinInstances = 1,
-  [int]$MaxInstances = 3
+  [int]$MinInstances = 0,
+  [int]$MaxInstances = 1
 )
 
 $ErrorActionPreference = "Stop"
