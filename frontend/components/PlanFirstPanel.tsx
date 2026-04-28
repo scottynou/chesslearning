@@ -28,7 +28,9 @@ export function PlanFirstPanel({
   const phaseDisplay = recommendations?.phaseDisplay;
   const isOpening = phaseDisplay?.key === "opening";
   const planName = recommendations?.selectedPlan?.nameFr ?? selectedPlan?.nameFr ?? "Plan general";
-  const moves = [primary, ...alternatives].filter(Boolean) as PlanRecommendation[];
+  const moves = primary && recommendations?.mergedRecommendations?.length
+    ? recommendations.mergedRecommendations
+    : ([primary, ...alternatives].filter(Boolean) as PlanRecommendation[]);
   const hasStaleRecommendations = Boolean(loading && recommendations);
 
   return (
@@ -66,7 +68,7 @@ export function PlanFirstPanel({
             <div className="live-fact-grid">
               <CoachFact title={isOpening ? "Avancee" : "Plan actuel"} value={compactText(isOpening ? recommendations.whatChanged || recommendations.coachMessage : recommendations.nextObjective || recommendations.currentObjective, 170)} />
               <CoachFact title="Dernier fait" value={compactText(recommendations.lastEvent || "La partie est prete.", 150)} />
-              {expectedOpponentMove ? <CoachFact title="Reponse adverse attendue" value={`Ligne du plan : ${expectedOpponentMove.beginnerLabel}.`} /> : null}
+              {expectedOpponentMove ? <CoachFact title="Reponse adverse attendue" value={`Fleche rouge : ${expectedOpponentMove.beginnerLabel}.`} /> : null}
               {expectedReplyLabel ? <CoachFact title="Reponse attendue" value={`Ligne du plan : ${expectedReplyLabel}. Sinon, on adapte.`} /> : null}
             </div>
           </div>
@@ -147,7 +149,10 @@ function RecommendationCard({
     <article className={primary ? "live-move-card is-primary" : "live-move-card"}>
       <div className="live-move-head">
         <div className="live-move-badges">
-          <span>{item.displayRole ?? (primary ? "Coup du plan" : "Alternative")}</span>
+          <span className="live-priority-badge">
+            <i style={{ backgroundColor: item.arrowColor ?? "rgba(224,185,118,0.78)" }} aria-hidden="true" />
+            {item.displayRole ?? (primary ? "Coup du plan" : "Alternative")}
+          </span>
           <span>{complexityLabel(item.moveComplexity)}</span>
         </div>
         <strong>{item.beginnerLabel}</strong>

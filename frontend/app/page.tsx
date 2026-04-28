@@ -68,6 +68,8 @@ type NavigationSnapshot = {
 const INTERNAL_MAX_MOVES = 4;
 const INTERNAL_ENGINE_DEPTH = 6;
 const NAVIGATION_KEY = "chess-learning-navigation";
+const PLAYER_ARROW_FALLBACKS = ["rgba(224,185,118,0.82)", "rgba(125,183,154,0.78)", "rgba(126,166,224,0.76)"];
+const OPPONENT_EXPECTED_ARROW = "rgba(239,118,118,0.78)";
 
 function buildGameFromHistory(moves: string[]) {
   const next = new Chess();
@@ -243,7 +245,7 @@ export default function HomePage() {
   }, [plans, planRecommendations?.selectedPlan, selectedPlanId]);
   const boardLocked = appStage === "black-plan-selection" || appStage === "white-plan-selection" || appStage === "plan-intro" || appStage === "side-selection";
   const firstMoveLabel = firstOpponentMove ? history[0]?.san ?? firstOpponentMove : null;
-  const expectedReplyLabel = useMemo(() => {
+  const expectedReply = useMemo(() => {
     const primary = planRecommendations?.primaryMove;
     const line = selectedPlan?.mainLineUci;
     const linePly = planRecommendations?.planProgress?.linePly ?? historyUci.length;
@@ -257,9 +259,9 @@ export default function HomePage() {
         to: primary.moveUci.slice(2, 4),
         ...(primary.moveUci.slice(4) ? { promotion: primary.moveUci.slice(4) } : {})
       });
-      return notationFromUci(afterPrimary.fen(), replyUci).beginnerLabel;
+      return { moveUci: replyUci, label: notationFromUci(afterPrimary.fen(), replyUci).beginnerLabel };
     } catch {
-      return `${replyUci.slice(0, 2)} -> ${replyUci.slice(2, 4)}`;
+      return { moveUci: replyUci, label: `${replyUci.slice(0, 2)} -> ${replyUci.slice(2, 4)}` };
     }
   }, [fen, historyUci.length, planRecommendations?.planProgress?.linePly, planRecommendations?.primaryMove, selectedPlan?.mainLineUci]);
   const latestOpponentReviewMove = useMemo(() => {
@@ -273,18 +275,28 @@ export default function HomePage() {
   const latestOpponentReview = latestOpponentReviewMove ? reviewsByPly[latestOpponentReviewMove.ply] ?? null : null;
   const latestUserReview = latestUserReviewMove ? reviewsByPly[latestUserReviewMove.ply] ?? null : null;
   const opponentReviewOpen = Boolean(latestOpponentReviewMove && openOpponentReviewPly === latestOpponentReviewMove.ply);
-  const visibleRecommendations = useMemo(() => {
-    const primary = planRecommendations?.primaryMove;
-    return primary ? [primary, ...(planRecommendations?.adaptedAlternatives ?? [])] : [];
-  }, [planRecommendations?.adaptedAlternatives, planRecommendations?.primaryMove]);
+  const visibleRecommendations = useMemo(
+    () => planRecommendations?.mergedRecommendations ?? [],
+    [planRecommendations?.mergedRecommendations]
+  );
   const recommendationArrows = useMemo(
-    () =>
-      visibleRecommendations.map((move) => ({
+    () => {
+      const arrows = visibleRecommendations.map((move, index) => ({
         from: move.moveUci.slice(0, 2),
         to: move.moveUci.slice(2, 4),
-        color: move.arrowColor
-      })),
-    [visibleRecommendations]
+        color: move.arrowColor ?? PLAYER_ARROW_FALLBACKS[Math.min(index, PLAYER_ARROW_FALLBACKS.length - 1)]
+      }));
+      const expectedOpponent = planRecommendations?.expectedOpponentMove;
+      if (expectedOpponent) {
+        arrows.push({
+          from: expectedOpponent.moveUci.slice(0, 2),
+          to: expectedOpponent.moveUci.slice(2, 4),
+          color: expectedOpponent.arrowColor ?? OPPONENT_EXPECTED_ARROW
+        });
+      }
+      return arrows;
+    },
+    [planRecommendations?.expectedOpponentMove, visibleRecommendations]
   );
 
   const makeNavigationSnapshot = useCallback(
@@ -1148,7 +1160,7 @@ export default function HomePage() {
             loading={planLoading}
             error={planError}
             highlightedMoveUci={highlightedRecommendationUci}
-            expectedReplyLabel={expectedReplyLabel}
+            expectedReplyLabel={expectedReply?.label ?? null}
             onToggleRecommendation={handlePlanRecommendationToggle}
           />
           {latestOpponentReviewMove ? (

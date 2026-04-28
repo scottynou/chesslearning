@@ -29,7 +29,7 @@ $gcloudCommand = Get-Command gcloud -ErrorAction SilentlyContinue
 if ($gcloudCommand) {
   $gcloud = $gcloudCommand.Source
 } else {
-  $gcloud = "C:\ProgramData\chocolatey\lib\gcloudsdk\tools\google-cloud-sdk\bin\gcloud.cmd"
+  $gcloud = "C:\ProgramData\chocolatey\lib\gcloudsdk\tools\google-cloud-sdk\bin\gcloud.ps1"
   if (-not (Test-Path $gcloud)) {
     throw "gcloud introuvable. Installe Google Cloud CLI ou ouvre un nouveau terminal."
   }
@@ -49,7 +49,7 @@ Write-Host "Enabling required APIs..."
 Invoke-Gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
 
 $corsRegex = "https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.(onrender\.com|web\.app|firebaseapp\.com)"
-$envVars = "AI_PROVIDER=heuristic,STOCKFISH_PATH=/usr/games/stockfish,FRONTEND_ORIGIN_REGEX=$corsRegex,RATE_LIMIT_WINDOW_SECONDS=60,RATE_LIMIT_PER_WINDOW=45"
+$envVars = "AI_PROVIDER=auto,GEMINI_MODEL=gemini-2.5-flash,STOCKFISH_PATH=/usr/games/stockfish,FRONTEND_ORIGIN_REGEX=$corsRegex,RATE_LIMIT_WINDOW_SECONDS=60,RATE_LIMIT_PER_WINDOW=45"
 
 Write-Host "Deploying $ServiceName to Cloud Run in $Region..."
 Invoke-Gcloud run deploy $ServiceName `
@@ -62,7 +62,7 @@ Invoke-Gcloud run deploy $ServiceName `
   --cpu 1 `
   --concurrency 10 `
   --timeout 45 `
-  --set-env-vars $envVars
+  --update-env-vars $envVars
 
 Write-Host "Cloud Run URL:"
 Invoke-Gcloud run services describe $ServiceName --region $Region --format "value(status.url)"

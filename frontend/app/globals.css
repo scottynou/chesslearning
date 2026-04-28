@@ -497,6 +497,8 @@ button:disabled { cursor: not-allowed; }
 .live-move-head strong { color: #fff7e8; font-size: clamp(1.2rem, 2.1vw, 1.75rem); font-weight: 900; letter-spacing: 0; line-height: 1.04; }
 .live-move-badges { display: flex; flex-wrap: wrap; gap: 0.45rem; }
 .live-move-badges span { border: 1px solid rgba(247,239,224,0.11); border-radius: 999px; background: rgba(3,5,10,0.22); color: rgba(247,239,224,0.68); padding: 0.32rem 0.5rem; font-size: 0.64rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.11em; }
+.live-move-badges .live-priority-badge { display: inline-flex; align-items: center; gap: 0.38rem; }
+.live-priority-badge i { width: 0.55rem; height: 0.55rem; flex: 0 0 auto; border-radius: 999px; box-shadow: 0 0 0 2px rgba(255,255,255,0.10), 0 0 16px currentColor; }
 .live-move-explanation { margin: 0.75rem 0 0; color: rgba(247,239,224,0.64); font-size: 0.9rem; line-height: 1.58; }
 .live-move-warning, .live-warning { border: 1px solid rgba(231,108,95,0.20); border-radius: 14px; background: rgba(181,68,63,0.11); color: #ffb4a9; padding: 0.75rem; font-size: 0.84rem; font-weight: 720; line-height: 1.48; }
 .live-move-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.7rem; margin-top: 0.85rem; color: rgba(247,239,224,0.48); font-size: 0.78rem; font-weight: 780; }

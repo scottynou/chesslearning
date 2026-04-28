@@ -112,5 +112,19 @@ Dans le navigateur, les appels comme `/plan-recommendations` et `/bot-move` doiv
 - `min-instances=0` est le reglage economie. C'est le plus prudent si tu ne veux pas payer.
 - `min-instances=1` est le reglage stabilite. Il garde une instance chaude, donc facture un minimum.
 - Les budgets Google Cloud envoient des alertes, mais ne bloquent pas automatiquement les depenses. Pour rester prudent, garde aussi `max-instances=1`.
+- Le backend utilise `AI_PROVIDER=auto` : Gemini est utilise seulement si `GEMINI_API_KEY` est configuree, sinon le coach revient automatiquement aux explications heuristiques gratuites.
 - Firebase Hosting a un timeout de 60 secondes sur les rewrites Cloud Run. Ton API doit rester rapide, ce qui est l'objectif des optimisations Stockfish deja ajoutees.
 - Si tu changes la region ou le nom du service Cloud Run, modifie aussi `firebase.json`.
+
+## Activer Gemini pour les explications
+
+Stockfish reste responsable des coups. Gemini sert seulement a reformuler les analyses en langage de coach.
+
+1. Cree une cle gratuite dans Google AI Studio.
+2. Depuis la racine du repo :
+
+```powershell
+.\scripts\configure-gemini-cloudrun.ps1 -ProjectId TON_PROJECT_ID_FIREBASE
+```
+
+Si Gemini atteint son quota ou echoue, le backend revient automatiquement aux explications heuristiques.

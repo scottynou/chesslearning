@@ -9,6 +9,7 @@ from .ai_providers.gemini_provider import GeminiProvider
 from .ai_providers.heuristic_provider import HeuristicProvider
 from .ai_providers.ollama_provider import OllamaProvider
 from .ai_providers.openai_provider import OpenAiProvider
+from .ai_providers.selection import configured_provider_name
 from .beginner_notation import beginner_notation_for_uci
 from .evaluation_label import evaluation_label
 from .explanation_quality import ExplanationQualityError, assert_beginner_explanation_quality
@@ -32,7 +33,7 @@ PROVIDERS = {
 
 def explain_candidate(request: ExplainCandidateRequest) -> ExplainCandidateResponse:
     context = build_explanation_context(request)
-    provider_name = os.getenv("AI_PROVIDER", "heuristic").lower()
+    provider_name = configured_provider_name()
     provider_cls = PROVIDERS.get(provider_name, HeuristicProvider)
     timeout = float(os.getenv("AI_TIMEOUT_SECONDS", "18"))
 

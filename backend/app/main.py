@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from .bot_service import choose_bot_move
+from .ai_providers.selection import configured_provider_name
 from .cache import MemoryCache
 from .elo_ranker import rank_candidates
 from .explanation_service import explain_candidate, explain_move
@@ -152,7 +153,8 @@ def health() -> dict[str, bool | str]:
     return {
         "ok": True,
         "stockfishConfigured": stockfish_configured,
-        "aiProvider": os.getenv("AI_PROVIDER", "heuristic"),
+        "aiProvider": configured_provider_name(),
+        "aiProviderMode": os.getenv("AI_PROVIDER", "auto"),
         "openaiConfigured": bool(os.getenv("OPENAI_API_KEY")),
         "geminiConfigured": bool(os.getenv("GEMINI_API_KEY")),
     }

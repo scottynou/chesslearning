@@ -7,7 +7,9 @@ services:
     healthCheckPath: /health
     envVars:
       - key: AI_PROVIDER
-        value: heuristic
+        value: auto
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
       - key: STOCKFISH_PATH
         value: /usr/games/stockfish
       - key: FRONTEND_ORIGIN

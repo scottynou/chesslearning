@@ -8,6 +8,7 @@ from .ai_providers.gemini_provider import GeminiProvider
 from .ai_providers.heuristic_provider import HeuristicProvider
 from .ai_providers.ollama_provider import OllamaProvider
 from .ai_providers.openai_provider import OpenAiProvider
+from .ai_providers.selection import configured_provider_name
 from .beginner_notation import beginner_notation_for_uci
 from .elo_ranker import _score_value, rank_candidates
 from .evaluation_label import evaluation_label
@@ -164,7 +165,7 @@ def _review_context(
 
 
 def _coach_narrative(context: dict) -> tuple[str, str, str]:
-    provider_name = os.getenv("AI_PROVIDER", "heuristic").lower()
+    provider_name = configured_provider_name()
     provider_cls = REVIEW_PROVIDERS.get(provider_name, HeuristicProvider)
     timeout = float(os.getenv("AI_TIMEOUT_SECONDS", "18"))
 

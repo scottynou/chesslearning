@@ -101,6 +101,7 @@ describe("PlanFirstPanel", () => {
 
   it("shows ranked choices after the opening", () => {
     const alternative = { ...recommendation, moveUci: "b8c6", beginnerLabel: "Cavalier b8 -> c6", displayRole: "Alternative saine" };
+    const primary = { ...recommendation, displayRole: "Meilleur" };
     render(
       <PlanFirstPanel
         recommendations={{
@@ -113,7 +114,8 @@ describe("PlanFirstPanel", () => {
             recommendationStyle: "ranked",
             maxVisibleMoves: 3
           },
-          primaryMove: { ...recommendation, displayRole: "Meilleur" },
+          primaryMove: primary,
+          mergedRecommendations: [primary, alternative],
           adaptedAlternatives: [alternative]
         }}
         onToggleRecommendation={() => undefined}
