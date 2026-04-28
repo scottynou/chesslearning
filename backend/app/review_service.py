@@ -7,15 +7,15 @@ from .elo_ranker import _score_value, rank_candidates
 from .evaluation_label import evaluation_label
 from .pv_translator import simple_move_explanation
 from .schemas import ReviewMoveRequest, ReviewMoveResponse
-from .strategy.opening_coach import detect_current_opening
 from .stockfish_engine import StockfishEngine
+from .strategy.opening_coach import get_plan
 
 
 QUALITY_LABELS = {
     "excellent": "Excellent",
     "good": "Bon coup",
     "playable": "Jouable",
-    "inaccurate": "Imprécis",
+    "inaccurate": "Imprecis",
     "mistake": "Erreur",
     "blunder": "Grosse erreur",
 }
@@ -54,16 +54,27 @@ def review_move(request: ReviewMoveRequest, depth: int = 10) -> ReviewMoveRespon
     if best_candidate is not None:
         best_notation = beginner_notation_for_uci(request.fen_before, best_candidate.move_uci, best_candidate.move_san)
         best_label = best_notation.beginner_label
+        best_uci = best_candidate.move_uci
         best_different = best_candidate.move_uci != request.move_uci
     else:
         best_label = played_notation.beginner_label
+        best_uci = request.move_uci
         best_different = False
 
     what_it_does = simple_move_explanation(board_before, played_move)
     to_square = played_notation.to_square
     piece = played_notation.piece_name
+    active_plan = get_plan(request.selected_plan_id)
+    connection = _connection_to_plan(
+        plan=active_plan,
+        move_history=request.move_history_uci,
+        move_uci=request.move_uci,
+        best_label=best_label,
+        best_uci=best_uci,
+        quality=quality,
+    )
+    comparison = _comparison(best_label, best_different, quality)
 
-    connection = _connection_to_plan(request.move_history_pgn, request.move_uci)
     return ReviewMoveResponse(
         moveLabel=played_notation.beginner_label,
         quality=quality,
@@ -72,11 +83,11 @@ def review_move(request: ReviewMoveRequest, depth: int = 10) -> ReviewMoveRespon
         bestMoveLabel=best_label,
         bestMoveWasDifferent=best_different,
         explanation={
-            "probableIdea": f"L'idée probable est de placer le {piece} en {to_square} pour améliorer son activité.",
+            "probableIdea": f"L'idee probable est de placer le {piece} en {to_square} pour modifier le centre, le developpement ou la securite du roi.",
             "whatItDoes": what_it_does,
             "whatItAllows": _what_it_allows(piece, to_square, board_after),
-            "whatToWatch": _what_to_watch(piece, to_square),
-            "comparisonWithBest": _comparison(best_label, best_different, quality),
+            "whatToWatch": _what_to_watch(piece, to_square, quality),
+            "comparisonWithBest": comparison,
         },
         connectionToPlan=connection,
         whatItAttacks=_attacked_squares(board_before, played_move),
@@ -84,9 +95,9 @@ def review_move(request: ReviewMoveRequest, depth: int = 10) -> ReviewMoveRespon
         whatItAllowsNext=_next_steps(piece, to_square),
         bestAlternative={
             "moveLabel": best_label,
-            "whyBetterOrDifferent": _comparison(best_label, best_different, quality),
+            "whyBetterOrDifferent": comparison,
         },
-        warning=_what_to_watch(piece, to_square),
+        warning=_what_to_watch(piece, to_square, quality),
     )
 
 
@@ -106,30 +117,92 @@ def classify_quality(loss_cp: int) -> str:
 
 def _what_it_allows(piece: str, to_square: str, board_after: chess.Board) -> str:
     if piece == "Cavalier":
-        return f"Depuis {to_square}, le Cavalier peut aider à contrôler le centre et préparer le roque."
+        return f"Depuis {to_square}, le Cavalier peut controler le centre, defendre une case utile ou preparer le roque."
     if piece == "Fou":
-        return f"Depuis {to_square}, le Fou regarde une diagonale et aide les autres pièces à sortir."
+        return f"Depuis {to_square}, le Fou ouvre une diagonale et change les cases que ton plan doit surveiller."
     if piece == "Pion":
-        return f"Le Pion en {to_square} peut soutenir une pièce ou attaquer une case centrale."
+        return f"Le Pion en {to_square} change la structure. Il peut gagner de l'espace, soutenir le centre ou laisser une case derriere lui."
     if board_after.is_check():
-        return "Ce coup crée aussi un échec, donc l'adversaire doit répondre tout de suite."
-    return f"La pièce en {to_square} peut ensuite soutenir un plan plus large."
+        return "Ce coup cree aussi un echec, donc la reponse prioritaire devient la securite du roi."
+    return f"La piece en {to_square} peut soutenir un plan plus large ou creer une nouvelle cible."
 
 
-def _what_to_watch(piece: str, to_square: str) -> str:
+def _what_to_watch(piece: str, to_square: str, quality: str) -> str:
+    if quality in {"mistake", "blunder"}:
+        return "Ce coup semble moins optimise : cherche tout de suite le gain de temps, de centre ou de securite qu'il te donne."
     if piece == "Cavalier":
-        return f"Ne déplace pas encore le Cavalier en {to_square} sans menace précise : développe aussi les autres pièces."
+        return f"Surveille les cases centrales autour du Cavalier en {to_square} et garde ton developpement fluide."
     if piece == "Pion":
-        return f"Après ce Pion en {to_square}, regarde les cases qu'il ne défend plus derrière lui."
-    return f"Vérifie que la pièce en {to_square} n'est pas attaquée gratuitement."
+        return f"Apres ce Pion en {to_square}, regarde les cases qu'il ne defend plus et les ruptures de centre possibles."
+    return f"Verifie que la piece en {to_square} ne cree pas une menace concrete contre ton plan."
 
 
 def _comparison(best_label: str, best_different: bool, quality: str) -> str:
     if not best_different:
-        return "Le coup joué correspond au meilleur coup recommandé par l'analyse."
+        return "Le coup joue correspond au meilleur repere de l'analyse."
     if quality in {"excellent", "good", "playable"}:
-        return f"Le moteur préférait {best_label}, mais le coup joué reste cohérent et instructif."
-    return f"Le moteur préférait {best_label}. La différence vient d'une perte de coordination ou de sécurité dans la position."
+        return f"Il pouvait aussi choisir {best_label}. Le coup joue reste coherent, mais il peut changer l'ordre exact de ton plan."
+    return f"Il aurait plutot du jouer {best_label}. Le coup joue est moins optimise parce qu'il peut perdre du temps, du controle ou de la securite."
+
+
+def _connection_to_plan(
+    plan: dict | None,
+    move_history: list[str],
+    move_uci: str,
+    best_label: str,
+    best_uci: str,
+    quality: str,
+) -> str:
+    if not plan:
+        return "Ce coup est compare aux principes de la position actuelle. Garde le centre, le developpement et la securite comme priorites."
+
+    plan_name = str(plan.get("nameFr") or "ton plan")
+    line = list(plan.get("mainLineUci") or [])
+    ply_index = max(0, len(move_history) - 1)
+    expected_uci = line[ply_index] if ply_index < len(line) else None
+
+    if expected_uci == move_uci:
+        return (
+            f"L'adversaire a joue la reponse attendue par {plan_name}. Ton ouverture reste intacte : "
+            "tu peux continuer le prochain repere du plan sans chercher une refutation."
+        )
+
+    if expected_uci:
+        expected_label = _label_for_expected_move(expected_uci, move_history)
+        if quality in {"excellent", "good", "playable"}:
+            return (
+                f"L'adversaire sort de la ligne de {plan_name}. La reponse attendue etait {expected_label}, "
+                f"et l'autre bon repere etait {best_label}. Ce n'est pas forcement mauvais : ton plan reste vivant, "
+                "mais le prochain coup doit etre choisi pour garder le centre et le developpement coherents."
+            )
+        return (
+            f"L'adversaire ne joue pas la reponse attendue de {plan_name}. La ligne prevoyait {expected_label}; "
+            f"le meilleur repere d'analyse etait {best_label}. Son coup semble moins precis, donc tu peux souvent "
+            "gagner un tempo ou installer ton plan avec plus de confort."
+        )
+
+    if best_uci == move_uci:
+        return (
+            f"La ligne forcee de {plan_name} est deja depassee, mais le coup joue reste un bon repere. "
+            "Continue avec les idees du plan plutot qu'avec une suite memorisee."
+        )
+    return (
+        f"La ligne forcee de {plan_name} est depassee. Compare ce coup a {best_label}, puis adapte : "
+        "garde les pieces actives, le roi en securite et une rupture centrale claire."
+    )
+
+
+def _label_for_expected_move(move_uci: str, move_history: list[str]) -> str:
+    board = chess.Board()
+    for played in move_history[:-1]:
+        try:
+            board.push_uci(played)
+        except ValueError:
+            break
+    try:
+        return beginner_notation_for_uci(board.fen(), move_uci).beginner_label
+    except Exception:
+        return move_uci
 
 
 def _attacked_squares(board: chess.Board, move: chess.Move) -> list[str]:
@@ -152,17 +225,13 @@ def _next_steps(piece: str, to_square: str) -> list[str]:
     if piece == "Cavalier":
         return [
             f"Garder le Cavalier actif en {to_square}.",
-            "Développer une autre pièce.",
-            "Préparer le roque ou attaquer le centre.",
+            "Developper une autre piece.",
+            "Preparer le roque ou contester le centre.",
         ]
     if piece == "Pion":
         return [
-            f"Utiliser le Pion en {to_square} pour soutenir le centre.",
-            "Sortir une pièce mineure.",
-            "Vérifier que le roi reste en sécurité.",
+            f"Utiliser le Pion en {to_square} pour lire la structure.",
+            "Sortir une piece mineure.",
+            "Verifier que le roi reste en securite.",
         ]
-    return [f"Vérifier que la pièce en {to_square} est bien défendue.", "Chercher le prochain objectif du plan."]
-
-
-def _connection_to_plan(move_history_pgn: str | None, move_uci: str) -> str:
-    return "Ce coup est comparé au plan actif et aux principes de la position actuelle."
+    return [f"Verifier que la piece en {to_square} est bien defendue.", "Chercher le prochain objectif du plan."]

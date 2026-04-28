@@ -510,6 +510,24 @@ button:disabled { cursor: not-allowed; }
 .coach-spinner { width: 1.1rem; height: 1.1rem; border: 3px solid rgba(247,239,224,0.14); border-top-color: var(--gold); border-radius: 50%; animation: coach-spin 900ms linear infinite; }
 .coach-skeleton { display: grid; gap: 0.7rem; }
 .coach-skeleton span { height: 4.6rem; border-radius: 18px; background: linear-gradient(90deg, rgba(247,239,224,0.05), rgba(247,239,224,0.13), rgba(247,239,224,0.05)); background-size: 200% 100%; animation: coach-shimmer 1.4s ease infinite; }
+.opponent-review-backdrop { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; background: rgba(0,0,0,0.54); padding: clamp(1rem, 3vw, 2rem); backdrop-filter: blur(12px); }
+.opponent-review-dialog { width: min(100%, 520px); border: 1px solid rgba(247,239,224,0.14); border-radius: 22px; background: linear-gradient(180deg, rgba(21,24,29,0.96), rgba(6,8,12,0.98)); color: #f7efe0; padding: clamp(1rem, 2.2vw, 1.35rem); box-shadow: 0 40px 130px rgba(0,0,0,0.62), inset 0 1px 0 rgba(255,255,255,0.08); }
+.opponent-review-head { display: grid; gap: 0.35rem; margin-bottom: 0.95rem; }
+.opponent-review-head p { margin: 0; color: var(--gold); font-size: 0.68rem; font-weight: 950; letter-spacing: 0.16em; text-transform: uppercase; }
+.opponent-review-head h2 { margin: 0; color: #fffaf0; font-size: clamp(1.55rem, 4vw, 2.35rem); font-weight: 920; letter-spacing: 0; line-height: 1; }
+.opponent-review-loading { display: flex; align-items: center; gap: 0.75rem; border: 1px solid rgba(247,239,224,0.1); border-radius: 16px; background: rgba(247,239,224,0.055); padding: 0.9rem; color: rgba(247,239,224,0.72); font-weight: 760; }
+.opponent-review-loading p, .opponent-review-error p { margin: 0; }
+.opponent-review-error { display: grid; gap: 0.75rem; border: 1px solid rgba(231,108,95,0.22); border-radius: 16px; background: rgba(181,68,63,0.12); color: #ffb4a9; padding: 0.9rem; }
+.opponent-review-body { display: grid; gap: 0.7rem; }
+.opponent-review-summary, .opponent-review-note, .opponent-review-best { border: 1px solid rgba(247,239,224,0.10); border-radius: 16px; background: rgba(247,239,224,0.055); padding: 0.85rem; }
+.opponent-review-summary { display: grid; gap: 0.22rem; background: radial-gradient(circle at 100% 0%, rgba(231,185,106,0.14), transparent 10rem), rgba(247,239,224,0.06); }
+.opponent-review-summary span, .opponent-review-best span { color: var(--gold); font-size: 0.64rem; font-weight: 950; letter-spacing: 0.14em; text-transform: uppercase; }
+.opponent-review-summary strong, .opponent-review-best strong { color: #fffaf0; font-size: 1.06rem; font-weight: 900; line-height: 1.2; }
+.opponent-review-summary small { color: rgba(247,239,224,0.58); font-size: 0.82rem; font-weight: 760; }
+.opponent-review-note h3 { margin: 0 0 0.35rem; color: #f7d89b; font-size: 0.78rem; font-weight: 920; letter-spacing: 0.10em; text-transform: uppercase; }
+.opponent-review-note p { margin: 0; color: rgba(247,239,224,0.68); font-size: 0.9rem; line-height: 1.56; }
+.opponent-review-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.65rem; margin-top: 1rem; }
+.opponent-review-actions .plan-start-button:disabled { cursor: wait; opacity: 0.55; transform: none; }
 @keyframes coach-spin { to { transform: rotate(360deg); } }
 @keyframes coach-shimmer { to { background-position: -200% 0; } }
 

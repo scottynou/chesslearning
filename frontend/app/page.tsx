@@ -42,6 +42,8 @@ type LastMoveForReview = {
   moveUci: string;
   ply: number;
   source: "manual" | "bot";
+  selectedPlanId: string | null;
+  moveHistoryUci: string[];
 };
 
 type AppStage = "side-selection" | "white-plan-selection" | "black-first-move" | "black-plan-selection" | "plan-intro" | "coach";
@@ -143,6 +145,15 @@ function createNavigationSnapshot(overrides: Partial<NavigationSnapshot> = {}): 
   };
 }
 
+function sideForPly(ply: number): "white" | "black" {
+  return ply % 2 === 1 ? "white" : "black";
+}
+
+function isOpponentMoveForPlan(move: LastMoveForReview, plan: StrategyPlan | null) {
+  if (!plan || (plan.side !== "white" && plan.side !== "black")) return false;
+  return sideForPly(move.ply) !== plan.side;
+}
+
 function urlForSnapshot(snapshot: NavigationSnapshot) {
   const params = new URLSearchParams();
   if (snapshot.appStage === "white-plan-selection") {
@@ -190,6 +201,7 @@ export default function HomePage() {
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [lastMoveForReview, setLastMoveForReview] = useState<LastMoveForReview | null>(null);
+  const [opponentReviewDismissedPly, setOpponentReviewDismissedPly] = useState<number | null>(null);
   const [botThinking, setBotThinking] = useState(false);
   const [botError, setBotError] = useState<string | null>(null);
   const [highlightedMove, setHighlightedMove] = useState<{ from: string; to: string } | null>(null);
@@ -232,6 +244,12 @@ export default function HomePage() {
       return `${replyUci.slice(0, 2)} -> ${replyUci.slice(2, 4)}`;
     }
   }, [fen, historyUci.length, planRecommendations?.planProgress?.linePly, planRecommendations?.primaryMove, selectedPlan?.mainLineUci]);
+  const pendingOpponentReviewMove = useMemo(() => {
+    if (appStage !== "coach" || !lastMoveForReview || !selectedPlan) return null;
+    if (opponentReviewDismissedPly === lastMoveForReview.ply) return null;
+    return isOpponentMoveForPlan(lastMoveForReview, selectedPlan) ? lastMoveForReview : null;
+  }, [appStage, lastMoveForReview, opponentReviewDismissedPly, selectedPlan]);
+  const pendingOpponentReview = pendingOpponentReviewMove ? reviewsByPly[pendingOpponentReviewMove.ply] ?? null : null;
 
   const makeNavigationSnapshot = useCallback(
     (overrides: Partial<NavigationSnapshot> = {}) =>
@@ -280,6 +298,7 @@ export default function HomePage() {
     setReviewLoading(false);
     setReviewError(null);
     setLastMoveForReview(null);
+    setOpponentReviewDismissedPly(null);
     setBotThinking(false);
     setBotError(null);
     setBotStrategyState({});
@@ -322,13 +341,14 @@ export default function HomePage() {
   }, [makeNavigationSnapshot, writeNavigationSnapshot]);
 
   useEffect(() => {
-    const primaryUci = planRecommendations?.primaryMove?.moveUci;
-    if (appStage !== "coach" || !primaryUci) {
+    const primaryUci = planRecommendations?.primaryMove?.moveUci ?? null;
+    const hintUci = primaryUci ?? planRecommendations?.expectedOpponentMove?.moveUci ?? null;
+    if (appStage !== "coach" || pendingOpponentReviewMove || !hintUci) {
       return;
     }
-    setHighlightedRecommendationUci(primaryUci);
-    setHighlightedMove({ from: primaryUci.slice(0, 2), to: primaryUci.slice(2, 4) });
-  }, [appStage, planRecommendations?.primaryMove?.moveUci]);
+    setHighlightedRecommendationUci(hintUci);
+    setHighlightedMove({ from: hintUci.slice(0, 2), to: hintUci.slice(2, 4) });
+  }, [appStage, pendingOpponentReviewMove, planRecommendations?.expectedOpponentMove?.moveUci, planRecommendations?.primaryMove?.moveUci]);
 
   useEffect(() => {
     function updateBoardWidth() {
@@ -423,11 +443,15 @@ export default function HomePage() {
     return game.moves({ square: selectedSquare as Square, verbose: true }).map((move) => move.to);
   }, [boardLocked, game, selectedSquare]);
 
-  const rememberMoveForReview = useCallback((fenBefore: string, fenAfter: string, moveUci: string, ply: number, source: "manual" | "bot") => {
-    setLastMoveForReview({ fenBefore, fenAfter, moveUci, ply, source });
-    setLastReview(null);
-    setReviewError(null);
-  }, []);
+  const rememberMoveForReview = useCallback(
+    (fenBefore: string, fenAfter: string, moveUci: string, ply: number, source: "manual" | "bot", nextHistoryUci: string[]) => {
+      setLastMoveForReview({ fenBefore, fenAfter, moveUci, ply, source, selectedPlanId, moveHistoryUci: nextHistoryUci });
+      setLastReview(null);
+      setReviewError(null);
+      setOpponentReviewDismissedPly(null);
+    },
+    [selectedPlanId]
+  );
 
   const applyMove = useCallback(
     (from: string, to: string, promotion?: string, source: "manual" | "bot" = "manual") => {
@@ -449,13 +473,14 @@ export default function HomePage() {
 
       const moveUci = `${from}${to}${promotion ?? ""}`;
       const ply = history.length + 1;
+      const nextHistoryUci = [...historyUci, moveUci];
       setGame(result.game);
       setSelectedSquare(null);
       setPendingPromotion(null);
       setBotError(null);
       setHighlightedMove({ from, to });
       setHighlightedRecommendationUci(null);
-      rememberMoveForReview(fenBefore, result.game.fen(), moveUci, ply, source);
+      rememberMoveForReview(fenBefore, result.game.fen(), moveUci, ply, source, nextHistoryUci);
 
       if (appStage === "black-first-move" && history.length === 0 && source === "manual") {
         const nextSnapshot = makeNavigationSnapshot({
@@ -464,7 +489,7 @@ export default function HomePage() {
           orientation: "black",
           selectedPlanId: null,
           firstOpponentMove: moveUci,
-          historyUci: [...historyUci, moveUci]
+          historyUci: nextHistoryUci
         });
         setFirstOpponentMove(moveUci);
         setAppStage("black-plan-selection");
@@ -532,10 +557,11 @@ export default function HomePage() {
           return;
         }
         setBotStrategyState(response.updatedStrategyState);
+        const nextHistoryUci = [...historyUci, response.move.moveUci];
         setGame(result.game);
         setHighlightedMove({ from, to });
         setHighlightedRecommendationUci(null);
-        rememberMoveForReview(fenBefore, result.game.fen(), response.move.moveUci, ply, "bot");
+        rememberMoveForReview(fenBefore, result.game.fen(), response.move.moveUci, ply, "bot", nextHistoryUci);
       })
       .catch((error: Error) => setBotError(error.message || "Le bot n'a pas pu jouer."))
       .finally(() => {
@@ -666,7 +692,15 @@ export default function HomePage() {
     (move: LastMoveForReview) => {
       setReviewLoading(true);
       setReviewError(null);
-      reviewMove({ fenBefore: move.fenBefore, fenAfter: move.fenAfter, moveUci: move.moveUci, elo: INTERNAL_ELO, moveHistoryPgn: pgn })
+      reviewMove({
+        fenBefore: move.fenBefore,
+        fenAfter: move.fenAfter,
+        moveUci: move.moveUci,
+        elo: INTERNAL_ELO,
+        moveHistoryPgn: pgn,
+        selectedPlanId: move.selectedPlanId,
+        moveHistoryUci: move.moveHistoryUci
+      })
         .then((review) => {
           setLastReview(review);
           setReviewsByPly((current) => ({ ...current, [move.ply]: review }));
@@ -677,6 +711,11 @@ export default function HomePage() {
     [pgn]
   );
 
+  useEffect(() => {
+    if (!pendingOpponentReviewMove || reviewsByPly[pendingOpponentReviewMove.ply] || reviewLoading) return;
+    reviewStoredMove(pendingOpponentReviewMove);
+  }, [pendingOpponentReviewMove, reviewLoading, reviewStoredMove, reviewsByPly]);
+
   function resetBoardOnly() {
     setGame(new Chess());
     setSelectedSquare(null);
@@ -686,6 +725,7 @@ export default function HomePage() {
     setReviewsByPly({});
     setLastReview(null);
     setLastMoveForReview(null);
+    setOpponentReviewDismissedPly(null);
     setLastMessage(null);
     setPlanRecommendations(null);
   }
@@ -706,6 +746,7 @@ export default function HomePage() {
     setHighlightedRecommendationUci(null);
     setLastMessage(null);
     setLastMoveForReview(null);
+    setOpponentReviewDismissedPly(null);
     if (userSide === "black" && nextHistory.length === 0) {
       setSelectedPlanId(null);
       setFirstOpponentMove(null);
@@ -754,7 +795,9 @@ export default function HomePage() {
         fenAfter: verbose.after,
         moveUci: `${move.from}${move.to}${move.promotion ?? ""}`,
         ply,
-        source: "manual"
+        source: "manual",
+        selectedPlanId,
+        moveHistoryUci: historyUci.slice(0, ply)
       });
       setMenuOpen(true);
     }
@@ -891,69 +934,163 @@ export default function HomePage() {
   }
 
   return renderShell(
-    <main className="coach-live-shell">
-      <section className="coach-board-column">
-        <div className="coach-board-stage">
-          <ChessCoachBoard
-            fen={fen}
-            boardWidth={boardWidth}
-            orientation={orientation}
-            selectedSquare={selectedSquare}
-            legalTargets={legalTargets}
-            highlightedMove={highlightedMove}
-            lastMove={lastBoardMove}
-            thinking={botThinking}
-            onDrop={requestMove}
-            onSquareClick={handleSquareClick}
-          />
+    <>
+      <main className="coach-live-shell">
+        <section className="coach-board-column">
+          <div className="coach-board-stage">
+            <ChessCoachBoard
+              fen={fen}
+              boardWidth={boardWidth}
+              orientation={orientation}
+              selectedSquare={selectedSquare}
+              legalTargets={legalTargets}
+              highlightedMove={highlightedMove}
+              lastMove={lastBoardMove}
+              thinking={botThinking}
+              onDrop={requestMove}
+              onSquareClick={handleSquareClick}
+            />
 
-          {pendingPromotion ? (
-            <div className="promotion-popover" role="dialog" aria-label="Choisir une promotion">
-              <p>Promotion</p>
-              <div>
-                {[
-                  ["q", "Dame"],
-                  ["r", "Tour"],
-                  ["b", "Fou"],
-                  ["n", "Cavalier"]
-                ].map(([piece, label]) => (
-                  <button
-                    key={piece}
-                    type="button"
-                    onClick={() => applyMove(pendingPromotion.from, pendingPromotion.to, piece)}
-                    className="control-button"
-                  >
-                    {label}
-                  </button>
-                ))}
+            {pendingPromotion ? (
+              <div className="promotion-popover" role="dialog" aria-label="Choisir une promotion">
+                <p>Promotion</p>
+                <div>
+                  {[
+                    ["q", "Dame"],
+                    ["r", "Tour"],
+                    ["b", "Fou"],
+                    ["n", "Cavalier"]
+                  ].map(([piece, label]) => (
+                    <button
+                      key={piece}
+                      type="button"
+                      onClick={() => applyMove(pendingPromotion.from, pendingPromotion.to, piece)}
+                      className="control-button"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          ) : null}
-        </div>
+            ) : null}
+          </div>
 
-        <div className="coach-board-controls">
-          <button type="button" onClick={undo} className="control-button">Annuler</button>
-          <button type="button" onClick={reset} className="control-button">Reset</button>
-          <button type="button" onClick={() => setOrientation(orientation === "white" ? "black" : "white")} className="control-button">Tourner</button>
-        </div>
+          <div className="coach-board-controls">
+            <button type="button" onClick={undo} className="control-button">Annuler</button>
+            <button type="button" onClick={reset} className="control-button">Reset</button>
+            <button type="button" onClick={() => setOrientation(orientation === "white" ? "black" : "white")} className="control-button">Tourner</button>
+          </div>
 
-        {botError ? <div className="coach-board-error">{botError}</div> : null}
+          {botError ? <div className="coach-board-error">{botError}</div> : null}
 
-        {lastMessage ? <div className="coach-board-note">{lastMessage}</div> : null}
-      </section>
+          {lastMessage ? <div className="coach-board-note">{lastMessage}</div> : null}
+        </section>
 
-      <section className="coach-panel-column">
-        <PlanFirstPanel
-          selectedPlan={selectedPlan}
-          recommendations={planRecommendations}
-          loading={planLoading}
-          error={planError}
-          highlightedMoveUci={highlightedRecommendationUci}
-          expectedReplyLabel={expectedReplyLabel}
-          onToggleRecommendation={handlePlanRecommendationToggle}
+        <section className="coach-panel-column">
+          <PlanFirstPanel
+            selectedPlan={selectedPlan}
+            recommendations={planRecommendations}
+            loading={planLoading}
+            error={planError}
+            highlightedMoveUci={highlightedRecommendationUci}
+            expectedReplyLabel={expectedReplyLabel}
+            suppressRecommendations={Boolean(pendingOpponentReviewMove)}
+            onToggleRecommendation={handlePlanRecommendationToggle}
+          />
+        </section>
+      </main>
+      {pendingOpponentReviewMove ? (
+        <OpponentMoveReviewModal
+          review={pendingOpponentReview}
+          loading={reviewLoading}
+          error={reviewError}
+          onRetry={() => reviewStoredMove(pendingOpponentReviewMove)}
+          onClose={() => setOpponentReviewDismissedPly(pendingOpponentReviewMove.ply)}
         />
+      ) : null}
+    </>
+  );
+}
+
+function OpponentMoveReviewModal({
+  review,
+  loading,
+  error,
+  onRetry,
+  onClose
+}: {
+  review: ReviewMoveResponse | null;
+  loading: boolean;
+  error: string | null;
+  onRetry: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="opponent-review-backdrop" role="presentation">
+      <section className="opponent-review-dialog" role="dialog" aria-modal="true" aria-labelledby="opponent-review-title">
+        <div className="opponent-review-head">
+          <p>Coup adverse</p>
+          <h2 id="opponent-review-title">Ce que ca change</h2>
+        </div>
+
+        {loading && !review ? (
+          <div className="opponent-review-loading" role="status">
+            <span className="coach-spinner" aria-hidden="true" />
+            <p>Analyse du coup adverse...</p>
+          </div>
+        ) : null}
+
+        {error ? (
+          <div className="opponent-review-error">
+            <p>{error}</p>
+            <button type="button" onClick={onRetry} className="opening-detail-toggle">
+              Reessayer
+            </button>
+          </div>
+        ) : null}
+
+        {review ? (
+          <div className="opponent-review-body">
+            <div className="opponent-review-summary">
+              <span>Coup joue</span>
+              <strong>{review.moveLabel}</strong>
+              <small>{review.qualityLabel} - {review.playedMoveEvalLabel}</small>
+            </div>
+
+            <ReviewNote title="Effet sur ton plan" body={review.connectionToPlan ?? "Le coach adapte le prochain coup a cette reponse."} />
+            <ReviewNote title="Ce qu'il fait" body={review.explanation.whatItDoes} />
+            <ReviewNote title="Ce qu'il aurait pu faire" body={review.explanation.comparisonWithBest} />
+
+            {review.bestMoveWasDifferent ? (
+              <div className="opponent-review-best">
+                <span>Meilleur repere adverse</span>
+                <strong>{review.bestMoveLabel}</strong>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="opponent-review-actions">
+          {!review && !loading ? (
+            <button type="button" onClick={onRetry} className="control-button">
+              Analyser ce coup
+            </button>
+          ) : null}
+          <button type="button" onClick={onClose} disabled={loading && !review} className="plan-start-button">
+            OK, afficher mon coup
+          </button>
+        </div>
       </section>
-    </main>
+    </div>
+  );
+}
+
+function ReviewNote({ title, body }: { title: string; body: string }) {
+  return (
+    <article className="opponent-review-note">
+      <h3>{title}</h3>
+      <p>{body}</p>
+    </article>
   );
 }
 

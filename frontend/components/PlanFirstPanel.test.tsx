@@ -54,6 +54,7 @@ const response: PlanRecommendationsResponse = {
   nextObjective: "Developper une piece.",
   recommendedPlanMoves: [recommendation],
   primaryMove: recommendation,
+  expectedOpponentMove: null,
   adaptedAlternatives: [],
   blockedExpectedMove: null,
   coachMessage: "Tu suis la Caro-Kann.",
@@ -77,5 +78,23 @@ describe("PlanFirstPanel", () => {
     render(<PlanFirstPanel recommendations={response} onToggleRecommendation={onSelect} highlightedMoveUci={null} />);
     fireEvent.click(screen.getByText("Afficher la fleche"));
     expect(onSelect).toHaveBeenCalledWith(recommendation);
+  });
+
+  it("does not turn an opponent reply into the player's recommendation", () => {
+    render(
+      <PlanFirstPanel
+        recommendations={{ ...response, primaryMove: null, planMoves: [], expectedOpponentMove: recommendation }}
+        onToggleRecommendation={() => undefined}
+        highlightedMoveUci={null}
+      />
+    );
+    expect(screen.queryByText("Afficher la fleche")).toBeNull();
+    expect(screen.getByText("A l'adversaire de jouer. Ligne attendue : Cavalier g8 -> f6.")).toBeTruthy();
+  });
+
+  it("waits for the opponent review before showing the next player move", () => {
+    render(<PlanFirstPanel recommendations={response} suppressRecommendations onToggleRecommendation={() => undefined} highlightedMoveUci={null} />);
+    expect(screen.queryByText("Afficher la fleche")).toBeNull();
+    expect(screen.getByText("Valide l'analyse du coup adverse pour afficher ton prochain coup du plan.")).toBeTruthy();
   });
 });

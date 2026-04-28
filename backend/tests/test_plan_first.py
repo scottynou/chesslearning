@@ -50,6 +50,7 @@ def test_caro_kann_after_e4_proposes_c6(monkeypatch) -> None:
     assert data["planState"]["status"] == "on_plan"
     assert data["planState"]["recommendedPlanMoves"] == ["c7c6"]
     assert data["mergedRecommendations"][0]["moveUci"] == "c7c6"
+    assert data["expectedOpponentMove"] is None
 
 
 def test_caro_kann_after_e4_c6_d4_proposes_d5(monkeypatch) -> None:
@@ -121,6 +122,33 @@ def test_selected_plan_stays_locked_when_position_matches_another_plan(monkeypat
     assert data["planState"]["status"] == "opponent_deviated"
 
 
+def test_opponent_turn_returns_expected_move_without_recommendation(monkeypatch) -> None:
+    import app.strategy.plan_engine as plan_engine
+
+    monkeypatch.setattr(plan_engine, "StockfishEngine", lambda: FakePlanStockfish())
+    client = TestClient(app)
+    board = chess.Board()
+    for move in ["e2e4", "c7c6"]:
+        board.push_uci(move)
+    response = client.post(
+        "/plan-recommendations",
+        json={
+            "fen": board.fen(),
+            "selectedPlanId": "caro_kann_beginner",
+            "elo": 1200,
+            "moveHistoryUci": ["e2e4", "c7c6"],
+            "maxMoves": 5,
+            "engineDepth": 1,
+        },
+    )
+    data = response.json()
+    assert data["primaryMove"] is None
+    assert data["planMoves"] == []
+    assert data["planState"]["recommendedPlanMoves"] == []
+    assert data["recommendedPlanMoves"] == []
+    assert data["expectedOpponentMove"]["moveUci"] == "d2d4"
+
+
 def test_skill_level_changes_visible_technical_window(monkeypatch) -> None:
     import app.strategy.plan_engine as plan_engine
 
@@ -163,8 +191,8 @@ def test_opening_success_after_main_line(monkeypatch) -> None:
         },
     )
     data = response.json()
-    assert data["phaseStatus"] == "opening_success"
-    assert data["planProgress"]["percent"] == 100
+    assert data["phaseStatus"] == "opening_in_progress"
+    assert 35 <= data["planProgress"]["percent"] < 100
 
 
 def test_opening_data_main_menu_is_pedagogical() -> None:

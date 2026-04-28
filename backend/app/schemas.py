@@ -195,6 +195,8 @@ class ReviewMoveRequest(BaseModel):
     move_uci: str = Field(alias="moveUci")
     elo: int = Field(default=1200, ge=600, le=3200)
     move_history_pgn: str | None = Field(default=None, alias="moveHistoryPgn")
+    selected_plan_id: str | None = Field(default=None, alias="selectedPlanId")
+    move_history_uci: list[str] = Field(default_factory=list, alias="moveHistoryUci")
 
     @field_validator("fen_before", "fen_after")
     @classmethod
@@ -374,6 +376,7 @@ class PlanRecommendationsResponse(BaseModel):
     next_objective: str = Field(default="", alias="nextObjective")
     recommended_plan_moves: list[dict[str, Any]] = Field(default_factory=list, alias="recommendedPlanMoves")
     primary_move: dict[str, Any] | None = Field(default=None, alias="primaryMove")
+    expected_opponent_move: dict[str, Any] | None = Field(default=None, alias="expectedOpponentMove")
     adapted_alternatives: list[dict[str, Any]] = Field(default_factory=list, alias="adaptedAlternatives")
     blocked_expected_move: dict[str, Any] | None = Field(default=None, alias="blockedExpectedMove")
     coach_message: str = Field(default="", alias="coachMessage")

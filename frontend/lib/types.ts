@@ -188,6 +188,8 @@ export type PlanRecommendationsResponse = {
     criteria?: Array<{ label: string; ok: boolean }>;
     linePly?: number;
     lineTotal?: number;
+    tempoPly?: number;
+    tempoTotal?: number;
   };
   currentObjective: string;
   lastEvent?: string;
@@ -195,6 +197,7 @@ export type PlanRecommendationsResponse = {
   nextObjective?: string;
   recommendedPlanMoves?: PlanRecommendation[];
   primaryMove: PlanRecommendation | null;
+  expectedOpponentMove: PlanRecommendation | null;
   adaptedAlternatives: PlanRecommendation[];
   blockedExpectedMove: {
     moveUci: string;

@@ -9,6 +9,7 @@ type PlanFirstPanelProps = {
   error?: string | null;
   highlightedMoveUci?: string | null;
   expectedReplyLabel?: string | null;
+  suppressRecommendations?: boolean;
   onToggleRecommendation: (recommendation: PlanRecommendation) => void;
 };
 
@@ -19,13 +20,15 @@ export function PlanFirstPanel({
   error,
   highlightedMoveUci,
   expectedReplyLabel,
+  suppressRecommendations,
   onToggleRecommendation
 }: PlanFirstPanelProps) {
-  const primary = recommendations?.primaryMove ?? recommendations?.planMoves[0] ?? recommendations?.mergedRecommendations[0] ?? null;
+  const primary = recommendations?.primaryMove ?? null;
+  const expectedOpponentMove = recommendations?.expectedOpponentMove ?? null;
   const alternatives = recommendations?.adaptedAlternatives ?? [];
   const progress = recommendations?.planProgress;
   const planName = recommendations?.selectedPlan?.nameFr ?? selectedPlan?.nameFr ?? "Plan general";
-  const moves = [primary, ...alternatives].filter(Boolean) as PlanRecommendation[];
+  const moves = suppressRecommendations ? [] : ([primary, ...alternatives].filter(Boolean) as PlanRecommendation[]);
   const hasStaleRecommendations = Boolean(loading && recommendations);
 
   return (
@@ -64,13 +67,16 @@ export function PlanFirstPanel({
               <CoachFact title="Ce qui vient de se passer" value={compactText(recommendations.lastEvent || "La partie est prete.", 170)} />
               <CoachFact title="Impact" value={compactText(recommendations.whatChanged || recommendations.coachMessage, 170)} />
               <CoachFact title="Objectif" value={compactText(recommendations.nextObjective || recommendations.currentObjective, 170)} />
+              {expectedOpponentMove ? <CoachFact title="Reponse adverse attendue" value={`Ligne du plan : ${expectedOpponentMove.beginnerLabel}.`} /> : null}
               {expectedReplyLabel ? <CoachFact title="Reponse attendue" value={`Ligne du plan : ${expectedReplyLabel}. Sinon, on adapte.`} /> : null}
             </div>
           </div>
 
-          {moves.length > 0 ? (
+          {suppressRecommendations ? (
+            <div className="live-empty">Valide l&apos;analyse du coup adverse pour afficher ton prochain coup du plan.</div>
+          ) : moves.length > 0 ? (
             <div className="live-move-section">
-              <h3>Coup recommandé</h3>
+              <h3>Coup recommande</h3>
               {moves.map((item, index) => (
                 <RecommendationCard
                   key={`${item.moveUci}-${index}`}
@@ -81,6 +87,8 @@ export function PlanFirstPanel({
                 />
               ))}
             </div>
+          ) : expectedOpponentMove ? (
+            <div className="live-empty">A l&apos;adversaire de jouer. Ligne attendue : {expectedOpponentMove.beginnerLabel}.</div>
           ) : (
             <div className="live-empty">Aucun coup de plan clair. Joue un coup legal simple ou consulte les details.</div>
           )}

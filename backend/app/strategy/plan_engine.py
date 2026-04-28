@@ -43,6 +43,8 @@ def get_plan_recommendations(
     deviation = get_opponent_deviation(active_plan["id"], move_history) if active_plan else None
     raw_plan_moves = get_next_plan_steps(active_plan["id"], move_history) if active_plan and phase == "opening" else []
     plan_moves = [move for move in raw_plan_moves if _is_legal_uci(board, move)]
+    plan_color = color_for_plan(active_plan)
+    waiting_for_opponent = active_plan is not None and plan_color is not None and board.turn != plan_color and phase == "opening"
     level_settings = skill_level_settings(skill_level, elo, max_moves)
 
     safety_window = min(10, max(10, int(level_settings["technical_limit"]) * 2))
@@ -60,7 +62,10 @@ def get_plan_recommendations(
     )
 
     plan_items = [item for item in merged if item["source"] in {"plan", "plan_and_engine"}]
-    primary_move = choose_primary_move(plan_items, merged)
+    expected_opponent_move = choose_primary_move(plan_items, merged) if waiting_for_opponent else None
+    visible_plan_items = [] if waiting_for_opponent else plan_items
+    visible_merged = [] if waiting_for_opponent else merged
+    primary_move = None if waiting_for_opponent else choose_primary_move(visible_plan_items, visible_merged)
     phase_status = phase_status_for(
         board=board,
         plan=active_plan,
@@ -73,7 +78,7 @@ def get_plan_recommendations(
         status = "plan_completed"
 
     adapted_alternatives = adapted_alternatives_for(
-        merged=merged,
+        merged=visible_merged,
         primary_move=primary_move,
         status=status,
         limit=int(level_settings["alternative_limit"]),
@@ -97,19 +102,19 @@ def get_plan_recommendations(
         "status": status,
         "currentStepIndex": min(len(move_history), len(active_plan.get("mainLineUci", []))) if active_plan else 0,
         "currentGoals": active_plan.get("coreIdeas", [])[:3] if active_plan else fallback_goals(phase),
-        "nextObjectives": next_objectives(active_plan, phase, merged),
+        "nextObjectives": next_objectives(active_plan, phase, visible_merged),
         "knownOpponentDeviation": deviation,
-        "recommendedPlanMoves": plan_moves,
+        "recommendedPlanMoves": [] if waiting_for_opponent else plan_moves,
         "fallbackPrinciples": fallback_goals(phase),
-        "engineSafetyWarning": next((item["warning"] for item in merged if item.get("warning")), None),
+        "engineSafetyWarning": next((item["warning"] for item in visible_merged if item.get("warning")), None),
         "statusExplanation": coach_message,
     }
 
     return {
         "planState": plan_state,
-        "planMoves": plan_items,
+        "planMoves": visible_plan_items,
         "engineMoves": technical_moves,
-        "mergedRecommendations": merged,
+        "mergedRecommendations": visible_merged,
         "explanationContext": {
             "opening": active_plan,
             "detectedOpening": detected_plan,
@@ -126,8 +131,9 @@ def get_plan_recommendations(
         "lastEvent": last_event,
         "whatChanged": what_changed,
         "nextObjective": next_objective,
-        "recommendedPlanMoves": plan_items,
+        "recommendedPlanMoves": visible_plan_items,
         "primaryMove": primary_move,
+        "expectedOpponentMove": expected_opponent_move,
         "adaptedAlternatives": adapted_alternatives,
         "blockedExpectedMove": blocked_expected_move,
         "coachMessage": coach_message,
@@ -215,6 +221,16 @@ def choose_primary_move(plan_items: list[dict[str, Any]], merged: list[dict[str,
     return merged[0] if merged else None
 
 
+def color_for_plan(plan: dict[str, Any] | None) -> chess.Color | None:
+    if not plan:
+        return None
+    if plan.get("side") == "white":
+        return chess.WHITE
+    if plan.get("side") == "black":
+        return chess.BLACK
+    return None
+
+
 def adapted_alternatives_for(
     merged: list[dict[str, Any]],
     primary_move: dict[str, Any] | None,
@@ -251,14 +267,15 @@ def phase_status_for(
 ) -> str:
     if not plan:
         return "fallback"
-    if detect_opening_success(board, plan, move_history, primary_move)["completed"] >= 3:
+    success = detect_opening_success(board, plan, move_history, primary_move)
+    line = plan.get("mainLineUci", [])
+    minimum_ply = max(6, min(10, len(line) + 2))
+    if success["completed"] >= 4 and len(move_history) >= minimum_ply:
         return "opening_success"
     if status == "opponent_deviated":
         return "adapted"
     if status == "transposed":
         return "transposed"
-    if status == "plan_completed":
-        return "opening_success"
     return "opening_in_progress"
 
 
@@ -267,9 +284,12 @@ def plan_progress_for(board: chess.Board, plan: dict[str, Any] | None, move_hist
         return {"percent": 0, "completed": 0, "total": 0, "criteria": []}
     success = detect_opening_success(board, plan, move_history, None)
     total_line = max(1, len(plan.get("mainLineUci", [])))
+    target_ply = max(8, min(12, total_line + 4))
     line_percent = min(100, round((min(len(move_history), total_line) / total_line) * 100))
+    tempo_percent = min(100, round((min(len(move_history), target_ply) / target_ply) * 100))
     criteria_percent = round((success["completed"] / max(1, success["total"])) * 100)
-    percent = 100 if phase_status == "opening_success" else max(line_percent, criteria_percent)
+    raw_percent = round(line_percent * 0.5 + criteria_percent * 0.35 + tempo_percent * 0.15)
+    percent = 100 if phase_status == "opening_success" else min(92, raw_percent)
     return {
         "percent": percent,
         "completed": success["completed"],
@@ -277,6 +297,8 @@ def plan_progress_for(board: chess.Board, plan: dict[str, Any] | None, move_hist
         "criteria": success["criteria"],
         "linePly": min(len(move_history), total_line),
         "lineTotal": total_line,
+        "tempoPly": min(len(move_history), target_ply),
+        "tempoTotal": target_ply,
     }
 
 

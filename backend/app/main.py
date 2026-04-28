@@ -167,7 +167,7 @@ def explain_candidate_endpoint(request: ExplainCandidateRequest) -> ExplainCandi
 
 @app.post("/review-move", response_model=ReviewMoveResponse)
 def review_move_endpoint(request: ReviewMoveRequest) -> ReviewMoveResponse:
-    cache_key = f"{request.fen_before}|{request.fen_after}|{request.move_uci}|{request.elo}"
+    cache_key = f"{request.fen_before}|{request.fen_after}|{request.move_uci}|{request.elo}|{request.selected_plan_id}|{','.join(request.move_history_uci)}"
     cached = review_cache.get(cache_key)
     if cached is not None:
         return cached

@@ -72,6 +72,8 @@ export function reviewMove(params: {
   moveUci: string;
   elo: number;
   moveHistoryPgn?: string;
+  selectedPlanId?: string | null;
+  moveHistoryUci?: string[];
 }): Promise<ReviewMoveResponse> {
   return requestJson<ReviewMoveResponse>("/review-move", params);
 }
