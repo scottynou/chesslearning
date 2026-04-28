@@ -1,0 +1,121 @@
+{
+  "hosting": {
+    "public": "frontend/out",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "predeploy": [
+      "npm --prefix frontend ci",
+      "npm --prefix frontend run build:firebase"
+    ],
+    "headers": [
+      {
+        "source": "/_next/static/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000, immutable"
+          }
+        ]
+      },
+      {
+        "source": "/landing/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=86400"
+          }
+        ]
+      },
+      {
+        "source": "/openings/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=86400"
+          }
+        ]
+      }
+    ],
+    "rewrites": [
+      {
+        "source": "/health",
+        "run": {
+          "serviceId": "chess-elo-coach-api",
+          "region": "europe-west1",
+          "pinTag": true
+        }
+      },
+      {
+        "source": "/available-plans",
+        "run": {
+          "serviceId": "chess-elo-coach-api",
+          "region": "europe-west1",
+          "pinTag": true
+        }
+      },
+      {
+        "source": "/analyze",
+        "run": {
+          "serviceId": "chess-elo-coach-api",
+          "region": "europe-west1",
+          "pinTag": true
+        }
+      },
+      {
+        "source": "/explain",
+        "run": {
+          "serviceId": "chess-elo-coach-api",
+          "region": "europe-west1",
+          "pinTag": true
+        }
+      },
+      {
+        "source": "/explain-candidate",
+        "run": {
+          "serviceId": "chess-elo-coach-api",
+          "region": "europe-west1",
+          "pinTag": true
+        }
+      },
+      {
+        "source": "/review-move",
+        "run": {
+          "serviceId": "chess-elo-coach-api",
+          "region": "europe-west1",
+          "pinTag": true
+        }
+      },
+      {
+        "source": "/bot-move",
+        "run": {
+          "serviceId": "chess-elo-coach-api",
+          "region": "europe-west1",
+          "pinTag": true
+        }
+      },
+      {
+        "source": "/position-plan",
+        "run": {
+          "serviceId": "chess-elo-coach-api",
+          "region": "europe-west1",
+          "pinTag": true
+        }
+      },
+      {
+        "source": "/plan-recommendations",
+        "run": {
+          "serviceId": "chess-elo-coach-api",
+          "region": "europe-west1",
+          "pinTag": true
+        }
+      },
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

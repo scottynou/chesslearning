@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:firebase": "node scripts/build-firebase.mjs",
     "build:live-server": "next build",
     "lint": "eslint .",
     "test": "vitest run"

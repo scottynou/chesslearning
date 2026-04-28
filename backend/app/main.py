@@ -57,7 +57,7 @@ frontend_origins = sorted(
 )
 frontend_origin_regex = os.getenv(
     "FRONTEND_ORIGIN_REGEX",
-    r"https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.onrender\.com",
+    r"https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.(onrender\.com|web\.app|firebaseapp\.com)",
 )
 try:
     frontend_origin_pattern = re.compile(frontend_origin_regex)
