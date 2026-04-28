@@ -248,6 +248,7 @@ export default function HomePage() {
   const skipNextEloPersist = useRef(true);
   const lastEloAdjustmentPly = useRef<number | null>(null);
   const previousEffectiveElo = useRef(DEFAULT_BASE_ELO);
+  const preloadingReviewPlies = useRef<Set<number>>(new Set());
 
   const fen = game.fen();
   const history = useMemo(() => game.history({ verbose: true }) as VerboseMove[], [game]);
@@ -795,10 +796,8 @@ export default function HomePage() {
     setHighlightedMove({ from: recommendation.moveUci.slice(0, 2), to: recommendation.moveUci.slice(2, 4) });
   }, [highlightedRecommendationUci]);
 
-  const reviewStoredMove = useCallback(
-    (move: LastMoveForReview) => {
-      setReviewLoading(true);
-      setReviewError(null);
+  const requestStoredReview = useCallback(
+    (move: LastMoveForReview) =>
       reviewMove({
         fenBefore: move.fenBefore,
         fenAfter: move.fenAfter,
@@ -807,7 +806,15 @@ export default function HomePage() {
         moveHistoryPgn: pgn,
         selectedPlanId: move.selectedPlanId,
         moveHistoryUci: move.moveHistoryUci
-      })
+      }),
+    [effectiveCoachElo, pgn]
+  );
+
+  const reviewStoredMove = useCallback(
+    (move: LastMoveForReview) => {
+      setReviewLoading(true);
+      setReviewError(null);
+      requestStoredReview(move)
         .then((review) => {
           setLastReview(review);
           setReviewsByPly((current) => ({ ...current, [move.ply]: review }));
@@ -815,18 +822,34 @@ export default function HomePage() {
         .catch((error: Error) => setReviewError(error.message || "Impossible d'analyser ce coup."))
         .finally(() => setReviewLoading(false));
     },
-    [effectiveCoachElo, pgn]
+    [requestStoredReview]
+  );
+
+  const preloadStoredMove = useCallback(
+    (move: LastMoveForReview) => {
+      if (preloadingReviewPlies.current.has(move.ply)) return;
+      preloadingReviewPlies.current.add(move.ply);
+      requestStoredReview(move)
+        .then((review) => {
+          setReviewsByPly((current) => ({ ...current, [move.ply]: review }));
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          preloadingReviewPlies.current.delete(move.ply);
+        });
+    },
+    [requestStoredReview]
   );
 
   useEffect(() => {
-    if (!latestUserReviewMove || reviewsByPly[latestUserReviewMove.ply] || reviewLoading) return;
-    reviewStoredMove(latestUserReviewMove);
-  }, [latestUserReviewMove, reviewLoading, reviewStoredMove, reviewsByPly]);
+    if (!latestUserReviewMove || reviewsByPly[latestUserReviewMove.ply]) return;
+    preloadStoredMove(latestUserReviewMove);
+  }, [latestUserReviewMove, preloadStoredMove, reviewsByPly]);
 
   useEffect(() => {
-    if (!latestOpponentReviewMove || reviewsByPly[latestOpponentReviewMove.ply] || reviewLoading) return;
-    reviewStoredMove(latestOpponentReviewMove);
-  }, [latestOpponentReviewMove, reviewLoading, reviewStoredMove, reviewsByPly]);
+    if (!latestOpponentReviewMove || reviewsByPly[latestOpponentReviewMove.ply]) return;
+    preloadStoredMove(latestOpponentReviewMove);
+  }, [latestOpponentReviewMove, preloadStoredMove, reviewsByPly]);
 
   useEffect(() => {
     if (!autoEloEnabled || !latestUserReviewMove || !latestUserReview) return;
@@ -1179,7 +1202,12 @@ export default function HomePage() {
               review={latestOpponentReview}
               loading={reviewLoading && !latestOpponentReview}
               error={reviewError}
-              onOpen={() => setOpenOpponentReviewPly(latestOpponentReviewMove.ply)}
+              onOpen={() => {
+                setOpenOpponentReviewPly(latestOpponentReviewMove.ply);
+                if (!latestOpponentReview && !reviewLoading) {
+                  reviewStoredMove(latestOpponentReviewMove);
+                }
+              }}
               onClose={() => setOpenOpponentReviewPly(null)}
               onRetry={() => reviewStoredMove(latestOpponentReviewMove)}
             />
@@ -1216,7 +1244,7 @@ function OpponentMoveInsight({
   }
 
   return (
-    <section className="opponent-review-dialog is-inline" aria-labelledby="opponent-review-title">
+    <section className="opponent-review-card is-inline" aria-labelledby="opponent-review-title">
       <div className="opponent-review-head">
         <p>Coup adverse</p>
         <h2 id="opponent-review-title">Ce que ca change</h2>
