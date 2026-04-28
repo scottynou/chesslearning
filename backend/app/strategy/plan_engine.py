@@ -142,10 +142,12 @@ def get_plan_recommendations(
 
     phase_display = phase_display_for(phase, phase_status)
     accuracy_profile = accuracy_profile_for(
+        board=board,
         phase_display=phase_display,
         phase_status=phase_status,
         opening_state=opening_state,
         engine_candidates=engine_candidates,
+        move_history=move_history,
         player_turn=player_turn,
     )
     if player_turn and visible_merged and should_shape_for_human_accuracy(phase_display, phase_status, opening_state):
@@ -188,6 +190,7 @@ def get_plan_recommendations(
         opening_state=opening_state,
         player_turn=player_turn,
         engine_candidates=engine_candidates,
+        draw_pressure=accuracy_profile.get("drawPressure"),
     )
     current_objective = current_objective_for(active_plan, phase, primary_move)
     progress = plan_progress_for(board, active_plan, move_history, phase_status)
@@ -485,12 +488,20 @@ def should_shape_for_human_accuracy(phase_display: dict[str, Any], phase_status:
 
 def accuracy_profile_for(
     *,
+    board: chess.Board,
     phase_display: dict[str, Any],
     phase_status: str,
     opening_state: str,
     engine_candidates: list[Any],
+    move_history: list[str],
     player_turn: bool,
 ) -> dict[str, Any]:
+    draw_pressure = draw_pressure_for(
+        board=board,
+        phase_display=phase_display,
+        move_history=move_history,
+        engine_candidates=engine_candidates,
+    )
     if not player_turn:
         return {
             "mode": "idle",
@@ -498,6 +509,7 @@ def accuracy_profile_for(
             "min": 78,
             "max": 88,
             "reason": "Hors tour joueur.",
+            "drawPressure": draw_pressure,
         }
 
     position_score = score_from_side_to_move(engine_candidates)
@@ -511,6 +523,7 @@ def accuracy_profile_for(
             "min": 92,
             "max": 100,
             "reason": "Position critique : on accepte des coups tres proches du moteur pour ne pas perdre.",
+            "drawPressure": draw_pressure,
         }
     if phase_status in {"adapted", "fallback"} or opening_state in {"recoverable", "abandoned"} or position_score <= -90:
         return {
@@ -519,6 +532,25 @@ def accuracy_profile_for(
             "min": 84,
             "max": 96,
             "reason": "Sous pression : on monte la qualite sans devenir systematiquement machine.",
+            "drawPressure": draw_pressure,
+        }
+    if draw_pressure["level"] == "critical":
+        return {
+            "mode": "draw_break",
+            "target": 94,
+            "min": 88,
+            "max": 99,
+            "reason": "La position devient trop nulle : on cherche des coups plus precis qui gardent des chances de gain.",
+            "drawPressure": draw_pressure,
+        }
+    if draw_pressure["level"] == "warning":
+        return {
+            "mode": "draw_break",
+            "target": 91,
+            "min": 84,
+            "max": 97,
+            "reason": "Risque de simplification vers nulle : on augmente legerement la precision.",
+            "drawPressure": draw_pressure,
         }
     if phase_key == "endgame":
         return {
@@ -527,6 +559,7 @@ def accuracy_profile_for(
             "min": 82,
             "max": 94,
             "reason": "Finale : les coups doivent convertir proprement.",
+            "drawPressure": draw_pressure,
         }
     if position_score >= 220:
         return {
@@ -535,6 +568,7 @@ def accuracy_profile_for(
             "min": 76,
             "max": 86,
             "reason": "Position confortable : on evite les coups inutilement parfaits.",
+            "drawPressure": draw_pressure,
         }
     return {
         "mode": "human",
@@ -542,7 +576,57 @@ def accuracy_profile_for(
         "min": 78,
         "max": 89,
         "reason": "Zone humaine forte : proche du moteur, mais pas toujours top engine.",
+        "drawPressure": draw_pressure,
     }
+
+
+def draw_pressure_for(
+    *,
+    board: chess.Board,
+    phase_display: dict[str, Any],
+    move_history: list[str],
+    engine_candidates: list[Any],
+) -> dict[str, Any]:
+    score = score_from_side_to_move(engine_candidates)
+    abs_score = abs(score)
+    phase_key = str(phase_display.get("key", "opening"))
+    piece_map = board.piece_map()
+    piece_count = len(piece_map)
+    pawns = sum(1 for piece in piece_map.values() if piece.piece_type == chess.PAWN)
+    queens = sum(1 for piece in piece_map.values() if piece.piece_type == chess.QUEEN)
+    major_pieces = sum(1 for piece in piece_map.values() if piece.piece_type in {chess.QUEEN, chess.ROOK})
+    low_spread = candidate_score_spread(engine_candidates[:5]) <= 24
+
+    base = {
+        "level": "none",
+        "reason": "Pas de signal de nulle.",
+        "scoreCp": score,
+        "pieceCount": piece_count,
+        "pawns": pawns,
+        "queens": queens,
+    }
+
+    if board.is_insufficient_material():
+        return {**base, "level": "critical", "reason": "Materiel insuffisant : la partie tend deja vers nulle."}
+    if board.halfmove_clock >= 86:
+        return {**base, "level": "critical", "reason": "Regle des 50 coups proche : il faut creer une rupture utile."}
+    if phase_key == "endgame" and abs_score <= 60 and (queens == 0 or pawns <= 6):
+        return {**base, "level": "critical", "reason": "Finale tres egale avec peu de materiel."}
+    if phase_key == "endgame" and abs_score <= 105:
+        return {**base, "level": "warning", "reason": "Finale encore jouable mais trop proche de l'egalite."}
+    if len(move_history) >= 22 and queens == 0 and major_pieces <= 4 and abs_score <= 70:
+        return {**base, "level": "warning", "reason": "Les dames sont sorties et l'evaluation reste plate."}
+    if len(move_history) >= 26 and abs_score <= 45 and low_spread:
+        return {**base, "level": "warning", "reason": "Les meilleurs coups se valent trop : risque de partie plate."}
+    return base
+
+
+def candidate_score_spread(engine_candidates: list[Any]) -> int:
+    scores = [getattr(candidate, "eval_cp", None) for candidate in engine_candidates]
+    numeric_scores = [int(score) for score in scores if score is not None]
+    if len(numeric_scores) < 2:
+        return 999
+    return max(numeric_scores) - min(numeric_scores)
 
 
 def shape_recommendations_for_accuracy(items: list[dict[str, Any]], profile: dict[str, Any]) -> list[dict[str, Any]]:
@@ -604,7 +688,11 @@ def human_accuracy_sort_score(item: dict[str, Any], profile: dict[str, Any]) -> 
     maximum = int(profile.get("max", 89))
     mode = str(profile.get("mode", "human"))
 
-    if mode == "pressure":
+    if mode == "draw_break":
+        over_penalty = 0.25
+        under_penalty = 3.6
+        distance_penalty = 1.05
+    elif mode == "pressure":
         over_penalty = 0.45
         under_penalty = 3.4
         distance_penalty = 1.35
@@ -630,11 +718,36 @@ def human_accuracy_sort_score(item: dict[str, Any], profile: dict[str, Any]) -> 
         + plan_fit * 0.23
         + simplicity * 0.15
         + engine_score * 0.14
+        + draw_avoidance_bonus(item, profile)
         - risk * 0.42
         - abs(engine_score - target) * distance_penalty
         - max(0, minimum - engine_score) * under_penalty
         - max(0, engine_score - maximum) * over_penalty
     )
+
+
+def draw_avoidance_bonus(item: dict[str, Any], profile: dict[str, Any]) -> float:
+    if str(profile.get("mode")) != "draw_break":
+        return 0.0
+    candidate_eval = candidate_eval_cp(item)
+    engine_rank = item.get("engineRank") or 8
+    tactical_risk = int(item.get("tacticalRisk") or 0)
+    positive_eval_bonus = max(-40, min(220, candidate_eval)) * 0.10
+    initiative_bonus = max(0, 8 - int(engine_rank)) * 1.2
+    risk_penalty = max(0, tactical_risk - 26) * 0.45
+    return positive_eval_bonus + initiative_bonus - risk_penalty
+
+
+def candidate_eval_cp(item: dict[str, Any]) -> int:
+    candidate = item.get("candidate")
+    if isinstance(candidate, dict):
+        value = candidate.get("evalCp")
+        if value is not None:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return 0
+    return 0
 
 
 def annotate_accuracy(item: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
@@ -745,6 +858,7 @@ def adaptive_signal_for(
     opening_state: str,
     player_turn: bool,
     engine_candidates: list[Any],
+    draw_pressure: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not player_turn:
         return {
@@ -765,6 +879,7 @@ def adaptive_signal_for(
     adapted = phase_status in {"adapted", "fallback"} or opening_state in {"recoverable", "abandoned"}
     position_score = score_from_side_to_move(engine_candidates)
     mating_danger = mate_danger_from_side_to_move(engine_candidates)
+    draw_level = str((draw_pressure or {}).get("level", "none"))
 
     if warning or mating_danger == "critical" or position_score <= -260 or engine_score <= 45 or tactical_risk >= 45:
         return {
@@ -772,11 +887,23 @@ def adaptive_signal_for(
             "suggestedBoostDelta": 100,
             "reason": "La position est sous forte pression : le coach monte d'un cran pour chercher des coups plus precis.",
         }
+    if draw_level == "critical":
+        return {
+            "pressure": "drawish",
+            "suggestedBoostDelta": 100,
+            "reason": "La partie risque de s'aplatir vers nulle : le coach monte en precision pour garder des chances de gain.",
+        }
     if adapted or mating_danger == "warning" or position_score <= -90 or engine_score <= 65 or tactical_risk >= 28:
         return {
             "pressure": "worse",
             "suggestedBoostDelta": 50,
             "reason": "L'adversaire met assez de pression pour augmenter legerement le niveau cache.",
+        }
+    if draw_level == "warning":
+        return {
+            "pressure": "drawish",
+            "suggestedBoostDelta": 50,
+            "reason": "La position devient trop egale : le coach augmente legerement le niveau cache.",
         }
     if position_score >= 160 and engine_score >= 74 and tactical_risk <= 18 and not warning:
         return {

@@ -204,7 +204,7 @@ export type AiRerankStatus = {
 };
 
 export type AdaptiveSignal = {
-  pressure: "stable" | "worse" | "critical";
+  pressure: "stable" | "worse" | "critical" | "drawish";
   suggestedBoostDelta: number;
   reason: string;
 };

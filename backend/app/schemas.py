@@ -467,7 +467,7 @@ class AiRerankStatus(BaseModel):
 class AdaptiveSignal(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    pressure: Literal["stable", "worse", "critical"]
+    pressure: Literal["stable", "worse", "critical", "drawish"]
     suggested_boost_delta: int = Field(alias="suggestedBoostDelta")
     reason: str
 

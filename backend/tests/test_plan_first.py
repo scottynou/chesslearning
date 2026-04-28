@@ -279,6 +279,79 @@ def test_survival_accuracy_shaping_keeps_best_engine_move() -> None:
     assert shaped[0]["moveUci"] == "d1h5"
 
 
+def test_drawish_positions_raise_hidden_accuracy_profile() -> None:
+    from app.strategy.plan_engine import accuracy_profile_for
+
+    board = chess.Board("8/8/8/2k5/8/2K5/4P3/8 w - - 0 42")
+    profile = accuracy_profile_for(
+        board=board,
+        phase_display={"key": "endgame"},
+        phase_status="opening_success",
+        opening_state="completed",
+        engine_candidates=[SimpleNamespace(eval_cp=18, mate_in=None)],
+        move_history=["e2e4"] * 24,
+        player_turn=True,
+    )
+
+    assert profile["mode"] == "draw_break"
+    assert profile["target"] >= 91
+    assert profile["drawPressure"]["level"] == "critical"
+
+
+def test_drawish_adaptive_signal_boosts_precision() -> None:
+    from app.strategy.plan_engine import adaptive_signal_for
+
+    signal = adaptive_signal_for(
+        primary_move={"engineScore": 88, "tacticalRisk": 12, "warning": None},
+        phase_status="opening_success",
+        blocked_expected_move=None,
+        opening_state="completed",
+        player_turn=True,
+        engine_candidates=[SimpleNamespace(eval_cp=12, mate_in=None)],
+        draw_pressure={"level": "critical"},
+    )
+
+    assert signal["pressure"] == "drawish"
+    assert signal["suggestedBoostDelta"] == 100
+
+
+def test_draw_break_shaping_prefers_winning_chances_over_flat_move() -> None:
+    from app.strategy.plan_engine import shape_recommendations_for_accuracy
+
+    flat_move = {
+        "moveUci": "c3d3",
+        "source": "engine",
+        "engineRank": 1,
+        "planFitScore": 35,
+        "engineScore": 92,
+        "beginnerSimplicityScore": 76,
+        "tacticalRisk": 8,
+        "finalCoachScore": 86,
+        "warning": None,
+        "candidate": {"evalCp": 12},
+    }
+    active_move = {
+        "moveUci": "e2e4",
+        "source": "engine",
+        "engineRank": 2,
+        "planFitScore": 35,
+        "engineScore": 90,
+        "beginnerSimplicityScore": 72,
+        "tacticalRisk": 14,
+        "finalCoachScore": 84,
+        "warning": None,
+        "candidate": {"evalCp": 120},
+    }
+
+    shaped = shape_recommendations_for_accuracy(
+        [flat_move, active_move],
+        {"mode": "draw_break", "target": 94, "min": 88, "max": 99, "drawPressure": {"level": "critical"}},
+    )
+
+    assert shaped[0]["moveUci"] == "e2e4"
+    assert shaped[0]["accuracyBand"] == "draw_break"
+
+
 def test_player_turn_after_deviation_returns_primary_move(monkeypatch) -> None:
     import app.strategy.plan_engine as plan_engine
 
