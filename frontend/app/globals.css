@@ -688,11 +688,15 @@ button:disabled { cursor: not-allowed; }
   .landing-decision-panel { transform: translateY(-8vh); }
   .landing-choice-grid { width: min(100%, 330px); }
   .landing-side-button span { font-size: clamp(1.12rem, 6vw, 1.55rem); }
-  .coach-live-shell, .first-move-shell, .plan-selection-shell { padding-inline: 0.6rem; }
-  .coach-board-column, .coach-board-stage { justify-items: start; }
-  .coach-panel-column, .live-coach-panel { width: min(100%, 370px); max-width: min(100%, 370px); }
-  .coach-board-frame { border-radius: 13px; padding: 0.25rem; }
-  .coach-board-controls { border-radius: 18px; }
+  .coach-live-shell { width: 100%; min-height: calc(100svh - 3.75rem); gap: 0.75rem; padding: 0.45rem 0.25rem 1.2rem; }
+  .first-move-shell, .plan-selection-shell { padding-inline: 0.45rem; }
+  .coach-board-column { width: 100%; justify-items: center; gap: 0.62rem; }
+  .coach-board-stage { width: 100%; justify-items: center; }
+  .coach-board-frame { width: fit-content; max-width: calc(100vw - 0.7rem); border-radius: 13px; padding: 0.18rem; }
+  .coach-board-canvas { border-radius: 8px; }
+  .coach-board-controls { width: max-content; max-width: calc(100vw - 1rem); border-radius: 18px; margin-top: 0.08rem; }
+  .coach-board-controls .control-button { min-height: 2.55rem; padding-inline: 0.72rem; }
+  .coach-panel-column, .live-coach-panel { width: min(100%, calc(100vw - 0.9rem)); max-width: min(100%, calc(100vw - 0.9rem)); justify-self: center; }
   .image-import-panel { grid-template-columns: 1fr; max-height: calc(100vh - 2rem); overflow-y: auto; }
   .image-import-preview { min-height: 14rem; max-height: 42vh; }
   .image-import-confidence, .image-import-turn { align-items: flex-start; flex-direction: column; }

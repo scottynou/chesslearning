@@ -468,9 +468,9 @@ export default function HomePage() {
         window.visualViewport?.width ?? window.innerWidth
       );
       const mobileViewport = viewportWidth <= 540;
-      const horizontalReserve = mobileViewport ? 52 : 38;
-      const maxBoardWidth = mobileViewport ? 340 : 720;
-      const width = Math.min(viewportWidth - horizontalReserve, viewportWidth * 0.9, maxBoardWidth);
+      const horizontalReserve = mobileViewport ? 14 : 38;
+      const maxBoardWidth = mobileViewport ? 520 : 720;
+      const width = Math.min(viewportWidth - horizontalReserve, mobileViewport ? viewportWidth * 0.97 : viewportWidth * 0.9, maxBoardWidth);
       setBoardWidth(Math.floor(Math.max(240, width)));
     }
     updateBoardWidth();
