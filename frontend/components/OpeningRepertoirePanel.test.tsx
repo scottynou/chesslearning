@@ -40,17 +40,18 @@ describe("OpeningRepertoirePanel", () => {
 
     expect(screen.getByText("Choisis ton plan")).toBeTruthy();
     expect(screen.getByText("Caro-Kann")).toBeTruthy();
-    expect(screen.getByText("Intermediaire")).toBeTruthy();
+    expect(screen.queryByText("Intermediaire")).toBeNull();
     expect(screen.queryByText("Recommande")).toBeNull();
     expect(screen.queryByText("Comprendre ce plan")).toBeNull();
+    expect(screen.queryByText("Attaquer le centre blanc avec une structure solide.")).toBeNull();
   });
 
-  it("shows black reply cards as concise reasons", () => {
+  it("shows black reply cards without explanatory copy", () => {
     render(<OpeningRepertoirePanel plans={[plan]} selectedPlanId={null} onSelect={() => undefined} mode="black-reply" firstMoveLabel="Nf3" />);
 
     expect(screen.getByText("Caro-Kann")).toBeTruthy();
-    expect(screen.getByText("Reponse")).toBeTruthy();
-    expect(screen.getByText(/Apres Nf3/)).toBeTruthy();
+    expect(screen.queryByText("Reponse")).toBeNull();
+    expect(screen.queryByText(/Apres Nf3/)).toBeNull();
     expect(screen.queryByText("Comprendre cette reponse")).toBeNull();
   });
 

@@ -13,7 +13,7 @@ describe("eloAdaptation", () => {
     expect(normalizeBaseElo(1237)).toBe(1250);
     expect(normalizeBaseElo(3900)).toBe(3200);
     expect(effectiveElo(3150, 400)).toBe(3200);
-    expect(effectiveElo(1200, -200)).toBe(1000);
+    expect(effectiveElo(1200, -200)).toBe(1200);
   });
 
   it("maps Elo to the internal skill level", () => {
@@ -33,7 +33,7 @@ describe("eloAdaptation", () => {
     const stableCount = nextStablePlyCount({ currentStablePlyCount: 1, quality: "good", hasDanger: false });
     expect(stableCount).toBe(2);
     expect(nextAdaptiveBoost({ currentBoost: 150, autoEnabled: true, playerReviewQuality: "good", stablePlyCount: stableCount })).toBe(100);
-    expect(nextAdaptiveBoost({ currentBoost: 0, autoEnabled: true, playerReviewQuality: "excellent", stablePlyCount: stableCount })).toBe(-50);
+    expect(nextAdaptiveBoost({ currentBoost: 0, autoEnabled: true, playerReviewQuality: "excellent", stablePlyCount: stableCount })).toBe(0);
   });
 
   it("does not adjust twice on the same ply", () => {

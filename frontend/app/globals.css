@@ -432,6 +432,9 @@ button:disabled { cursor: not-allowed; }
 .opening-visual { position: relative; aspect-ratio: 16 / 9; overflow: hidden; background: #05070a; }
 .opening-hero-image { width: 100%; height: 100%; object-fit: cover; filter: saturate(0.96) contrast(1.04); }
 .opening-visual::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgba(3,5,10,0.08), rgba(3,5,10,0.28)); }
+.repertoire-intro { grid-template-columns: 1fr !important; }
+.opening-card-body { min-height: 0; padding: 0.95rem 1rem 1.05rem; }
+.opening-card-main { cursor: pointer; }
 .opening-visual-caption { position: absolute; left: 0.8rem; top: 0.75rem; z-index: 1; display: grid; gap: 0.18rem; color: #fffaf0; }
 .opening-visual-caption span { font-size: 0.62rem; font-weight: 850; letter-spacing: 0.16em; opacity: 0.62; text-transform: uppercase; }
 .opening-visual-caption strong { font-size: 0.92rem; font-weight: 900; letter-spacing: 0; }

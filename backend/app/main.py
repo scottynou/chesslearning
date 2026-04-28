@@ -159,6 +159,8 @@ def health() -> dict[str, bool | str]:
         "stockfishConfigured": stockfish_configured,
         "aiProvider": configured_provider_name(),
         "aiProviderMode": os.getenv("AI_PROVIDER", "auto"),
+        "aiRerankProvider": os.getenv("AI_RERANK_PROVIDER", "gemini"),
+        "aiRerankModel": os.getenv("AI_RERANK_MODEL") or os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite"),
         "openaiConfigured": bool(os.getenv("OPENAI_API_KEY")),
         "geminiConfigured": bool(os.getenv("GEMINI_API_KEY")),
     }
@@ -311,7 +313,11 @@ def available_plans(
 
 @app.post("/plan-recommendations", response_model=PlanRecommendationsResponse)
 def plan_recommendations_endpoint(request: PlanRecommendationsRequest) -> PlanRecommendationsResponse:
-    cache_key = f"{request.fen}|{request.selected_plan_id}|{request.elo}|{request.skill_level}|{request.max_moves}|{request.engine_depth}|{','.join(request.move_history_uci)}"
+    cache_key = (
+        f"{request.fen}|{request.selected_plan_id}|{request.elo}|{request.skill_level}|{request.max_moves}|"
+        f"{request.engine_depth}|{','.join(request.move_history_uci)}|{os.getenv('AI_RERANK_PROVIDER', 'gemini')}|"
+        f"{os.getenv('AI_RERANK_MODEL') or os.getenv('GEMINI_MODEL', 'gemini-2.5-flash-lite')}"
+    )
     cached = plan_recommendations_cache.get(cache_key)
     if cached is not None:
         return cached

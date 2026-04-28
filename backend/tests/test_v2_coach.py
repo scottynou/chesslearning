@@ -101,14 +101,15 @@ def test_bot_move_returns_legal_move_and_respects_elo_pool(monkeypatch) -> None:
 
     assert response.status_code == 200
     move_uci = response.json()["move"]["moveUci"]
-    assert chess.Move.from_uci(move_uci) in chess.Board(chess.STARTING_FEN).legal_moves
-    assert move_uci in {"e2e4", "d2d4"}
+    board = chess.Board(chess.STARTING_FEN)
+    assert chess.Move.from_uci(move_uci) in board.legal_moves
+    assert move_uci == next(iter(board.legal_moves)).uci()
 
 
-def test_bot_follows_selected_opening_plan_primary_move(monkeypatch) -> None:
-    import app.strategy.plan_engine as plan_engine
+def test_bot_ignores_selected_opening_plan_and_plays_top_engine_move(monkeypatch) -> None:
+    import app.bot_service as bot_service
 
-    monkeypatch.setattr(plan_engine, "StockfishEngine", lambda: FakeStockfishEngine())
+    monkeypatch.setattr(bot_service, "StockfishEngine", lambda: FakeStockfishEngine())
     client = TestClient(app)
     board = chess.Board()
     board.push_uci("e2e4")
@@ -128,7 +129,7 @@ def test_bot_follows_selected_opening_plan_primary_move(monkeypatch) -> None:
     )
 
     assert response.status_code == 200
-    assert response.json()["move"]["moveUci"] == "c7c6"
+    assert response.json()["move"]["moveUci"] == next(iter(board.legal_moves)).uci()
 
 
 def test_cors_allows_render_frontend_for_expensive_routes() -> None:

@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { PlanFirstPanel } from "./PlanFirstPanel";
-import type { LivePlanInsightResponse, PlanEvent, PlanRecommendation, PlanRecommendationsResponse } from "@/lib/types";
+import type { PlanRecommendation, PlanRecommendationsResponse } from "@/lib/types";
 
 const recommendation: PlanRecommendation = {
   moveUci: "g8f6",
@@ -18,27 +18,12 @@ const recommendation: PlanRecommendation = {
   evalLabel: "Position equilibree",
   purpose: "Developper le cavalier vers f6.",
   planConnection: "Ce coup suit le plan.",
-  pedagogicalExplanation: "Joue Cavalier g8 -> f6. Le cavalier controle le centre et garde le plan lisible.",
+  pedagogicalExplanation: "Texte cache.",
   moveComplexity: "simple",
   warning: null,
-  candidate: null
-};
-
-const event: PlanEvent = {
-  id: "opening-completed-caro",
-  severity: "success",
-  title: "Ouverture terminee",
-  message: "On passe maintenant au plan de milieu de partie."
-};
-
-const insight: LivePlanInsightResponse = {
-  headline: "Plan simple",
-  currentPlan: "Finir le developpement sans forcer une attaque.",
-  whyChanged: "La structure est stable et le centre est controle.",
-  nextGoal: "Roquer puis placer une tour sur une colonne utile.",
-  event: null,
-  analysisProvider: "heuristic",
-  analysisKind: "heuristic"
+  candidate: null,
+  displayRole: "Coup du plan",
+  arrowColor: "rgba(224,185,118,0.78)"
 };
 
 const response: PlanRecommendationsResponse = {
@@ -95,7 +80,7 @@ const response: PlanRecommendationsResponse = {
   adaptedAlternatives: [],
   blockedExpectedMove: null,
   coachMessage: "Tu suis la Caro-Kann.",
-  pedagogicalSummary: "Tu suis la Caro-Kann.",
+  pedagogicalSummary: "Texte cache.",
   moveComplexity: "simple",
   turnContext: {
     sideToMove: "black",
@@ -104,26 +89,33 @@ const response: PlanRecommendationsResponse = {
     opponentTurn: false,
     gameOver: false
   },
+  aiRerankStatus: {
+    provider: "local",
+    model: null,
+    status: "disabled",
+    latencyMs: 0,
+    fallbackReason: "not_enough_choices"
+  },
+  adaptiveSignal: {
+    pressure: "stable",
+    suggestedBoostDelta: 0,
+    reason: "stable"
+  },
   technicalDetails: {},
   technicalEngineMoves: []
 };
 
 describe("PlanFirstPanel", () => {
-  it("shows the live plan instead of a move explanation in the cockpit", () => {
-    render(<PlanFirstPanel recommendations={response} liveInsight={insight} />);
-    expect(screen.getByText("Plan actuel")).toBeTruthy();
-    expect(screen.getByText("Plan simple")).toBeTruthy();
-    expect(screen.getByText("Finir le developpement sans forcer une attaque.")).toBeTruthy();
+  it("shows only phase, progress and useful moves", () => {
+    render(<PlanFirstPanel recommendations={response} />);
+    expect(screen.getByText("Coups")).toBeTruthy();
+    expect(screen.getAllByText("Ouverture").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("25%").length).toBeGreaterThan(0);
     expect(screen.getByText("Coup recommande")).toBeTruthy();
     expect(screen.getByText("Cavalier g8 -> f6")).toBeTruthy();
-    expect(screen.queryByText("Focus plateau")).toBeNull();
-  });
-
-  it("keeps evaluation only inside advanced details", () => {
-    render(<PlanFirstPanel recommendations={response} />);
-    expect(screen.getByText("Details avances")).toBeTruthy();
-    expect(screen.getByText("Evaluation : Position equilibree")).toBeTruthy();
-    expect(screen.queryByText("Joue Cavalier g8 -> f6. Le cavalier controle le centre et garde le plan lisible.")).toBeNull();
+    expect(screen.queryByText("Plan actuel")).toBeNull();
+    expect(screen.queryByText("Details avances")).toBeNull();
+    expect(screen.queryByText("Texte cache.")).toBeNull();
   });
 
   it("does not turn an opponent reply into the player's recommendation", () => {
@@ -135,12 +127,6 @@ describe("PlanFirstPanel", () => {
           planMoves: [],
           mergedRecommendations: [],
           expectedOpponentMove: recommendation,
-          strategicPlan: {
-            title: "Observer la reponse adverse",
-            goal: "Regarder la reponse noire.",
-            reason: "C'est a l'autre camp de jouer.",
-            nextObjective: "Adapter le plan ensuite."
-          },
           turnContext: {
             ...response.turnContext,
             sideToMove: "white",
@@ -152,10 +138,10 @@ describe("PlanFirstPanel", () => {
     );
     expect(screen.getAllByText("Coup adverse attendu").length).toBeGreaterThan(0);
     expect(screen.getByText("Cavalier g8 -> f6")).toBeTruthy();
-    expect(screen.queryByText("Aucun coup de plan clair. Joue un coup legal simple ou consulte les details.")).toBeNull();
+    expect(screen.queryByText("Aucun coup legal disponible.")).toBeNull();
   });
 
-  it("shows ranked choices and event feed after the opening", () => {
+  it("shows ranked choices after the opening", () => {
     const alternative = { ...recommendation, moveUci: "b8c6", beginnerLabel: "Cavalier b8 -> c6", displayRole: "Alternative saine" };
     const primary = { ...recommendation, displayRole: "Meilleur" };
     render(
@@ -175,12 +161,11 @@ describe("PlanFirstPanel", () => {
           mergedRecommendations: [primary, alternative],
           adaptedAlternatives: [alternative]
         }}
-        events={[event]}
       />
     );
-    expect(screen.getByText("Choix strategiques")).toBeTruthy();
+    expect(screen.getByText("Coups proposes")).toBeTruthy();
     expect(screen.getByText("Meilleur")).toBeTruthy();
     expect(screen.getByText("Alternative saine")).toBeTruthy();
-    expect(screen.getByText("Ouverture terminee")).toBeTruthy();
+    expect(screen.queryByText("Ouverture terminee")).toBeNull();
   });
 });

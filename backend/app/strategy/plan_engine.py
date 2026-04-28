@@ -4,8 +4,10 @@ from typing import Any
 
 import chess
 
+from ..ai_reranker import rerank_recommendations
 from ..beginner_notation import beginner_notation_for_uci
 from ..elo_ranker import rank_candidates
+from ..evaluation_label import evaluation_label
 from ..stockfish_engine import StockfishEngine
 from .endgame_coach import analyze_endgame
 from .middlegame_coach import analyze_middlegame
@@ -69,7 +71,7 @@ def get_plan_recommendations(
     )
 
     plan_items = [item for item in merged if item["source"] in {"plan", "plan_and_engine"}]
-    expected_opponent_move = expected_opponent_move_for(choose_primary_move(plan_items, merged)) if opponent_turn else None
+    expected_opponent_move = pure_engine_expected_opponent_move(fen, max(engine_depth, 14)) if opponent_turn else None
     visible_plan_items = [] if opponent_turn else plan_items
     visible_merged = [] if opponent_turn else merged
     primary_move = None if opponent_turn else choose_primary_move(visible_plan_items, visible_merged)
@@ -127,9 +129,35 @@ def get_plan_recommendations(
         primary_move=primary_move,
         merged=visible_merged,
     )
+    ai_rerank_status = {
+        "provider": "local",
+        "model": None,
+        "status": "disabled",
+        "latencyMs": 0,
+        "fallbackReason": "opponent_turn_or_no_visible_choices" if opponent_turn else "not_enough_choices",
+    }
+    if player_turn and visible_recommendations and not game_over:
+        visible_recommendations, ai_rerank_status = rerank_recommendations(
+            fen=fen,
+            selected_plan=active_plan,
+            phase=phase,
+            opening_state=opening_state,
+            move_history=move_history,
+            recommendations=visible_recommendations,
+        )
+        visible_recommendations = decorate_recommendations(
+            visible_recommendations,
+            str(phase_display["recommendationStyle"]),
+        )
     primary_move = visible_recommendations[0] if visible_recommendations else None
     adapted_alternatives = visible_recommendations[1:]
     blocked_expected_move = blocked_expected_move_for(primary_move, deviation)
+    adaptive_signal = adaptive_signal_for(
+        primary_move=primary_move,
+        phase_status=phase_status,
+        blocked_expected_move=blocked_expected_move,
+        opening_state=opening_state,
+    )
     current_objective = current_objective_for(active_plan, phase, primary_move)
     progress = plan_progress_for(board, active_plan, move_history, phase_status)
     opening_brief = opening_brief_for(active_plan)
@@ -213,6 +241,8 @@ def get_plan_recommendations(
         "pedagogicalSummary": pedagogical_summary,
         "moveComplexity": response_move_complexity,
         "turnContext": turn_context,
+        "aiRerankStatus": ai_rerank_status,
+        "adaptiveSignal": adaptive_signal,
         "technicalDetails": {
             "engineDepth": engine_depth,
             "maxMoves": max_moves,
@@ -417,6 +447,38 @@ def expected_opponent_move_for(item: dict[str, Any] | None) -> dict[str, Any] | 
     return copy
 
 
+def pure_engine_expected_opponent_move(fen: str, engine_depth: int) -> dict[str, Any] | None:
+    lines = StockfishEngine().analyze(fen, multipv=1, depth=engine_depth)
+    candidates = rank_candidates(fen, lines, elo=3200, max_moves=1)
+    if not candidates:
+        return None
+    return expected_opponent_move_for(recommendation_from_candidate(fen, candidates[0]))
+
+
+def recommendation_from_candidate(fen: str, candidate) -> dict[str, Any]:
+    notation = beginner_notation_for_uci(fen, candidate.move_uci, candidate.move_san)
+    return {
+        "moveUci": candidate.move_uci,
+        "moveSan": notation.san,
+        "beginnerLabel": notation.beginner_label,
+        "source": "engine",
+        "engineRank": candidate.stockfish_rank,
+        "planRank": None,
+        "planFitScore": 35,
+        "engineScore": candidate.engine_score,
+        "beginnerSimplicityScore": candidate.simplicity_score,
+        "tacticalRisk": candidate.risk_penalty,
+        "finalCoachScore": candidate.coach_score,
+        "evalLabel": evaluation_label(candidate.eval_cp, candidate.mate_in),
+        "purpose": candidate.summary,
+        "planConnection": "Coup Stockfish pur attendu pour l'adversaire.",
+        "pedagogicalExplanation": "",
+        "moveComplexity": "simple" if candidate.difficulty == "easy" else "moyen" if candidate.difficulty == "medium" else "complexe",
+        "warning": None,
+        "candidate": candidate.model_dump(by_alias=True),
+    }
+
+
 def fallback_legal_recommendations(
     *,
     board: chess.Board,
@@ -458,6 +520,50 @@ def fallback_legal_recommendations(
             }
         )
     return recommendations
+
+
+def adaptive_signal_for(
+    *,
+    primary_move: dict[str, Any] | None,
+    phase_status: str,
+    blocked_expected_move: dict[str, Any] | None,
+    opening_state: str,
+) -> dict[str, Any]:
+    if primary_move is None:
+        return {
+            "pressure": "stable",
+            "suggestedBoostDelta": 0,
+            "reason": "Aucun coup joueur actif a ajuster.",
+        }
+
+    engine_score = int(primary_move.get("engineScore") or 100)
+    tactical_risk = int(primary_move.get("tacticalRisk") or 0)
+    warning = bool(primary_move.get("warning") or blocked_expected_move)
+    adapted = phase_status in {"adapted", "fallback"} or opening_state in {"recoverable", "abandoned"}
+
+    if warning or engine_score <= 45 or tactical_risk >= 45:
+        return {
+            "pressure": "critical",
+            "suggestedBoostDelta": 200,
+            "reason": "La position demande des coups plus precis pour eviter un danger tactique.",
+        }
+    if adapted or engine_score <= 65 or tactical_risk >= 28:
+        return {
+            "pressure": "worse",
+            "suggestedBoostDelta": 100,
+            "reason": "Le plan reste jouable mais la position demande un peu plus de precision.",
+        }
+    if engine_score >= 78 and tactical_risk <= 18 and not warning:
+        return {
+            "pressure": "stable",
+            "suggestedBoostDelta": -50,
+            "reason": "La position est stable, le coach peut revenir progressivement au niveau de base.",
+        }
+    return {
+        "pressure": "stable",
+        "suggestedBoostDelta": 0,
+        "reason": "Pas de changement utile du niveau cache.",
+    }
 
 
 def fallback_move_score(board: chess.Board, move: chess.Move) -> int:

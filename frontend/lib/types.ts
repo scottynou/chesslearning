@@ -195,6 +195,20 @@ export type StrategicPlan = {
   nextObjective: string;
 };
 
+export type AiRerankStatus = {
+  provider: string;
+  model: string | null;
+  status: "success" | "fallback" | "disabled" | "error";
+  latencyMs: number;
+  fallbackReason: string | null;
+};
+
+export type AdaptiveSignal = {
+  pressure: "stable" | "worse" | "critical";
+  suggestedBoostDelta: number;
+  reason: string;
+};
+
 export type PlanRecommendationsResponse = {
   planState: GamePlanState;
   planMoves: PlanRecommendation[];
@@ -258,6 +272,8 @@ export type PlanRecommendationsResponse = {
     opponentTurn: boolean;
     gameOver: boolean;
   };
+  aiRerankStatus: AiRerankStatus;
+  adaptiveSignal: AdaptiveSignal;
   technicalDetails?: Record<string, unknown>;
   technicalEngineMoves: CandidateMove[];
 };

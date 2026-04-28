@@ -407,6 +407,24 @@ class StrategicPlan(BaseModel):
     next_objective: str = Field(alias="nextObjective")
 
 
+class AiRerankStatus(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    provider: str
+    model: str | None = None
+    status: Literal["success", "fallback", "disabled", "error"]
+    latency_ms: int = Field(default=0, alias="latencyMs")
+    fallback_reason: str | None = Field(default=None, alias="fallbackReason")
+
+
+class AdaptiveSignal(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    pressure: Literal["stable", "worse", "critical"]
+    suggested_boost_delta: int = Field(alias="suggestedBoostDelta")
+    reason: str
+
+
 class PlanRecommendationsResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -438,6 +456,8 @@ class PlanRecommendationsResponse(BaseModel):
     pedagogical_summary: str = Field(default="", alias="pedagogicalSummary")
     move_complexity: str = Field(default="simple", alias="moveComplexity")
     turn_context: TurnContext = Field(alias="turnContext")
+    ai_rerank_status: AiRerankStatus = Field(alias="aiRerankStatus")
+    adaptive_signal: AdaptiveSignal = Field(alias="adaptiveSignal")
     technical_details: dict[str, Any] = Field(default_factory=dict, alias="technicalDetails")
     technical_engine_moves: list[CandidateMove] = Field(default_factory=list, alias="technicalEngineMoves")
 
