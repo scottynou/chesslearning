@@ -103,3 +103,20 @@ def test_bot_move_returns_legal_move_and_respects_elo_pool(monkeypatch) -> None:
     move_uci = response.json()["move"]["moveUci"]
     assert chess.Move.from_uci(move_uci) in chess.Board(chess.STARTING_FEN).legal_moves
     assert move_uci in {"e2e4", "d2d4"}
+
+
+def test_cors_allows_render_frontend_for_expensive_routes() -> None:
+    client = TestClient(app)
+    origin = "https://chess-elo-coach-web-bh95.onrender.com"
+
+    response = client.options(
+        "/plan-recommendations",
+        headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == origin

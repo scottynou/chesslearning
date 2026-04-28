@@ -249,6 +249,7 @@ export default function HomePage() {
   const lastEloAdjustmentPly = useRef<number | null>(null);
   const previousEffectiveElo = useRef(DEFAULT_BASE_ELO);
   const preloadingReviewPlies = useRef<Set<number>>(new Set());
+  const failedPreloadReviewPlies = useRef<Set<number>>(new Set());
 
   const fen = game.fen();
   const history = useMemo(() => game.history({ verbose: true }) as VerboseMove[], [game]);
@@ -364,6 +365,8 @@ export default function HomePage() {
     setPlanError(null);
     setLastReview(null);
     setReviewsByPly({});
+    preloadingReviewPlies.current.clear();
+    failedPreloadReviewPlies.current.clear();
     setReviewLoading(false);
     setReviewError(null);
     setLastMoveForReview(null);
@@ -440,6 +443,8 @@ export default function HomePage() {
     if (previousEffectiveElo.current === effectiveCoachElo) return;
     previousEffectiveElo.current = effectiveCoachElo;
     setReviewsByPly({});
+    preloadingReviewPlies.current.clear();
+    failedPreloadReviewPlies.current.clear();
     setLastReview(null);
     setReviewError(null);
   }, [effectiveCoachElo]);
@@ -812,6 +817,7 @@ export default function HomePage() {
 
   const reviewStoredMove = useCallback(
     (move: LastMoveForReview) => {
+      failedPreloadReviewPlies.current.delete(move.ply);
       setReviewLoading(true);
       setReviewError(null);
       requestStoredReview(move)
@@ -827,13 +833,16 @@ export default function HomePage() {
 
   const preloadStoredMove = useCallback(
     (move: LastMoveForReview) => {
-      if (preloadingReviewPlies.current.has(move.ply)) return;
+      if (preloadingReviewPlies.current.has(move.ply) || failedPreloadReviewPlies.current.has(move.ply)) return;
       preloadingReviewPlies.current.add(move.ply);
       requestStoredReview(move)
         .then((review) => {
+          failedPreloadReviewPlies.current.delete(move.ply);
           setReviewsByPly((current) => ({ ...current, [move.ply]: review }));
         })
-        .catch(() => undefined)
+        .catch(() => {
+          failedPreloadReviewPlies.current.add(move.ply);
+        })
         .finally(() => {
           preloadingReviewPlies.current.delete(move.ply);
         });
@@ -908,6 +917,8 @@ export default function HomePage() {
     setHighlightedMove(null);
     setHighlightedRecommendationUci(null);
     setReviewsByPly({});
+    preloadingReviewPlies.current.clear();
+    failedPreloadReviewPlies.current.clear();
     setLastReview(null);
     setLastMoveForReview(null);
     setLastUserMoveForReview(null);
@@ -935,6 +946,11 @@ export default function HomePage() {
     setLastMoveForReview(null);
     setLastUserMoveForReview(null);
     setOpenOpponentReviewPly(null);
+    setLastReview(null);
+    setReviewError(null);
+    setReviewsByPly({});
+    preloadingReviewPlies.current.clear();
+    failedPreloadReviewPlies.current.clear();
     setStableEloPlyCount(0);
     lastEloAdjustmentPly.current = null;
     if (userSide === "black" && nextHistory.length === 0) {

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import logging
 import os
+import re
 import shutil
 import time
 from collections import defaultdict, deque
@@ -8,7 +10,7 @@ from collections import defaultdict, deque
 import chess
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from .bot_service import choose_bot_move
@@ -41,15 +43,47 @@ from .strategy.plan_engine import get_plan_recommendations
 load_dotenv()
 
 app = FastAPI(title="Chess Learning API", version="0.1.0")
+logger = logging.getLogger(__name__)
 
 frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
+frontend_origins = sorted(
+    {
+        frontend_origin,
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://chess-elo-coach-web-bh95.onrender.com",
+        *[origin.strip() for origin in os.getenv("FRONTEND_ORIGINS", "").split(",") if origin.strip()],
+    }
+)
 frontend_origin_regex = os.getenv(
     "FRONTEND_ORIGIN_REGEX",
     r"https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.onrender\.com",
 )
+try:
+    frontend_origin_pattern = re.compile(frontend_origin_regex)
+except re.error:
+    logger.exception("Invalid FRONTEND_ORIGIN_REGEX, falling back to explicit origins only.")
+    frontend_origin_pattern = re.compile(r"$^")
+
+
+def _origin_is_allowed(origin: str | None) -> bool:
+    if not origin:
+        return False
+    return origin in frontend_origins or bool(frontend_origin_pattern.fullmatch(origin))
+
+
+def _with_cors_headers(response: Response, origin: str | None) -> Response:
+    if not _origin_is_allowed(origin):
+        return response
+    response.headers["Access-Control-Allow-Origin"] = origin
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Vary"] = "Origin"
+    return response
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[frontend_origin, "http://127.0.0.1:3000"],
+    allow_origins=frontend_origins,
     allow_origin_regex=frontend_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
@@ -79,6 +113,16 @@ async def simple_ip_rate_limit(request: Request, call_next):
             )
         hits.append(now)
     return await call_next(request)
+
+
+@app.middleware("http")
+async def cors_error_guard(request: Request, call_next):
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception("Unhandled API error on %s %s", request.method, request.url.path)
+        response = JSONResponse(status_code=500, content={"detail": "Erreur serveur interne."})
+    return _with_cors_headers(response, request.headers.get("origin"))
 
 analyze_cache: MemoryCache[AnalyzeResponse] = MemoryCache(ttl_seconds=300)
 explain_cache: MemoryCache[ExplainResponse] = MemoryCache(ttl_seconds=900)
