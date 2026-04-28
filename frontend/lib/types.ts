@@ -203,6 +203,15 @@ export type PlanRecommendationsResponse = {
     lineTotal?: number;
     tempoPly?: number;
     tempoTotal?: number;
+    planMovesPlayed?: number;
+    planMovesTarget?: number;
+    exactPlanMoves?: number;
+    exactPlanTotal?: number;
+    impact?: string;
+  };
+  openingBrief: {
+    summary: string;
+    completion: string;
   };
   currentObjective: string;
   lastEvent?: string;

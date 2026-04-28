@@ -16,9 +16,9 @@ def detect_game_phase(fen: str, move_history: list[str] | None = None, plan_acti
 
     if piece_count <= 12 or queens < 2:
         return "endgame"
-    if plan_active and len(history) <= 14:
+    if len(history) <= 8:
         return "opening"
-    if len(history) <= 10 or minor_home_count >= 3:
+    if len(history) <= 12 and minor_home_count >= 3:
         return "opening"
     if len(history) <= 18 and minor_home_count <= 2:
         return "transition"

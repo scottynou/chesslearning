@@ -25,6 +25,7 @@ export function PlanFirstPanel({
   const expectedOpponentMove = recommendations?.expectedOpponentMove ?? null;
   const alternatives = recommendations?.adaptedAlternatives ?? [];
   const progress = recommendations?.planProgress;
+  const openingBrief = recommendations?.openingBrief;
   const phaseDisplay = recommendations?.phaseDisplay;
   const isOpening = phaseDisplay?.key === "opening";
   const planName = recommendations?.selectedPlan?.nameFr ?? selectedPlan?.nameFr ?? "Plan general";
@@ -50,7 +51,7 @@ export function PlanFirstPanel({
             {phaseDisplay ? <span>{phaseDisplay.label}</span> : recommendations ? <span>{phaseLabel(recommendations.phase)}</span> : null}
           </div>
           <p className="live-coach-message">
-            {compactText(phaseDisplay?.subtitle ?? recommendations?.coachMessage ?? selectedPlan?.learningGoal ?? selectedPlan?.beginnerGoal ?? "Le coach relie le coup au plan choisi.", 180)}
+            {compactText(isOpening ? openingBrief?.summary ?? selectedPlan?.learningGoal ?? selectedPlan?.beginnerGoal ?? "Le coach relie le coup au plan choisi." : phaseDisplay?.subtitle ?? recommendations?.coachMessage ?? "Le coach relie le coup au plan choisi.", 220)}
           </p>
         </div>
         {isOpening && typeof progress?.percent === "number" ? (
@@ -73,8 +74,8 @@ export function PlanFirstPanel({
             </div>
             {isOpening ? <div className="live-progress-track"><div style={{ width: `${progress?.percent ?? 0}%` }} /></div> : null}
             <div className="live-fact-grid">
-              <CoachFact title={isOpening ? "Avancee" : "Plan actuel"} value={compactText(isOpening ? recommendations.whatChanged || recommendations.coachMessage : recommendations.nextObjective || recommendations.currentObjective, 170)} />
-              <CoachFact title="Dernier fait" value={compactText(recommendations.lastEvent || "La partie est prete.", 150)} />
+              <CoachFact title={isOpening ? "Fin de l'ouverture" : "Plan actuel"} value={compactText(isOpening ? openingBrief?.completion ?? recommendations.currentObjective : recommendations.nextObjective || recommendations.currentObjective, 180)} />
+              <CoachFact title={isOpening ? "Impact" : "Dernier fait"} value={compactText(isOpening ? progress?.impact ?? recommendations.lastEvent ?? "La partie est prete." : recommendations.lastEvent || "La partie est prete.", 170)} />
               {expectedOpponentMove ? <CoachFact title="Reponse adverse attendue" value={`Fleche rouge : ${expectedOpponentMove.beginnerLabel}.`} /> : null}
               {expectedReplyLabel ? <CoachFact title="Reponse attendue" value={`Ligne du plan : ${expectedReplyLabel}. Sinon, on adapte.`} /> : null}
             </div>

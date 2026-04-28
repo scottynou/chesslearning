@@ -40,7 +40,7 @@ export function ChessCoachBoard({
   onDrop,
   onSquareClick
 }: ChessCoachBoardProps) {
-  const customSquareStyles = buildSquareStyles(selectedSquare, legalTargets, lastMove, highlightedMove);
+  const customSquareStyles = buildSquareStyles(selectedSquare, legalTargets, lastMove, recommendationArrows, highlightedMove);
   const frameClassName = ["coach-board-frame", locked && "is-locked", thinking && "is-thinking"].filter(Boolean).join(" ");
   const customArrows = buildArrows(recommendationArrows, highlightedMove);
 
@@ -60,11 +60,11 @@ export function ChessCoachBoard({
           customSquareStyles={customSquareStyles}
           customArrows={customArrows}
           customBoardStyle={{
-            borderRadius: "12px",
-            boxShadow: "0 46px 130px rgba(0, 0, 0, 0.52), 0 0 0 1px rgba(247, 239, 224, 0.22), inset 0 0 0 1px rgba(255,255,255,0.08)"
+            borderRadius: "8px",
+            boxShadow: "0 46px 130px rgba(0, 0, 0, 0.56), 0 0 0 1px rgba(247, 239, 224, 0.24), inset 0 0 0 1px rgba(255,255,255,0.08)"
           }}
-          customDarkSquareStyle={{ backgroundColor: "#6b6658" }}
-          customLightSquareStyle={{ backgroundColor: "#e8dcc5" }}
+          customDarkSquareStyle={{ backgroundColor: "#625f52" }}
+          customLightSquareStyle={{ backgroundColor: "#eadfc8" }}
           customDropSquareStyle={{ boxShadow: "inset 0 0 0 4px rgba(247,239,224,0.58), inset 0 0 28px rgba(231,185,106,0.26)" }}
           customNotationStyle={{
             color: "rgba(3, 5, 10, 0.62)",
@@ -93,19 +93,25 @@ function buildArrows(recommendationArrows: BoardMove[], highlightedMove?: BoardM
   return arrows;
 }
 
-function buildSquareStyles(selectedSquare: string | null, legalTargets: string[], lastMove?: BoardMove | null, highlightedMove?: BoardMove | null) {
+function buildSquareStyles(
+  selectedSquare: string | null,
+  legalTargets: string[],
+  lastMove?: BoardMove | null,
+  recommendationArrows: BoardMove[] = [],
+  highlightedMove?: BoardMove | null
+) {
   const styles: Record<string, CSSProperties> = {};
 
   if (lastMove) {
     styles[lastMove.from] = {
       ...(styles[lastMove.from] ?? {}),
-      backgroundImage: "linear-gradient(135deg, rgba(231,185,106,0.34), rgba(247,239,224,0.12))",
-      boxShadow: "inset 0 0 0 2px rgba(231,185,106,0.30)"
+      backgroundImage: "linear-gradient(135deg, rgba(247,239,224,0.18), rgba(247,239,224,0.05))",
+      boxShadow: "inset 0 0 0 2px rgba(247,239,224,0.20)"
     };
     styles[lastMove.to] = {
       ...(styles[lastMove.to] ?? {}),
-      backgroundImage: "radial-gradient(circle at 50% 50%, rgba(247,239,224,0.32), rgba(231,185,106,0.18) 42%, transparent 68%)",
-      boxShadow: "inset 0 0 0 2px rgba(231,185,106,0.34)"
+      backgroundImage: "radial-gradient(circle at 50% 50%, rgba(247,239,224,0.26), rgba(247,239,224,0.10) 42%, transparent 68%)",
+      boxShadow: "inset 0 0 0 2px rgba(247,239,224,0.24)"
     };
   }
 
@@ -128,18 +134,51 @@ function buildSquareStyles(selectedSquare: string | null, legalTargets: string[]
     };
   }
 
+  for (const move of recommendationArrows) {
+    applyMoveGlow(styles, move);
+  }
+
   if (highlightedMove) {
-    styles[highlightedMove.from] = {
-      ...(styles[highlightedMove.from] ?? {}),
-      boxShadow: mergeBoxShadow(styles[highlightedMove.from]?.boxShadow, "inset 0 0 0 4px rgba(224,185,118,0.72), inset 0 0 30px rgba(224,185,118,0.22)")
-    };
-    styles[highlightedMove.to] = {
-      ...(styles[highlightedMove.to] ?? {}),
-      boxShadow: mergeBoxShadow(styles[highlightedMove.to]?.boxShadow, "inset 0 0 0 4px rgba(247,239,224,0.44), inset 0 0 30px rgba(224,185,118,0.26)")
-    };
+    applyMoveGlow(styles, highlightedMove, true);
   }
 
   return styles;
+}
+
+function applyMoveGlow(styles: Record<string, CSSProperties>, move: BoardMove, focused = false) {
+  const color = move.color ?? "rgba(224,185,118,0.78)";
+  const fromGlow = colorWithAlpha(color, focused ? 0.30 : 0.18);
+  const fromBorder = colorWithAlpha(color, focused ? 0.58 : 0.36);
+  const toGlow = colorWithAlpha(color, focused ? 0.42 : 0.30);
+  const toBorder = colorWithAlpha(color, focused ? 0.78 : 0.62);
+
+  styles[move.from] = {
+    ...(styles[move.from] ?? {}),
+    backgroundImage: mergeBackgroundImage(
+      styles[move.from]?.backgroundImage,
+      `linear-gradient(135deg, ${fromGlow}, transparent 72%)`
+    ),
+    boxShadow: mergeBoxShadow(styles[move.from]?.boxShadow, `inset 0 0 0 2px ${fromBorder}`)
+  };
+  styles[move.to] = {
+    ...(styles[move.to] ?? {}),
+    backgroundImage: mergeBackgroundImage(
+      styles[move.to]?.backgroundImage,
+      `radial-gradient(circle at 50% 50%, ${toGlow}, transparent 68%)`
+    ),
+    boxShadow: mergeBoxShadow(
+      styles[move.to]?.boxShadow,
+      `inset 0 0 0 ${focused ? 5 : 4}px ${toBorder}, inset 0 0 34px ${toGlow}`
+    )
+  };
+}
+
+function colorWithAlpha(color: string, alpha: number) {
+  const rgbaMatch = color.match(/^rgba?\(([^)]+)\)$/);
+  if (!rgbaMatch) return color;
+  const parts = rgbaMatch[1].split(",").map((part) => part.trim());
+  if (parts.length < 3) return color;
+  return `rgba(${parts[0]}, ${parts[1]}, ${parts[2]}, ${alpha})`;
 }
 
 function mergeBackgroundImage(current: CSSProperties["backgroundImage"], next: string) {

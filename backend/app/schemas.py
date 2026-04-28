@@ -383,6 +383,11 @@ class TurnContext(BaseModel):
     game_over: bool = Field(alias="gameOver")
 
 
+class OpeningBrief(BaseModel):
+    summary: str
+    completion: str
+
+
 class PlanRecommendationsResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -396,6 +401,7 @@ class PlanRecommendationsResponse(BaseModel):
     phase_display: PhaseDisplay = Field(alias="phaseDisplay")
     phase_status: str = Field(default="opening_in_progress", alias="phaseStatus")
     plan_progress: dict[str, Any] = Field(default_factory=dict, alias="planProgress")
+    opening_brief: OpeningBrief = Field(alias="openingBrief")
     current_objective: str = Field(default="", alias="currentObjective")
     last_event: str = Field(default="", alias="lastEvent")
     what_changed: str = Field(default="", alias="whatChanged")

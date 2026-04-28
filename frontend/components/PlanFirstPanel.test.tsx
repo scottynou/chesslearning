@@ -54,7 +54,11 @@ const response: PlanRecommendationsResponse = {
     maxVisibleMoves: 1
   },
   phaseStatus: "opening_in_progress",
-  planProgress: { percent: 25 },
+  planProgress: { percent: 25, impact: "Ce coup fait avancer la ligne principale de l'ouverture." },
+  openingBrief: {
+    summary: "Caro-Kann consiste a repondre a e4 avec c6 puis d5.",
+    completion: "Terminee lorsque c6 et d5 sont installes."
+  },
   currentObjective: "Developper une piece.",
   lastEvent: "Les blancs viennent de jouer Pion e2 -> e4.",
   whatChanged: "Le plan reste coherent.",
@@ -81,7 +85,8 @@ const response: PlanRecommendationsResponse = {
 describe("PlanFirstPanel", () => {
   it("shows the educational explanation directly in the move card", () => {
     render(<PlanFirstPanel recommendations={response} onToggleRecommendation={() => undefined} highlightedMoveUci="g8f6" expectedReplyLabel="Pion d2 -> d4" />);
-    expect(screen.getByText("Dernier fait")).toBeTruthy();
+    expect(screen.getByText("Impact")).toBeTruthy();
+    expect(screen.getByText("Terminee lorsque c6 et d5 sont installes.")).toBeTruthy();
     expect(screen.getByText("Reponse attendue")).toBeTruthy();
     expect(screen.getByText("Joue Cavalier g8 -> f6. Le cavalier controle le centre et garde le plan lisible.")).toBeTruthy();
     expect(screen.queryByText("Comprendre ce coup")).toBeNull();

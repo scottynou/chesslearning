@@ -106,6 +106,7 @@ def get_plan_recommendations(
     blocked_expected_move = blocked_expected_move_for(primary_move, deviation)
     current_objective = current_objective_for(active_plan, phase, primary_move)
     progress = plan_progress_for(board, active_plan, move_history, phase_status)
+    opening_brief = opening_brief_for(active_plan)
     technical_moves = [candidate.model_dump(by_alias=True) for candidate in engine_candidates[: int(level_settings["technical_limit"])]]
     coach_message = coach_message_for(active_plan, status, phase_status, locked_plan)
     last_event = last_event_for(move_history)
@@ -155,6 +156,7 @@ def get_plan_recommendations(
         "phaseDisplay": phase_display,
         "phaseStatus": phase_status,
         "planProgress": progress,
+        "openingBrief": opening_brief,
         "currentObjective": current_objective,
         "lastEvent": last_event,
         "whatChanged": what_changed,
@@ -258,6 +260,49 @@ def color_for_plan(plan: dict[str, Any] | None) -> chess.Color | None:
     if plan.get("side") == "black":
         return chess.BLACK
     return None
+
+
+def color_for_ply_index(index: int) -> chess.Color:
+    return chess.WHITE if index % 2 == 0 else chess.BLACK
+
+
+def opening_brief_for(plan: dict[str, Any] | None) -> dict[str, str]:
+    if not plan:
+        return {
+            "summary": "Le plan consiste a jouer des coups simples : centre, pieces actives, roi en securite.",
+            "completion": "L'ouverture est terminee quand le roi est en securite, les pieces sortent et le centre est clair.",
+        }
+    name = str(plan.get("nameFr") or "Cette ouverture")
+    goal = str(plan.get("learningGoal") or plan.get("beginnerGoal") or "installer une position claire.")
+    transition = plan.get("transitionToMiddlegame", {}) if isinstance(plan.get("transitionToMiddlegame"), dict) else {}
+    when = [str(item) for item in transition.get("when", []) if item]
+    if when:
+        completion = "Terminee lorsque " + ", ".join(when[:2]) + "."
+    else:
+        criteria = [str(item) for item in plan.get("successCriteria", []) if item]
+        completion = criteria[0] if criteria else "Terminee lorsque le centre, le developpement et la securite du roi sont traites."
+    return {
+        "summary": f"{name} consiste a {goal[0].lower() + goal[1:] if goal else 'installer une position claire.'}",
+        "completion": completion,
+    }
+
+
+def progress_impact_for(plan: dict[str, Any], move_history: list[str], plan_color: chess.Color | None, percent: int) -> str:
+    if not move_history:
+        return "La progression demarre au premier coup utile du plan."
+    last_index = len(move_history) - 1
+    last_side = color_for_ply_index(last_index)
+    if percent >= 82:
+        return "L'ouverture est presque terminee : les derniers coups doivent surtout stabiliser la position."
+    if plan_color is not None and last_side != plan_color:
+        return "Le coup adverse ne valide pas directement ton ouverture : le coach adapte le prochain repere."
+    line = plan.get("mainLineUci", [])
+    last_move = move_history[-1]
+    if last_index < len(line) and line[last_index] == last_move:
+        return "Ce coup fait avancer la ligne principale de l'ouverture."
+    if last_move in line:
+        return "Ce coup reste lie au plan, meme si l'ordre de coups a change."
+    return "Ce coup garde la position jouable, mais il avance moins directement l'ouverture choisie."
 
 
 def phase_display_for(phase: str, phase_status: str) -> dict[str, Any]:
@@ -446,9 +491,11 @@ def phase_status_for(
     if not plan:
         return "fallback"
     success = detect_opening_success(board, plan, move_history, primary_move)
+    progress = opening_progress_details_for(board, plan, move_history, success)
     line = plan.get("mainLineUci", [])
-    minimum_ply = max(6, min(10, len(line) + 2))
-    if success["completed"] >= 4 and len(move_history) >= minimum_ply:
+    minimum_ply = min(10, max(4, len(line)))
+    enough_plan_moves = int(progress["planMovesPlayed"]) >= int(progress["planMovesTarget"])
+    if int(progress["percent"]) >= 82 and enough_plan_moves and success["completed"] >= 3 and len(move_history) >= minimum_ply:
         return "opening_success"
     if status == "opponent_deviated":
         return "adapted"
@@ -460,23 +507,58 @@ def phase_status_for(
 def plan_progress_for(board: chess.Board, plan: dict[str, Any] | None, move_history: list[str], phase_status: str) -> dict[str, Any]:
     if not plan:
         return {"percent": 0, "completed": 0, "total": 0, "criteria": []}
-    success = detect_opening_success(board, plan, move_history, None)
-    total_line = max(1, len(plan.get("mainLineUci", [])))
-    target_ply = max(8, min(12, total_line + 4))
-    line_percent = min(100, round((min(len(move_history), total_line) / total_line) * 100))
-    tempo_percent = min(100, round((min(len(move_history), target_ply) / target_ply) * 100))
-    criteria_percent = round((success["completed"] / max(1, success["total"])) * 100)
-    raw_percent = round(line_percent * 0.5 + criteria_percent * 0.35 + tempo_percent * 0.15)
-    percent = 100 if phase_status == "opening_success" else min(92, raw_percent)
+    details = opening_progress_details_for(board, plan, move_history)
+    if phase_status == "opening_success":
+        details["percent"] = 100
+        details["impact"] = "Ouverture terminee : tu peux maintenant jouer les objectifs de milieu de partie."
+    return details
+
+
+def opening_progress_details_for(
+    board: chess.Board,
+    plan: dict[str, Any],
+    move_history: list[str],
+    success: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    success = success or detect_opening_success(board, plan, move_history, None)
+    plan_color = color_for_plan(plan)
+    line = plan.get("mainLineUci", [])
+    plan_line_moves = [
+        move
+        for index, move in enumerate(line)
+        if plan_color is None or color_for_ply_index(index) == plan_color
+    ]
+    played_plan_moves = [
+        move
+        for index, move in enumerate(move_history)
+        if plan_color is None or color_for_ply_index(index) == plan_color
+    ]
+    exact_plan_moves = [
+        move
+        for index, move in enumerate(move_history)
+        if index < len(line) and move == line[index] and (plan_color is None or color_for_ply_index(index) == plan_color)
+    ]
+    plan_target = max(2, min(4, len(plan_line_moves) or 3))
+    exact_total = max(1, len(plan_line_moves))
+    exact_ratio = min(1.0, len(exact_plan_moves) / exact_total)
+    plan_move_ratio = min(1.0, len(played_plan_moves) / plan_target)
+    criteria_ratio = success["completed"] / max(1, success["total"])
+    raw_percent = round(exact_ratio * 42 + plan_move_ratio * 34 + criteria_ratio * 24)
+    percent = 0 if not move_history else min(96, max(8, raw_percent))
     return {
         "percent": percent,
         "completed": success["completed"],
         "total": success["total"],
         "criteria": success["criteria"],
-        "linePly": min(len(move_history), total_line),
-        "lineTotal": total_line,
-        "tempoPly": min(len(move_history), target_ply),
-        "tempoTotal": target_ply,
+        "linePly": len(exact_plan_moves),
+        "lineTotal": exact_total,
+        "tempoPly": len(played_plan_moves),
+        "tempoTotal": plan_target,
+        "planMovesPlayed": len(played_plan_moves),
+        "planMovesTarget": plan_target,
+        "exactPlanMoves": len(exact_plan_moves),
+        "exactPlanTotal": exact_total,
+        "impact": progress_impact_for(plan, move_history, plan_color, percent),
     }
 
 

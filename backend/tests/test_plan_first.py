@@ -310,8 +310,9 @@ def test_opening_success_after_main_line(monkeypatch) -> None:
         },
     )
     data = response.json()
-    assert data["phaseStatus"] == "opening_in_progress"
-    assert 35 <= data["planProgress"]["percent"] < 100
+    assert data["phaseStatus"] == "opening_success"
+    assert data["phaseDisplay"]["key"] == "middlegame"
+    assert data["planProgress"]["percent"] == 100
 
 
 def test_completed_opening_switches_to_middlegame_ranked_choices(monkeypatch) -> None:
