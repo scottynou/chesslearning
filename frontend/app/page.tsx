@@ -1113,6 +1113,9 @@ function ImageImportConfirmDialog({
   onCancel: () => void;
   onConfirm: (side: "white" | "black") => void;
 }) {
+  const detectedOrientation: Orientation = draft.result.boardOrientation === "black_bottom" ? "black" : "white";
+  const detectedFen = fenWithSideToMove(draft.result.fen, draft.sideToMove);
+
   return (
     <div className="image-import-layer" role="dialog" aria-modal="true" aria-label="Importer une position">
       <button type="button" className="image-import-backdrop" aria-label="Annuler l'import" onClick={onCancel} />
@@ -1124,6 +1127,20 @@ function ImageImportConfirmDialog({
         <div className="image-import-content">
           <p className="image-import-eyebrow">Position detectee</p>
           <h2>Tu joues quel camp ?</h2>
+          <div className="image-import-board" aria-label="Plateau detecte">
+            <ChessCoachBoard
+              fen={detectedFen}
+              boardWidth={220}
+              orientation={detectedOrientation}
+              selectedSquare={null}
+              legalTargets={[]}
+              highlightedMove={null}
+              lastMove={null}
+              locked
+              onDrop={() => false}
+              onSquareClick={() => undefined}
+            />
+          </div>
           <div className="image-import-confidence">
             <span>Confiance</span>
             <strong>{draft.result.confidence}%</strong>

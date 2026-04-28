@@ -166,6 +166,7 @@ def health() -> dict[str, bool | str]:
         "aiProviderMode": os.getenv("AI_PROVIDER", "auto"),
         "aiRerankProvider": os.getenv("AI_RERANK_PROVIDER", "gemini"),
         "aiRerankModel": os.getenv("AI_RERANK_MODEL") or os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite"),
+        "imageImportModel": os.getenv("IMAGE_IMPORT_MODEL") or os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite"),
         "openaiConfigured": bool(os.getenv("OPENAI_API_KEY")),
         "geminiConfigured": bool(os.getenv("GEMINI_API_KEY")),
     }

@@ -243,6 +243,8 @@ button:disabled { cursor: not-allowed; }
 .image-import-content { display: grid; align-content: start; gap: 0.85rem; padding: clamp(1rem, 2.5vw, 1.35rem); }
 .image-import-eyebrow { margin: 0; color: #f7d89b; font-size: 0.66rem; font-weight: 950; letter-spacing: 0.16em; text-transform: uppercase; }
 .image-import-content h2 { margin: 0; font-size: clamp(1.55rem, 3vw, 2.4rem); font-weight: 920; line-height: 1; letter-spacing: 0; }
+.image-import-board { display: grid; justify-content: center; border: 1px solid rgba(247,239,224,0.10); border-radius: 18px; background: rgba(247,239,224,0.04); padding: 0.65rem; }
+.image-import-board .coach-board-frame { box-shadow: 0 22px 70px rgba(0,0,0,0.34); }
 .image-import-confidence, .image-import-turn { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; border: 1px solid rgba(247,239,224,0.10); border-radius: 16px; background: rgba(247,239,224,0.055); padding: 0.75rem 0.85rem; }
 .image-import-confidence span, .image-import-turn span { color: rgba(247,239,224,0.58); font-size: 0.78rem; font-weight: 850; }
 .image-import-confidence strong { color: #f7d89b; font-size: 1rem; font-weight: 950; }

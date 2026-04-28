@@ -15,7 +15,14 @@ IMAGE_IMPORT_SCHEMA: dict[str, Any] = {
     "properties": {
         "piecePlacement": {
             "type": "string",
-            "description": "FEN piece placement only, 8 ranks from rank 8 to rank 1.",
+            "description": "Optional final FEN piece placement from White's perspective.",
+        },
+        "visibleRows": {
+            "type": "array",
+            "description": "Exactly what is visible on the screenshot: 8 rows from screen top to screen bottom, each row left to right. Use KQRBNP for white pieces, kqrbnp for black pieces, and . for empty squares.",
+            "items": {"type": "string"},
+            "minItems": 8,
+            "maxItems": 8,
         },
         "sideToMove": {
             "type": "string",
@@ -35,7 +42,7 @@ IMAGE_IMPORT_SCHEMA: dict[str, Any] = {
             "items": {"type": "string"},
         },
     },
-    "required": ["piecePlacement", "sideToMove", "boardOrientation", "confidence", "warnings"],
+    "required": ["visibleRows", "sideToMove", "boardOrientation", "confidence", "warnings"],
 }
 
 
@@ -44,7 +51,7 @@ def import_position_image(request: ImportPositionImageRequest) -> ImportPosition
     if not api_key:
         raise RuntimeError("missing_gemini_api_key")
 
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
+    model = os.getenv("IMAGE_IMPORT_MODEL") or os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
     timeout_seconds = _float_env("IMAGE_IMPORT_TIMEOUT_SECONDS", 8.0)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     response = httpx.post(
@@ -81,7 +88,17 @@ def import_position_image(request: ImportPositionImageRequest) -> ImportPosition
 
 
 def response_from_detection(payload: dict[str, Any], *, provider: str, model: str) -> ImportPositionImageResponse:
-    placement = str(payload.get("piecePlacement", "")).strip()
+    board_orientation = str(payload.get("boardOrientation", "unknown")).strip().lower()
+    if board_orientation not in {"white_bottom", "black_bottom", "unknown"}:
+        board_orientation = "unknown"
+
+    visible_rows = _normalize_visible_rows(payload.get("visibleRows"))
+    if visible_rows is not None:
+        board_orientation = _infer_orientation(visible_rows, board_orientation)
+        placement = _visible_rows_to_piece_placement(visible_rows, board_orientation)
+    else:
+        placement = str(payload.get("piecePlacement", "")).strip()
+
     side_to_move = str(payload.get("sideToMove", "unknown")).strip().lower()
     if side_to_move not in {"white", "black"}:
         side_to_move = "white"
@@ -95,10 +112,8 @@ def response_from_detection(payload: dict[str, Any], *, provider: str, model: st
     warnings = [str(item) for item in payload.get("warnings", []) if str(item).strip()]
     if payload.get("sideToMove") == "unknown":
         warnings.append("Trait non visible sur l'image; les blancs sont selectionnes par defaut.")
-
-    board_orientation = str(payload.get("boardOrientation", "unknown")).strip().lower()
-    if board_orientation not in {"white_bottom", "black_bottom", "unknown"}:
-        board_orientation = "unknown"
+    if payload.get("boardOrientation") == "unknown":
+        warnings.append("Orientation estimee automatiquement; verifie le plateau avant de jouer.")
 
     return ImportPositionImageResponse(
         fen=fen,
@@ -131,13 +146,95 @@ def _castling_rights_from_placement(placement: str) -> str:
     return rights or "-"
 
 
+def _normalize_visible_rows(value: Any) -> list[str] | None:
+    if not isinstance(value, list) or len(value) != 8:
+        return None
+
+    normalized: list[str] = []
+    for row in value:
+        expanded = _expand_row(str(row))
+        if expanded is None:
+            return None
+        normalized.append(expanded)
+    return normalized
+
+
+def _expand_row(row: str) -> str | None:
+    clean = row.strip().replace(" ", "").replace("|", "").replace("-", ".").replace("_", ".")
+    squares: list[str] = []
+    for char in clean:
+        if char in "KQRBNPkqrbnp.":
+            squares.append(char)
+        elif char.isdigit():
+            squares.extend("." for _ in range(int(char)))
+        else:
+            return None
+    if len(squares) != 8:
+        return None
+    return "".join(squares)
+
+
+def _infer_orientation(visible_rows: list[str], board_orientation: str) -> str:
+    if board_orientation in {"white_bottom", "black_bottom"}:
+        return board_orientation
+
+    white_king_row = _piece_row(visible_rows, "K")
+    black_king_row = _piece_row(visible_rows, "k")
+    if white_king_row is not None and black_king_row is not None:
+        return "white_bottom" if white_king_row > black_king_row else "black_bottom"
+
+    white_piece_rows = [index for index, row in enumerate(visible_rows) if any(char.isupper() for char in row)]
+    black_piece_rows = [index for index, row in enumerate(visible_rows) if any(char.islower() for char in row)]
+    if white_piece_rows and black_piece_rows:
+        white_center = sum(white_piece_rows) / len(white_piece_rows)
+        black_center = sum(black_piece_rows) / len(black_piece_rows)
+        return "white_bottom" if white_center > black_center else "black_bottom"
+
+    return "unknown"
+
+
+def _piece_row(rows: list[str], piece: str) -> int | None:
+    for index, row in enumerate(rows):
+        if piece in row:
+            return index
+    return None
+
+
+def _visible_rows_to_piece_placement(visible_rows: list[str], board_orientation: str) -> str:
+    if board_orientation == "black_bottom":
+        standard_rows = ["".join(reversed(row)) for row in reversed(visible_rows)]
+    else:
+        standard_rows = visible_rows
+    return "/".join(_compress_row(row) for row in standard_rows)
+
+
+def _compress_row(row: str) -> str:
+    result = ""
+    empty_count = 0
+    for char in row:
+        if char == ".":
+            empty_count += 1
+            continue
+        if empty_count:
+            result += str(empty_count)
+            empty_count = 0
+        result += char
+    if empty_count:
+        result += str(empty_count)
+    return result
+
+
 def _prompt() -> str:
     return (
-        "Read the chessboard position from this screenshot. Return JSON only. "
-        "Use standard chess FEN piece placement from White's perspective, rank 8 to rank 1, regardless of the screenshot orientation. "
-        "Detect whether the board is shown with white pieces at the bottom or black pieces at the bottom when possible. "
+        "Read the chessboard position from this screenshot. Return JSON only. Accuracy matters more than speed. "
+        "First identify the 8x8 board edges. Then read the pieces square by square exactly as they appear on the screen. "
+        "Return visibleRows as 8 strings from the screenshot top row to bottom row, each string left to right on the screenshot. "
+        "Each visibleRows string must have exactly 8 characters: KQRBNP for white pieces, kqrbnp for black pieces, and . for empty squares. "
+        "Do not rotate visibleRows yourself. If the board is rotated, still write what the viewer sees from top-left to bottom-right. "
+        "Set boardOrientation to white_bottom if White's back rank/pieces are at the bottom of the screenshot, black_bottom if Black's are at the bottom, otherwise unknown. "
+        "piecePlacement is optional and can repeat the final FEN placement, but visibleRows is the source of truth. "
         "If the screenshot clearly shows whose turn it is, set sideToMove to white or black; otherwise set unknown. "
-        "Do not infer move history. Do not include explanations. If a square is obscured, choose the most likely legal piece and lower confidence."
+        "Do not infer move history. Do not include explanations. If a square is obscured, choose the most likely piece and lower confidence."
     )
 
 
