@@ -12,7 +12,7 @@ import { PlanFirstPanel } from "@/components/PlanFirstPanel";
 import { SideSelectionPanel } from "@/components/SideSelectionPanel";
 import { getPlanRecommendations, listAvailablePlans, requestBotMove } from "@/lib/api";
 import { canMoveInMode, gameStatus, isPromotionAttempt, tryMove } from "@/lib/chess";
-import { DEFAULT_BASE_ELO, effectiveElo, skillLevelForElo } from "@/lib/eloAdaptation";
+import { DEFAULT_BASE_ELO, MAX_ADAPTIVE_BOOST, effectiveElo, skillLevelForElo } from "@/lib/eloAdaptation";
 import { canStepBack, redoTimeline, undoTimeline, type MoveSource, type TimelineMove } from "@/lib/moveTimeline";
 import type { Orientation, PlanRecommendationsResponse, PlayMode, StrategyPlan } from "@/lib/types";
 
@@ -426,7 +426,7 @@ export default function HomePage() {
 
     const delta = planRecommendations.adaptiveSignal.suggestedBoostDelta ?? 0;
     if (!delta) return;
-    setAdaptiveBoost((current) => Math.max(0, Math.min(600, current + delta)));
+    setAdaptiveBoost((current) => Math.max(0, Math.min(MAX_ADAPTIVE_BOOST, current + delta)));
   }, [appStage, historyUci.length, planRecommendations?.adaptiveSignal]);
 
   const legalTargets = useMemo(() => {

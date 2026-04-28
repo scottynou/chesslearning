@@ -157,6 +157,8 @@ def get_plan_recommendations(
         phase_status=phase_status,
         blocked_expected_move=blocked_expected_move,
         opening_state=opening_state,
+        player_turn=player_turn,
+        engine_candidates=engine_candidates,
     )
     current_objective = current_objective_for(active_plan, phase, primary_move)
     progress = plan_progress_for(board, active_plan, move_history, phase_status)
@@ -528,7 +530,15 @@ def adaptive_signal_for(
     phase_status: str,
     blocked_expected_move: dict[str, Any] | None,
     opening_state: str,
+    player_turn: bool,
+    engine_candidates: list[Any],
 ) -> dict[str, Any]:
+    if not player_turn:
+        return {
+            "pressure": "stable",
+            "suggestedBoostDelta": 0,
+            "reason": "L'ajustement attend ton tour pour eviter les sauts inutiles.",
+        }
     if primary_move is None:
         return {
             "pressure": "stable",
@@ -540,30 +550,53 @@ def adaptive_signal_for(
     tactical_risk = int(primary_move.get("tacticalRisk") or 0)
     warning = bool(primary_move.get("warning") or blocked_expected_move)
     adapted = phase_status in {"adapted", "fallback"} or opening_state in {"recoverable", "abandoned"}
+    position_score = score_from_side_to_move(engine_candidates)
+    mating_danger = mate_danger_from_side_to_move(engine_candidates)
 
-    if warning or engine_score <= 45 or tactical_risk >= 45:
+    if warning or mating_danger == "critical" or position_score <= -260 or engine_score <= 45 or tactical_risk >= 45:
         return {
             "pressure": "critical",
-            "suggestedBoostDelta": 200,
-            "reason": "La position demande des coups plus precis pour eviter un danger tactique.",
+            "suggestedBoostDelta": 100,
+            "reason": "La position est sous forte pression : le coach monte d'un cran pour chercher des coups plus precis.",
         }
-    if adapted or engine_score <= 65 or tactical_risk >= 28:
+    if adapted or mating_danger == "warning" or position_score <= -90 or engine_score <= 65 or tactical_risk >= 28:
         return {
             "pressure": "worse",
-            "suggestedBoostDelta": 100,
-            "reason": "Le plan reste jouable mais la position demande un peu plus de precision.",
+            "suggestedBoostDelta": 50,
+            "reason": "L'adversaire met assez de pression pour augmenter legerement le niveau cache.",
         }
-    if engine_score >= 78 and tactical_risk <= 18 and not warning:
+    if position_score >= 160 and engine_score >= 74 and tactical_risk <= 18 and not warning:
         return {
             "pressure": "stable",
             "suggestedBoostDelta": -50,
-            "reason": "La position est stable, le coach peut revenir progressivement au niveau de base.",
+            "reason": "La position redevient confortable : le coach redescend progressivement.",
         }
     return {
         "pressure": "stable",
         "suggestedBoostDelta": 0,
         "reason": "Pas de changement utile du niveau cache.",
     }
+
+
+def score_from_side_to_move(engine_candidates: list[Any]) -> int:
+    if not engine_candidates:
+        return 0
+    candidate = engine_candidates[0]
+    eval_cp = getattr(candidate, "eval_cp", None)
+    if eval_cp is None:
+        return 0
+    return int(eval_cp)
+
+
+def mate_danger_from_side_to_move(engine_candidates: list[Any]) -> str:
+    if not engine_candidates:
+        return "none"
+    mate_in = getattr(engine_candidates[0], "mate_in", None)
+    if mate_in is None:
+        return "none"
+    if mate_in < 0:
+        return "critical"
+    return "winning"
 
 
 def fallback_move_score(board: chess.Board, move: chess.Move) -> int:

@@ -14,6 +14,7 @@ describe("eloAdaptation", () => {
     expect(normalizeBaseElo(3900)).toBe(3200);
     expect(effectiveElo(3150, 400)).toBe(3200);
     expect(effectiveElo(1200, -200)).toBe(1200);
+    expect(effectiveElo(1200, 1800)).toBe(2200);
   });
 
   it("maps Elo to the internal skill level", () => {

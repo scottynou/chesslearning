@@ -4,7 +4,7 @@ param(
 
   [string]$Region = "europe-west1",
   [string]$ServiceName = "chess-elo-coach-api",
-  [string]$Model = "gemini-2.5-flash"
+  [string]$Model = "gemini-2.5-flash-lite"
 )
 
 $ErrorActionPreference = "Stop"
@@ -49,7 +49,7 @@ if ($LASTEXITCODE -ne 0) { throw "Impossible de selectionner le projet $ProjectI
 & $gcloud run services update $ServiceName `
   --project $ProjectId `
   --region $Region `
-  --update-env-vars "AI_PROVIDER=auto,GEMINI_MODEL=$Model,GEMINI_API_KEY=$apiKey"
+  --update-env-vars "AI_PROVIDER=auto,AI_RERANK_PROVIDER=gemini,AI_RERANK_TIMEOUT_SECONDS=2.5,GEMINI_MODEL=$Model,GEMINI_API_KEY=$apiKey"
 if ($LASTEXITCODE -ne 0) { throw "Impossible de configurer Gemini sur Cloud Run." }
 
 Write-Host "Gemini est configure sur $ServiceName avec le modele $Model."

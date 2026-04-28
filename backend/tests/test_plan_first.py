@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 
 import chess
 from fastapi.testclient import TestClient
@@ -160,6 +161,41 @@ def test_opponent_deviation_on_opponent_turn_returns_expected_engine_move(monkey
     assert data["mergedRecommendations"] == []
     assert data["expectedOpponentMove"] is not None
     assert data["expectedOpponentMove"]["moveUci"] in {move.uci() for move in board.legal_moves}
+
+
+def test_adaptive_signal_progressively_tracks_position_pressure() -> None:
+    from app.strategy.plan_engine import adaptive_signal_for
+
+    move = {"engineScore": 72, "tacticalRisk": 12, "warning": None}
+
+    worse = adaptive_signal_for(
+        primary_move=move,
+        phase_status="opening_in_progress",
+        blocked_expected_move=None,
+        opening_state="on_track",
+        player_turn=True,
+        engine_candidates=[SimpleNamespace(eval_cp=-120, mate_in=None)],
+    )
+    critical = adaptive_signal_for(
+        primary_move=move,
+        phase_status="opening_in_progress",
+        blocked_expected_move=None,
+        opening_state="on_track",
+        player_turn=True,
+        engine_candidates=[SimpleNamespace(eval_cp=-320, mate_in=None)],
+    )
+    stable = adaptive_signal_for(
+        primary_move={**move, "engineScore": 82},
+        phase_status="opening_in_progress",
+        blocked_expected_move=None,
+        opening_state="on_track",
+        player_turn=True,
+        engine_candidates=[SimpleNamespace(eval_cp=220, mate_in=None)],
+    )
+
+    assert worse["suggestedBoostDelta"] == 50
+    assert critical["suggestedBoostDelta"] == 100
+    assert stable["suggestedBoostDelta"] == -50
 
 
 def test_player_turn_after_deviation_returns_primary_move(monkeypatch) -> None:
