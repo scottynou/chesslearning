@@ -4,6 +4,7 @@ out/
 dist/
 coverage/
 .codex-screenshots/
+.firebase/
 .env
 .env.local
 .venv/

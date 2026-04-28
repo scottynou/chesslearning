@@ -44,72 +44,63 @@
         "source": "/health",
         "run": {
           "serviceId": "chess-elo-coach-api",
-          "region": "europe-west1",
-          "pinTag": true
+          "region": "europe-west1"
         }
       },
       {
         "source": "/available-plans",
         "run": {
           "serviceId": "chess-elo-coach-api",
-          "region": "europe-west1",
-          "pinTag": true
+          "region": "europe-west1"
         }
       },
       {
         "source": "/analyze",
         "run": {
           "serviceId": "chess-elo-coach-api",
-          "region": "europe-west1",
-          "pinTag": true
+          "region": "europe-west1"
         }
       },
       {
         "source": "/explain",
         "run": {
           "serviceId": "chess-elo-coach-api",
-          "region": "europe-west1",
-          "pinTag": true
+          "region": "europe-west1"
         }
       },
       {
         "source": "/explain-candidate",
         "run": {
           "serviceId": "chess-elo-coach-api",
-          "region": "europe-west1",
-          "pinTag": true
+          "region": "europe-west1"
         }
       },
       {
         "source": "/review-move",
         "run": {
           "serviceId": "chess-elo-coach-api",
-          "region": "europe-west1",
-          "pinTag": true
+          "region": "europe-west1"
         }
       },
       {
         "source": "/bot-move",
         "run": {
           "serviceId": "chess-elo-coach-api",
-          "region": "europe-west1",
-          "pinTag": true
+          "region": "europe-west1"
         }
       },
       {
         "source": "/position-plan",
         "run": {
           "serviceId": "chess-elo-coach-api",
-          "region": "europe-west1",
-          "pinTag": true
+          "region": "europe-west1"
         }
       },
       {
         "source": "/plan-recommendations",
         "run": {
           "serviceId": "chess-elo-coach-api",
-          "region": "europe-west1",
-          "pinTag": true
+          "region": "europe-west1"
         }
       },
       {
