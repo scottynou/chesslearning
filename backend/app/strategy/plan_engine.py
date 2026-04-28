@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import chess
@@ -61,8 +62,17 @@ def get_plan_recommendations(
     else:
         safety_window = min(10, max(4, int(level_settings["technical_limit"]) * 2))
         multipv = min(24, safety_window * 2)
-        engine_lines = StockfishEngine().analyze(fen, multipv=multipv, depth=engine_depth)
+        recommend_ms = _int_env("STOCKFISH_RECOMMEND_MS", 700)
+        critical_ms = _int_env("STOCKFISH_CRITICAL_MS", 1200)
+        engine_lines = StockfishEngine().analyze(fen, multipv=multipv, depth=engine_depth, movetime_ms=recommend_ms)
         engine_candidates = rank_candidates(fen, engine_lines, elo=elo, max_moves=safety_window)
+        if (
+            critical_ms > recommend_ms
+            and engine_candidates
+            and (mate_danger_from_side_to_move(engine_candidates) == "critical" or score_from_side_to_move(engine_candidates) <= -260)
+        ):
+            engine_lines = StockfishEngine().analyze(fen, multipv=multipv, depth=engine_depth, movetime_ms=critical_ms)
+            engine_candidates = rank_candidates(fen, engine_lines, elo=elo, max_moves=safety_window)
     merged = merge_plan_and_engine_moves(
         fen=fen,
         plan_moves=plan_moves,
@@ -74,7 +84,11 @@ def get_plan_recommendations(
     )
 
     plan_items = [item for item in merged if item["source"] in {"plan", "plan_and_engine"}]
-    expected_opponent_move = pure_engine_expected_opponent_move(fen, max(engine_depth, 14)) if opponent_turn else None
+    expected_opponent_move = (
+        pure_engine_expected_opponent_move(fen, max(engine_depth, 14), _int_env("STOCKFISH_EXPECTED_MS", 650))
+        if opponent_turn
+        else None
+    )
     visible_plan_items = [] if opponent_turn else plan_items
     visible_merged = [] if opponent_turn else merged
     primary_move = None if opponent_turn else choose_primary_move(visible_plan_items, visible_merged)
@@ -641,12 +655,19 @@ def expected_opponent_move_for(item: dict[str, Any] | None) -> dict[str, Any] | 
     return copy
 
 
-def pure_engine_expected_opponent_move(fen: str, engine_depth: int) -> dict[str, Any] | None:
-    lines = StockfishEngine().analyze(fen, multipv=1, depth=engine_depth)
+def pure_engine_expected_opponent_move(fen: str, engine_depth: int, movetime_ms: int) -> dict[str, Any] | None:
+    lines = StockfishEngine().analyze(fen, multipv=1, depth=engine_depth, movetime_ms=movetime_ms)
     candidates = rank_candidates(fen, lines, elo=3200, max_moves=1)
     if not candidates:
         return None
     return expected_opponent_move_for(recommendation_from_candidate(fen, candidates[0]))
+
+
+def _int_env(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
 
 
 def recommendation_from_candidate(fen: str, candidate) -> dict[str, Any]:

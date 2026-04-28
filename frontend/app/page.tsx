@@ -269,6 +269,7 @@ export default function HomePage() {
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [firstOpponentMove, setFirstOpponentMove] = useState<string | null>(null);
   const [planRecommendations, setPlanRecommendations] = useState<PlanRecommendationsResponse | null>(null);
+  const [planRecommendationsFen, setPlanRecommendationsFen] = useState<string | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
   const [botThinking, setBotThinking] = useState(false);
@@ -310,6 +311,10 @@ export default function HomePage() {
   }, [game]);
   const effectiveCoachElo = useMemo(() => effectiveElo(DEFAULT_BASE_ELO, adaptiveBoost), [adaptiveBoost]);
   const activeSkillLevel = useMemo(() => skillLevelForElo(effectiveCoachElo), [effectiveCoachElo]);
+  const botTurnInBotMode = useMemo(() => {
+    if (appStage !== "coach" || mode === "both" || game.isGameOver() || pendingPromotion) return false;
+    return mode === "white" ? game.turn() === "b" : game.turn() === "w";
+  }, [appStage, game, mode, pendingPromotion]);
   const lastBoardMove = useMemo(() => {
     const move = history[history.length - 1];
     return move ? { from: move.from, to: move.to } : null;
@@ -334,6 +339,7 @@ export default function HomePage() {
         color: move.arrowColor ?? PLAYER_ARROW_FALLBACKS[Math.min(index, PLAYER_ARROW_FALLBACKS.length - 1)]
       }));
       const expectedOpponent = planRecommendations?.expectedOpponentMove;
+      if (planRecommendationsFen !== fen) return [];
       if (expectedOpponent) {
         arrows.push({
           from: expectedOpponent.moveUci.slice(0, 2),
@@ -343,7 +349,7 @@ export default function HomePage() {
       }
       return arrows;
     },
-    [planRecommendations?.expectedOpponentMove, visibleRecommendations]
+    [fen, planRecommendations?.expectedOpponentMove, planRecommendationsFen, visibleRecommendations]
   );
   const makeNavigationSnapshot = useCallback(
     (overrides: Partial<NavigationSnapshot> = {}) =>
@@ -397,6 +403,7 @@ export default function HomePage() {
     }
     setPlansError(null);
     setPlanRecommendations(null);
+    setPlanRecommendationsFen(null);
     setPlanError(null);
     setBotThinking(false);
     setBotError(null);
@@ -445,12 +452,12 @@ export default function HomePage() {
   useEffect(() => {
     const primaryUci = planRecommendations?.primaryMove?.moveUci ?? null;
     const hintUci = primaryUci ?? planRecommendations?.expectedOpponentMove?.moveUci ?? null;
-    if (appStage !== "coach" || !hintUci) {
+    if (appStage !== "coach" || !hintUci || planRecommendationsFen !== fen) {
       setHighlightedMove(null);
       return;
     }
     setHighlightedMove({ from: hintUci.slice(0, 2), to: hintUci.slice(2, 4) });
-  }, [appStage, planRecommendations?.expectedOpponentMove?.moveUci, planRecommendations?.primaryMove?.moveUci]);
+  }, [appStage, fen, planRecommendations?.expectedOpponentMove?.moveUci, planRecommendations?.primaryMove?.moveUci, planRecommendationsFen]);
 
   useEffect(() => {
     function updateBoardWidth() {
@@ -502,10 +509,17 @@ export default function HomePage() {
   useEffect(() => {
     if (appStage !== "coach") {
       setPlanRecommendations(null);
+      setPlanRecommendationsFen(null);
       return;
     }
     if (!selectedPlanId && userSide !== "both") {
       setPlanRecommendations(null);
+      setPlanRecommendationsFen(null);
+      return;
+    }
+    if (botTurnInBotMode) {
+      setPlanLoading(false);
+      setPlanError(null);
       return;
     }
 
@@ -525,12 +539,16 @@ export default function HomePage() {
       signal: controller.signal
     })
       .then((response) => {
-        if (active) setPlanRecommendations(response);
+        if (active) {
+          setPlanRecommendations(response);
+          setPlanRecommendationsFen(fen);
+        }
       })
       .catch((error: Error) => {
         if (isAbortError(error)) return;
         if (!active) return;
         setPlanRecommendations(null);
+        setPlanRecommendationsFen(null);
         setPlanError(error.message || "Impossible de mettre a jour les coups.");
       })
       .finally(() => {
@@ -541,7 +559,7 @@ export default function HomePage() {
       active = false;
       controller.abort();
     };
-  }, [activeSkillLevel, appStage, effectiveCoachElo, fen, historyUci, selectedPlanId, userSide]);
+  }, [activeSkillLevel, appStage, botTurnInBotMode, effectiveCoachElo, fen, historyUci, selectedPlanId, userSide]);
 
   useEffect(() => {
     if (appStage !== "coach" || !planRecommendations?.adaptiveSignal) return;
@@ -775,6 +793,7 @@ export default function HomePage() {
     setHighlightedMove(null);
     setLastMessage(null);
     setPlanRecommendations(null);
+    setPlanRecommendationsFen(null);
     setPlanError(null);
     botRequestInFlight.current = false;
     setBotThinking(false);
@@ -926,6 +945,7 @@ export default function HomePage() {
     setHighlightedMove(null);
     setLastMessage("Position importee depuis l'image.");
     setPlanRecommendations(null);
+    setPlanRecommendationsFen(null);
     setPlanError(null);
     setBotError(null);
     botRequestInFlight.current = false;

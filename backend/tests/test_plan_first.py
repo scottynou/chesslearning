@@ -11,7 +11,7 @@ from app.strategy.phase_detector import detect_game_phase
 
 
 class FakePlanStockfish:
-    def analyze(self, fen: str, multipv: int, depth: int):
+    def analyze(self, fen: str, multipv: int, depth: int, movetime_ms: int | None = None):
         board = chess.Board(fen)
         legal = {move.uci() for move in board.legal_moves}
         preferred = ["e2e4", "c7c6", "d2d4", "d7d5", "g1f3", "b8c6", "f1c4"]

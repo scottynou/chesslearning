@@ -44,7 +44,7 @@ def test_explanation_quality_rejects_text_without_piece_or_square() -> None:
 
 
 class FakeStockfishEngine:
-    def analyze(self, fen: str, multipv: int, depth: int):
+    def analyze(self, fen: str, multipv: int, depth: int, movetime_ms: int | None = None):
         board = chess.Board(fen)
         if multipv == 1:
             return [EngineLine(1, next(iter(board.legal_moves)).uci(), -60, None, [next(iter(board.legal_moves)).uci()])]

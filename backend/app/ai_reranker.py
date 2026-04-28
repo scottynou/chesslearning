@@ -38,7 +38,7 @@ def rerank_recommendations(
     if provider in {"none", "off", "disabled"}:
         return recommendations, _status("disabled", provider=provider, fallback_reason="disabled_by_env")
 
-    timeout_seconds = _float_env("AI_RERANK_TIMEOUT_SECONDS", 2.5)
+    timeout_seconds = _float_env("AI_RERANK_TIMEOUT_SECONDS", 0.7)
     started = monotonic()
     try:
         if provider == "gemini":

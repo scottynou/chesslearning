@@ -49,7 +49,7 @@ Write-Host "Enabling required APIs..."
 Invoke-Gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
 
 $corsRegex = "https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.(onrender\.com|web\.app|firebaseapp\.com)"
-$envVars = "AI_PROVIDER=auto,AI_RERANK_PROVIDER=gemini,AI_RERANK_TIMEOUT_SECONDS=2.5,GEMINI_MODEL=gemini-2.5-flash-lite,IMAGE_IMPORT_MODEL=gemini-2.5-flash,IMAGE_IMPORT_TIMEOUT_SECONDS=8,STOCKFISH_PATH=/usr/games/stockfish,FRONTEND_ORIGIN_REGEX=$corsRegex,RATE_LIMIT_WINDOW_SECONDS=60,RATE_LIMIT_PER_WINDOW=45"
+$envVars = "AI_PROVIDER=auto,AI_RERANK_PROVIDER=gemini,AI_RERANK_TIMEOUT_SECONDS=0.7,GEMINI_MODEL=gemini-2.5-flash-lite,IMAGE_IMPORT_MODEL=gemini-2.5-flash,IMAGE_IMPORT_TIMEOUT_SECONDS=8,STOCKFISH_PATH=/usr/games/stockfish,STOCKFISH_RECOMMEND_MS=700,STOCKFISH_EXPECTED_MS=650,STOCKFISH_BOT_MS=900,STOCKFISH_CRITICAL_MS=1200,FRONTEND_ORIGIN_REGEX=$corsRegex,RATE_LIMIT_WINDOW_SECONDS=60,RATE_LIMIT_PER_WINDOW=45"
 
 Write-Host "Deploying $ServiceName to Cloud Run in $Region..."
 Invoke-Gcloud run deploy $ServiceName `

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from .elo_ranker import rank_candidates
 from .schemas import BotMoveRequest, BotMoveResponse
 from .stockfish_engine import StockfishEngine
@@ -10,6 +12,7 @@ def choose_bot_move(request: BotMoveRequest) -> BotMoveResponse:
         request.fen,
         multipv=1,
         depth=max(request.engine_depth, 14),
+        movetime_ms=_int_env("STOCKFISH_BOT_MS", 900),
     )
     candidates = rank_candidates(request.fen, lines, elo=3200, max_moves=1)
     if not candidates:
@@ -22,3 +25,10 @@ def choose_bot_move(request: BotMoveRequest) -> BotMoveResponse:
         updatedStrategyState=request.strategy_state or {},
         explanationPreview=selected.summary,
     )
+
+
+def _int_env(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
