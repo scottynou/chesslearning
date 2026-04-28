@@ -5,6 +5,7 @@ export const ELO_MAX = 3200;
 export const ELO_STEP = 50;
 export const DEFAULT_BASE_ELO = 1200;
 export const MAX_ADAPTIVE_BOOST = 400;
+export const MIN_ADAPTIVE_BOOST = -200;
 
 export type EloQuality = "excellent" | "good" | "playable" | "inaccurate" | "mistake" | "blunder";
 
@@ -32,7 +33,7 @@ export function normalizeBaseElo(value: number) {
 
 export function normalizeAdaptiveBoost(value: number) {
   const stepped = Math.round(value / ELO_STEP) * ELO_STEP;
-  return clamp(stepped, 0, MAX_ADAPTIVE_BOOST);
+  return clamp(stepped, MIN_ADAPTIVE_BOOST, MAX_ADAPTIVE_BOOST);
 }
 
 export function effectiveElo(baseElo: number, adaptiveBoost: number) {
@@ -83,22 +84,6 @@ export function nextAdaptiveBoost(context: EloAdaptationContext) {
   const rawDelta = targetBoost - currentBoost;
   const cappedDelta = rawDelta > 0 ? Math.min(100, rawDelta) : Math.max(-50, rawDelta);
   return normalizeAdaptiveBoost(currentBoost + cappedDelta);
-}
-
-export function formatEloLabel({
-  baseElo,
-  adaptiveBoost,
-  autoEnabled
-}: {
-  baseElo: number;
-  adaptiveBoost: number;
-  autoEnabled: boolean;
-}) {
-  const base = normalizeBaseElo(baseElo);
-  const boost = normalizeAdaptiveBoost(autoEnabled ? adaptiveBoost : 0);
-  const effective = effectiveElo(base, boost);
-  const boostLabel = autoEnabled ? `Auto +${boost}` : "Auto off";
-  return `Niveau ${base} - ${boostLabel} - Effectif ${effective}`;
 }
 
 function clamp(value: number, minimum: number, maximum: number) {

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   effectiveElo,
-  formatEloLabel,
   nextAdaptiveBoost,
   nextStablePlyCount,
   normalizeBaseElo,
@@ -14,6 +13,7 @@ describe("eloAdaptation", () => {
     expect(normalizeBaseElo(1237)).toBe(1250);
     expect(normalizeBaseElo(3900)).toBe(3200);
     expect(effectiveElo(3150, 400)).toBe(3200);
+    expect(effectiveElo(1200, -200)).toBe(1000);
   });
 
   it("maps Elo to the internal skill level", () => {
@@ -29,10 +29,11 @@ describe("eloAdaptation", () => {
     expect(nextAdaptiveBoost({ currentBoost: 100, autoEnabled: true, playerReviewQuality: "mistake", stablePlyCount: 0 })).toBe(200);
   });
 
-  it("reduces the boost after two stable plies", () => {
+  it("reduces the hidden adjustment after two stable plies", () => {
     const stableCount = nextStablePlyCount({ currentStablePlyCount: 1, quality: "good", hasDanger: false });
     expect(stableCount).toBe(2);
     expect(nextAdaptiveBoost({ currentBoost: 150, autoEnabled: true, playerReviewQuality: "good", stablePlyCount: stableCount })).toBe(100);
+    expect(nextAdaptiveBoost({ currentBoost: 0, autoEnabled: true, playerReviewQuality: "excellent", stablePlyCount: stableCount })).toBe(-50);
   });
 
   it("does not adjust twice on the same ply", () => {
@@ -47,8 +48,4 @@ describe("eloAdaptation", () => {
     ).toBe(100);
   });
 
-  it("formats a compact label for the control", () => {
-    expect(formatEloLabel({ baseElo: 1200, adaptiveBoost: 100, autoEnabled: true })).toBe("Niveau 1200 - Auto +100 - Effectif 1300");
-    expect(formatEloLabel({ baseElo: 1200, adaptiveBoost: 100, autoEnabled: false })).toBe("Niveau 1200 - Auto off - Effectif 1200");
-  });
 });

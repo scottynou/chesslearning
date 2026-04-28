@@ -1,17 +1,6 @@
 "use client";
 
 import type { PlanRecommendation, PlanRecommendationsResponse, StrategyPlan } from "@/lib/types";
-import { ELO_MAX, ELO_MIN, ELO_STEP, formatEloLabel } from "@/lib/eloAdaptation";
-
-type EloControl = {
-  baseElo: number;
-  adaptiveBoost: number;
-  effectiveElo: number;
-  autoEnabled: boolean;
-  onBaseEloChange: (value: number) => void;
-  onAutoEnabledChange: (value: boolean) => void;
-  onResetBoost: () => void;
-};
 
 type PlanFirstPanelProps = {
   selectedPlan?: StrategyPlan | null;
@@ -20,7 +9,6 @@ type PlanFirstPanelProps = {
   error?: string | null;
   highlightedMoveUci?: string | null;
   expectedReplyLabel?: string | null;
-  eloControl?: EloControl;
   onToggleRecommendation: (recommendation: PlanRecommendation) => void;
 };
 
@@ -31,7 +19,6 @@ export function PlanFirstPanel({
   error,
   highlightedMoveUci,
   expectedReplyLabel,
-  eloControl,
   onToggleRecommendation
 }: PlanFirstPanelProps) {
   const primary = recommendations?.primaryMove ?? null;
@@ -64,8 +51,6 @@ export function PlanFirstPanel({
           </div>
         ) : null}
       </div>
-
-      {eloControl ? <EloControlPanel control={eloControl} /> : null}
 
       {loading ? <CoachUpdatingBanner stale={hasStaleRecommendations} /> : null}
       {error ? <div className="live-error">{error}</div> : null}
@@ -111,56 +96,6 @@ export function PlanFirstPanel({
         <CoachLoadingSkeleton />
       ) : null}
     </section>
-  );
-}
-
-function EloControlPanel({ control }: { control: EloControl }) {
-  const label = formatEloLabel({
-    baseElo: control.baseElo,
-    adaptiveBoost: control.adaptiveBoost,
-    autoEnabled: control.autoEnabled
-  });
-  const boostLabel = control.autoEnabled ? `Auto +${control.adaptiveBoost}` : "Auto off";
-
-  return (
-    <div className="elo-control" aria-label={label}>
-      <div className="elo-control-head">
-        <div>
-          <p>Niveau coach</p>
-          <strong>{control.effectiveElo}</strong>
-        </div>
-        <button
-          type="button"
-          className={control.autoEnabled ? "elo-auto-toggle is-active" : "elo-auto-toggle"}
-          onClick={() => control.onAutoEnabledChange(!control.autoEnabled)}
-          aria-pressed={control.autoEnabled}
-        >
-          Auto
-        </button>
-      </div>
-
-      <input
-        type="range"
-        min={ELO_MIN}
-        max={ELO_MAX}
-        step={ELO_STEP}
-        value={control.baseElo}
-        onChange={(event) => control.onBaseEloChange(Number(event.target.value))}
-        aria-label="Niveau Elo de base"
-      />
-
-      <div className="elo-control-meta">
-        <span>Niveau {control.baseElo}</span>
-        <span>{boostLabel}</span>
-        <span>Effectif {control.effectiveElo}</span>
-      </div>
-
-      {control.adaptiveBoost > 0 ? (
-        <button type="button" onClick={control.onResetBoost} className="elo-reset-button">
-          Reinitialiser boost
-        </button>
-      ) : null}
-    </div>
   );
 }
 

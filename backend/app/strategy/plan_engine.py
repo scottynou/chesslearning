@@ -47,10 +47,14 @@ def get_plan_recommendations(
     waiting_for_opponent = active_plan is not None and plan_color is not None and board.turn != plan_color and phase == "opening"
     level_settings = skill_level_settings(skill_level, elo, max_moves)
 
-    safety_window = min(10, max(10, int(level_settings["technical_limit"]) * 2))
-    multipv = min(30, safety_window * 3)
-    engine_lines = StockfishEngine().analyze(fen, multipv=multipv, depth=engine_depth)
-    engine_candidates = rank_candidates(fen, engine_lines, elo=elo, max_moves=safety_window)
+    if waiting_for_opponent:
+        engine_lines = []
+        engine_candidates = []
+    else:
+        safety_window = min(10, max(4, int(level_settings["technical_limit"]) * 2))
+        multipv = min(24, safety_window * 2)
+        engine_lines = StockfishEngine().analyze(fen, multipv=multipv, depth=engine_depth)
+        engine_candidates = rank_candidates(fen, engine_lines, elo=elo, max_moves=safety_window)
     merged = merge_plan_and_engine_moves(
         fen=fen,
         plan_moves=plan_moves,

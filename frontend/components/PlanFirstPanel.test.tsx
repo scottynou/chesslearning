@@ -124,40 +124,4 @@ describe("PlanFirstPanel", () => {
     expect(screen.getByText("Meilleur")).toBeTruthy();
     expect(screen.getByText("Alternative saine")).toBeTruthy();
   });
-
-  it("shows the adaptive Elo control and forwards changes", () => {
-    const onBaseEloChange = vi.fn();
-    const onAutoEnabledChange = vi.fn();
-    const onResetBoost = vi.fn();
-    render(
-      <PlanFirstPanel
-        recommendations={response}
-        onToggleRecommendation={() => undefined}
-        highlightedMoveUci={null}
-        eloControl={{
-          baseElo: 1200,
-          adaptiveBoost: 100,
-          effectiveElo: 1300,
-          autoEnabled: true,
-          onBaseEloChange,
-          onAutoEnabledChange,
-          onResetBoost
-        }}
-      />
-    );
-
-    expect(screen.getByText("Niveau coach")).toBeTruthy();
-    expect(screen.getByText("Niveau 1200")).toBeTruthy();
-    expect(screen.getByText("Auto +100")).toBeTruthy();
-    expect(screen.getByText("Effectif 1300")).toBeTruthy();
-
-    fireEvent.change(screen.getByLabelText("Niveau Elo de base"), { target: { value: "1500" } });
-    expect(onBaseEloChange).toHaveBeenCalledWith(1500);
-
-    fireEvent.click(screen.getByText("Auto"));
-    expect(onAutoEnabledChange).toHaveBeenCalledWith(false);
-
-    fireEvent.click(screen.getByText("Reinitialiser boost"));
-    expect(onResetBoost).toHaveBeenCalled();
-  });
 });

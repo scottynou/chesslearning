@@ -12,13 +12,14 @@ import type {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
-async function requestJson<T>(path: string, body: unknown): Promise<T> {
+async function requestJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
     headers: {
       // Keeps cross-origin POSTs CORS-simple; the API maps this body back to JSON.
       "Content-Type": "text/plain"
     },
+    signal,
     body: JSON.stringify(body)
   });
 
@@ -75,8 +76,10 @@ export function reviewMove(params: {
   moveHistoryPgn?: string;
   selectedPlanId?: string | null;
   moveHistoryUci?: string[];
+  signal?: AbortSignal;
 }): Promise<ReviewMoveResponse> {
-  return requestJson<ReviewMoveResponse>("/review-move", params);
+  const { signal, ...body } = params;
+  return requestJson<ReviewMoveResponse>("/review-move", body, signal);
 }
 
 export function requestBotMove(params: {
@@ -89,11 +92,13 @@ export function requestBotMove(params: {
   selectedBotPlanId?: string | null;
   userPlanId?: string | null;
   strategyState?: Record<string, unknown>;
+  signal?: AbortSignal;
 }): Promise<BotMoveResponse> {
+  const { signal, ...body } = params;
   return requestJson<BotMoveResponse>("/bot-move", {
-    ...params,
-    botStyle: params.botStyle ?? "balanced"
-  });
+    ...body,
+    botStyle: body.botStyle ?? "balanced"
+  }, signal);
 }
 
 export function getPositionPlan(fen: string, moveHistoryUci: string[]): Promise<PositionPlanResponse> {
@@ -120,9 +125,11 @@ export function getPlanRecommendations(params: {
   moveHistoryUci: string[];
   maxMoves: number;
   engineDepth?: number;
+  signal?: AbortSignal;
 }): Promise<PlanRecommendationsResponse> {
+  const { signal, ...body } = params;
   return requestJson<PlanRecommendationsResponse>("/plan-recommendations", {
-    ...params,
-    engineDepth: params.engineDepth ?? 10
-  });
+    ...body,
+    engineDepth: body.engineDepth ?? 10
+  }, signal);
 }
