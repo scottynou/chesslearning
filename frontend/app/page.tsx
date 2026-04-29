@@ -89,10 +89,11 @@ const IMAGE_IMPORT_MAX_PAYLOAD_CHARS = 2.4 * 1024 * 1024;
 const IMAGE_IMPORT_DIMENSIONS = [1400, 1100, 900, 720];
 const IMAGE_IMPORT_QUALITIES = [0.82, 0.7, 0.58, 0.46];
 const LOCAL_IMAGE_IMPORT_CANVAS_SIZE = 640;
+const LOCAL_TEMPLATE_SIZE = 18;
 const EDITABLE_FILES = ["a", "b", "c", "d", "e", "f", "g", "h"] as const;
 const EDITABLE_RANKS = ["8", "7", "6", "5", "4", "3", "2", "1"] as const;
 const EDITABLE_PIECES: Array<{ value: EditablePiece | null; label: string; symbol: string }> = [
-  { value: null, label: "Vider", symbol: "×" },
+  { value: null, label: "Effacer", symbol: "Vide" },
   { value: "K", label: "Roi blanc", symbol: "♔" },
   { value: "Q", label: "Dame blanche", symbol: "♕" },
   { value: "R", label: "Tour blanche", symbol: "♖" },
@@ -106,6 +107,14 @@ const EDITABLE_PIECES: Array<{ value: EditablePiece | null; label: string; symbo
   { value: "n", label: "Cavalier noir", symbol: "♞" },
   { value: "p", label: "Pion noir", symbol: "♟" }
 ];
+const LOCAL_TEMPLATE_SYMBOLS: Record<Lowercase<EditablePiece>, string> = {
+  k: "\u265A",
+  q: "\u265B",
+  r: "\u265C",
+  b: "\u265D",
+  n: "\u265E",
+  p: "\u265F"
+};
 
 function buildGameFromHistory(moves: string[], startFen?: string | null) {
   const next = startFen ? new Chess(startFen) : new Chess();
@@ -275,7 +284,12 @@ function rotateEditableBoard(board: EditableBoard): EditableBoard {
 }
 
 function pieceSymbol(piece: EditablePiece | null) {
+  if (!piece) return "";
   return EDITABLE_PIECES.find((item) => item.value === piece)?.symbol ?? "";
+}
+
+function pieceLabel(piece: EditablePiece | null) {
+  return EDITABLE_PIECES.find((item) => item.value === piece)?.label ?? "Effacer";
 }
 
 function orientedEditableSquares(orientation: Orientation) {
@@ -353,7 +367,7 @@ async function prepareImageForImport(file: File) {
       mimeType: mimeTypeFromDataUrl(variant.dataUrl) || "image/jpeg",
       label: variant.label,
       dataUrl: variant.dataUrl
-    })),
+    })).slice(0, 4),
     localCandidateDataUrls: [compressedDataUrl, ...cropDataUrls.map((variant) => variant.dataUrl)],
     fileName: file.name || "position.jpg"
   };
@@ -402,26 +416,48 @@ async function createImageImportCropDataUrls(dataUrl: string) {
     if (cropped) variants.push({ label: crop.label, dataUrl: cropped });
   }
 
-  return variants.slice(0, 4);
+  return variants.slice(0, 14);
 }
 
 function imageImportCropRects(width: number, height: number) {
-  const square = Math.min(width, height);
-  const centerX = Math.max(0, Math.round((width - square) / 2));
-  const centerY = Math.max(0, Math.round((height - square) / 2));
-  const crops: Array<{ x: number; y: number; width: number; height: number; label: string }> = [
-    { x: centerX, y: centerY, width: square, height: square, label: "crop carre centre" }
-  ];
+  const maxSquare = Math.min(width, height);
+  const crops: Array<{ x: number; y: number; width: number; height: number; label: string }> = [];
+  const seen = new Set<string>();
 
-  if (width > height * 1.12) {
-    crops.push({ x: 0, y: 0, width: square, height: square, label: "crop carre gauche" });
-    crops.push({ x: width - square, y: 0, width: square, height: square, label: "crop carre droit" });
+  function addCrop(centerXRatio: number, centerYRatio: number, sizeRatio: number, label: string) {
+    const cropSize = Math.max(64, Math.round(maxSquare * sizeRatio));
+    const centerX = width * centerXRatio;
+    const centerY = height * centerYRatio;
+    const x = Math.max(0, Math.min(width - cropSize, Math.round(centerX - cropSize / 2)));
+    const y = Math.max(0, Math.min(height - cropSize, Math.round(centerY - cropSize / 2)));
+    const key = `${x}:${y}:${cropSize}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    crops.push({ x, y, width: cropSize, height: cropSize, label });
   }
 
-  if (height > width * 1.12) {
-    crops.push({ x: 0, y: 0, width: square, height: square, label: "crop carre haut" });
-    crops.push({ x: 0, y: height - square, width: square, height: square, label: "crop carre bas" });
+  addCrop(0.5, 0.5, 1, "crop carre centre");
+  addCrop(0.5, 0.5, 0.9, "crop centre serre");
+  addCrop(0.5, 0.5, 0.78, "crop centre proche");
+
+  if (width >= height) {
+    addCrop(0.33, 0.5, 1, "crop gauche");
+    addCrop(0.67, 0.5, 1, "crop droit");
+    addCrop(0.25, 0.5, 0.9, "crop gauche serre");
+    addCrop(0.75, 0.5, 0.9, "crop droit serre");
   }
+
+  if (height >= width) {
+    addCrop(0.5, 0.34, 1, "crop haut");
+    addCrop(0.5, 0.66, 1, "crop bas");
+    addCrop(0.5, 0.25, 0.9, "crop haut serre");
+    addCrop(0.5, 0.75, 0.9, "crop bas serre");
+  }
+
+  addCrop(0.28, 0.34, 0.82, "crop haut gauche");
+  addCrop(0.72, 0.34, 0.82, "crop haut droit");
+  addCrop(0.28, 0.66, 0.82, "crop bas gauche");
+  addCrop(0.72, 0.66, 0.82, "crop bas droit");
 
   return crops;
 }
@@ -486,16 +522,36 @@ function mimeTypeFromDataUrl(dataUrl: string) {
 
 async function detectPositionLocally(dataUrls: string[]): Promise<LocalBoardDetection | null> {
   const detections: LocalBoardDetection[] = [];
-  for (const dataUrl of dataUrls.slice(0, 5)) {
+  for (const dataUrl of dataUrls.slice(0, 15)) {
     try {
       const detection = await detectPositionFromSquareImage(dataUrl);
       detections.push(detection);
+      detections.push({
+        boardMap: rotateEditableBoard(detection.boardMap),
+        confidence: Math.max(0, detection.confidence - 4),
+        warnings: [...detection.warnings, "Orientation retournee testee automatiquement."]
+      });
     } catch {
       continue;
     }
   }
   if (!detections.length) return null;
-  return detections.sort((a, b) => b.confidence - a.confidence)[0];
+  return detections.sort((a, b) => localDetectionScore(b) - localDetectionScore(a))[0];
+}
+
+function localDetectionScore(detection: LocalBoardDetection) {
+  const pieces = Object.values(detection.boardMap).filter(Boolean);
+  const hasWhiteKing = pieces.includes("K");
+  const hasBlackKing = pieces.includes("k");
+  let score = detection.confidence;
+  score += Math.min(32, pieces.length) * 1.8;
+  if (pieces.length >= 4 && pieces.length <= 32) score += 18;
+  if (hasWhiteKing) score += 14;
+  if (hasBlackKing) score += 14;
+  if (hasWhiteKing && hasBlackKing) score += 24;
+  if (editableBoardIsValid(detection.boardMap, "white")) score += 24;
+  if (pieces.length > 32) score -= 80;
+  return score;
 }
 
 async function detectPositionFromSquareImage(dataUrl: string): Promise<LocalBoardDetection> {
@@ -558,6 +614,7 @@ function detectLocalSquare(imageData: ImageData, square: string, x: number, y: n
   let topCount = 0;
   let middleCount = 0;
   let bottomCount = 0;
+  const maskCounts = new Array<number>(LOCAL_TEMPLATE_SIZE * LOCAL_TEMPLATE_SIZE).fill(0);
 
   for (let py = Math.round(y + margin); py < Math.round(y + size - margin); py += 2) {
     for (let px = Math.round(x + margin); px < Math.round(x + size - margin); px += 2) {
@@ -582,6 +639,9 @@ function detectLocalSquare(imageData: ImageData, square: string, x: number, y: n
       if (relativeY < 0.34) topCount += 1;
       else if (relativeY < 0.68) middleCount += 1;
       else bottomCount += 1;
+      const maskX = Math.max(0, Math.min(LOCAL_TEMPLATE_SIZE - 1, Math.floor(((px - x) / size) * LOCAL_TEMPLATE_SIZE)));
+      const maskY = Math.max(0, Math.min(LOCAL_TEMPLATE_SIZE - 1, Math.floor(((py - y) / size) * LOCAL_TEMPLATE_SIZE)));
+      maskCounts[maskY * LOCAL_TEMPLATE_SIZE + maskX] += 1;
     }
   }
 
@@ -600,7 +660,8 @@ function detectLocalSquare(imageData: ImageData, square: string, x: number, y: n
     asymmetry: Math.abs(leftCount - rightCount) / Math.max(1, count),
     topRatio: topCount / Math.max(1, count),
     middleRatio: middleCount / Math.max(1, count),
-    bottomRatio: bottomCount / Math.max(1, count)
+    bottomRatio: bottomCount / Math.max(1, count),
+    mask: maskCounts.map((value) => value > 0)
   });
   const piece = pieceColor === "white" ? pieceType.toUpperCase() : pieceType;
   const confidence = Math.round(Math.max(38, Math.min(84, 44 + fillRatio * 100 + Math.min(18, count / 38))));
@@ -655,6 +716,7 @@ function classifyLocalPiece(features: {
   topRatio: number;
   middleRatio: number;
   bottomRatio: number;
+  mask: boolean[];
 }): Lowercase<EditablePiece> {
   const file = features.square[0];
   const rank = Number(features.square[1]);
@@ -665,7 +727,12 @@ function classifyLocalPiece(features: {
     if (file === "b" || file === "g") return "n";
     if (file === "c" || file === "f") return "b";
     if (file === "d") return "q";
-    if (file === "e") return "k";
+      if (file === "e") return "k";
+  }
+
+  const templateMatch = bestLocalTemplateMatch(features.mask);
+  if (templateMatch && templateMatch.score >= 0.44) {
+    return templateMatch.piece;
   }
 
   if (features.heightRatio < 0.54 && features.widthRatio < 0.58) return "p";
@@ -677,12 +744,81 @@ function classifyLocalPiece(features: {
   return features.fillRatio > 0.18 ? "b" : "p";
 }
 
+const localTemplateCache = new Map<Lowercase<EditablePiece>, boolean[]>();
+
+function bestLocalTemplateMatch(mask: boolean[]) {
+  let best: { piece: Lowercase<EditablePiece>; score: number } | null = null;
+  for (const piece of ["k", "q", "r", "b", "n", "p"] as Array<Lowercase<EditablePiece>>) {
+    const template = localTemplateMask(piece);
+    const score = compareLocalMasks(mask, template);
+    if (!best || score > best.score) {
+      best = { piece, score };
+    }
+  }
+  return best;
+}
+
+function localTemplateMask(piece: Lowercase<EditablePiece>) {
+  const cached = localTemplateCache.get(piece);
+  if (cached) return cached;
+  const canvas = document.createElement("canvas");
+  canvas.width = 72;
+  canvas.height = 72;
+  const context = canvas.getContext("2d");
+  if (!context) return new Array<boolean>(LOCAL_TEMPLATE_SIZE * LOCAL_TEMPLATE_SIZE).fill(false);
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = "#000000";
+  context.font = "58px Georgia, 'Times New Roman', serif";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(LOCAL_TEMPLATE_SYMBOLS[piece], canvas.width / 2, canvas.height / 2 + 2);
+  const data = context.getImageData(0, 0, canvas.width, canvas.height).data;
+  const mask = new Array<boolean>(LOCAL_TEMPLATE_SIZE * LOCAL_TEMPLATE_SIZE).fill(false);
+  const binWidth = canvas.width / LOCAL_TEMPLATE_SIZE;
+  const binHeight = canvas.height / LOCAL_TEMPLATE_SIZE;
+  for (let y = 0; y < LOCAL_TEMPLATE_SIZE; y += 1) {
+    for (let x = 0; x < LOCAL_TEMPLATE_SIZE; x += 1) {
+      let active = 0;
+      let samples = 0;
+      for (let py = Math.floor(y * binHeight); py < Math.floor((y + 1) * binHeight); py += 1) {
+        for (let px = Math.floor(x * binWidth); px < Math.floor((x + 1) * binWidth); px += 1) {
+          active += data[(py * canvas.width + px) * 4 + 3] > 20 ? 1 : 0;
+          samples += 1;
+        }
+      }
+      mask[y * LOCAL_TEMPLATE_SIZE + x] = active / Math.max(1, samples) > 0.12;
+    }
+  }
+  localTemplateCache.set(piece, mask);
+  return mask;
+}
+
+function compareLocalMasks(a: boolean[], b: boolean[]) {
+  let intersection = 0;
+  let union = 0;
+  let aCount = 0;
+  let bCount = 0;
+  for (let index = 0; index < Math.min(a.length, b.length); index += 1) {
+    if (a[index]) aCount += 1;
+    if (b[index]) bCount += 1;
+    if (a[index] || b[index]) union += 1;
+    if (a[index] && b[index]) intersection += 1;
+  }
+  if (!union) return 0;
+  const coveragePenalty = Math.abs(aCount - bCount) / Math.max(aCount, bCount, 1);
+  return intersection / union - coveragePenalty * 0.12;
+}
+
 function repairLocalBackRankPieces(board: EditableBoard) {
   const backRanks: Array<{ color: "white" | "black"; rank: string; pieces: EditablePiece[] }> = [
     { color: "white", rank: "1", pieces: ["R", "N", "B", "Q", "K", "B", "N", "R"] },
     { color: "black", rank: "8", pieces: ["r", "n", "b", "q", "k", "b", "n", "r"] }
   ];
   for (const backRank of backRanks) {
+    const rankPieces = EDITABLE_FILES.map((file) => board[`${file}${backRank.rank}`]).filter(Boolean) as EditablePiece[];
+    const sameColorCount = rankPieces.filter((piece) => backRank.color === "white" ? piece === piece.toUpperCase() : piece === piece.toLowerCase()).length;
+    const opponentCount = rankPieces.length - sameColorCount;
+    if (sameColorCount < 4 || opponentCount > 0) continue;
     for (let index = 0; index < EDITABLE_FILES.length; index += 1) {
       const square = `${EDITABLE_FILES[index]}${backRank.rank}`;
       const piece = board[square];
@@ -1809,6 +1945,10 @@ function ImageImportConfirmDialog({
           <p className="image-import-eyebrow">{statusLabel}</p>
           <h2>Verifie la position</h2>
           <p className="image-import-copy">Choisis une piece, touche une case pour corriger, puis valide seulement quand le plateau est identique a l&apos;image.</p>
+          <div className="image-import-active-tool">
+            <span>Outil actif</span>
+            <strong>{pieceLabel(selectedPiece)}</strong>
+          </div>
 
           <EditablePositionBoard
             board={draft.boardMap}
@@ -1827,7 +1967,7 @@ function ImageImportConfirmDialog({
                 title={piece.label}
                 aria-label={piece.label}
               >
-                {piece.symbol}
+                <span>{piece.symbol}</span>
               </button>
             ))}
           </div>
@@ -1946,15 +2086,21 @@ function EditablePositionBoard({
         const fileIndex = EDITABLE_FILES.indexOf(square[0] as (typeof EDITABLE_FILES)[number]);
         const rank = Number(square[1]);
         const isLight = (fileIndex + rank) % 2 === 1;
+        const piece = board[square];
         return (
           <button
             key={square}
             type="button"
-            className={isLight ? "editable-square is-light" : "editable-square is-dark"}
+            className={[
+              "editable-square",
+              isLight ? "is-light" : "is-dark",
+              piece ? "has-piece" : "is-empty"
+            ].join(" ")}
             onClick={() => onSquareChange(square, selectedPiece)}
-            aria-label={`${square} ${board[square] ? pieceSymbol(board[square]) : "vide"}`}
+            aria-label={`${square} ${piece ? pieceLabel(piece) : "vide"}`}
+            title={`${square} - ${piece ? pieceLabel(piece) : "vide"}`}
           >
-            <span>{pieceSymbol(board[square])}</span>
+            <span>{pieceSymbol(piece)}</span>
             <small>{square}</small>
           </button>
         );
