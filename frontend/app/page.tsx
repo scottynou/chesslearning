@@ -1202,7 +1202,7 @@ export default function HomePage() {
               result: null,
               status: "manual",
               message: "Reconnaissance automatique indisponible, correction manuelle ouverte.",
-              warnings: [message]
+              warnings: []
             }
           : current
       );
