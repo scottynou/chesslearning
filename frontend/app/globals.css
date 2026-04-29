@@ -525,6 +525,18 @@ button:disabled { cursor: not-allowed; }
 .coach-board-controls .control-button.icon-control { width: 2.35rem; padding: 0; }
 .coach-board-controls .control-button:hover { border-color: rgba(247,239,224,0.16); background: rgba(247,239,224,0.08); color: #f7efe0; box-shadow: none; }
 .coach-board-controls .control-button:disabled { opacity: 0.32; transform: none; pointer-events: none; }
+.elo-live-indicator { display: grid; width: min(100%, 30rem); gap: 0.42rem; border: 1px solid rgba(247,239,224,0.11); border-radius: 18px; background: radial-gradient(circle at 0% 0%, rgba(231,185,106,0.12), transparent 12rem), rgba(247,239,224,0.045); padding: 0.72rem 0.8rem; color: rgba(247,239,224,0.78); box-shadow: 0 18px 54px rgba(0,0,0,0.20); backdrop-filter: blur(14px); }
+.elo-live-main { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 0.55rem; }
+.elo-live-main span { color: rgba(247,239,224,0.52); font-size: 0.68rem; font-weight: 940; letter-spacing: 0.16em; text-transform: uppercase; }
+.elo-live-main strong { color: #f7efe0; font-size: 1.35rem; font-weight: 950; line-height: 1; }
+.elo-live-main em { min-width: 3rem; border: 1px solid rgba(231,185,106,0.32); border-radius: 999px; background: rgba(231,185,106,0.12); color: #f7d89b; padding: 0.28rem 0.5rem; font-size: 0.78rem; font-style: normal; font-weight: 950; text-align: center; animation: elo-pulse 900ms ease both; }
+.elo-live-indicator.is-down .elo-live-main em { border-color: rgba(125,183,154,0.34); background: rgba(125,183,154,0.12); color: #bde7cf; }
+.elo-live-track { position: relative; height: 0.38rem; overflow: hidden; border-radius: 999px; background: rgba(247,239,224,0.09); }
+.elo-live-track span { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: linear-gradient(90deg, rgba(125,183,154,0.82), rgba(231,185,106,0.92), rgba(239,118,118,0.82)); transition: width 420ms ease; }
+.elo-live-meta { display: flex; flex-wrap: wrap; gap: 0.38rem; }
+.elo-live-meta span { border: 1px solid rgba(247,239,224,0.09); border-radius: 999px; background: rgba(3,5,10,0.22); color: rgba(247,239,224,0.58); padding: 0.28rem 0.48rem; font-size: 0.68rem; font-weight: 850; }
+.elo-live-change { margin: 0; color: rgba(247,239,224,0.66); font-size: 0.74rem; font-weight: 820; line-height: 1.35; animation: elo-slide-in 260ms ease both; }
+.elo-live-change.is-quiet { color: rgba(247,239,224,0.42); animation: none; }
 .coach-board-note { border: 1px solid rgba(247,239,224,0.12); border-radius: 16px; background: rgba(247,239,224,0.055); color: rgba(247,239,224,0.80); padding: 0.75rem 0.95rem; text-align: center; font-size: 0.86rem; font-weight: 780; box-shadow: 0 16px 44px rgba(0,0,0,0.18); }
 .promotion-popover { position: absolute; z-index: 4; right: clamp(0.65rem, 2vw, 1.2rem); bottom: clamp(3.4rem, 5vw, 4.5rem); width: min(20rem, calc(100vw - 2rem)); border: 1px solid rgba(247,239,224,0.16); border-radius: 18px; background: rgba(3,5,10,0.78); padding: 0.75rem; box-shadow: 0 30px 90px rgba(0,0,0,0.44); backdrop-filter: blur(18px); }
 .promotion-popover p { margin: 0 0 0.55rem; color: #f7efe0; font-size: 0.78rem; font-weight: 900; letter-spacing: 0.14em; text-transform: uppercase; }
@@ -612,6 +624,15 @@ button:disabled { cursor: not-allowed; }
 .opponent-review-actions .plan-start-button:disabled { cursor: wait; opacity: 0.55; transform: none; }
 @keyframes coach-spin { to { transform: rotate(360deg); } }
 @keyframes coach-shimmer { to { background-position: -200% 0; } }
+@keyframes elo-pulse {
+  0% { transform: scale(0.88); box-shadow: 0 0 0 0 rgba(231,185,106,0.34); }
+  58% { transform: scale(1.06); box-shadow: 0 0 0 8px rgba(231,185,106,0); }
+  100% { transform: scale(1); box-shadow: none; }
+}
+@keyframes elo-slide-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 /* Plan intro */
 .plan-intro-shell { width: min(100%, 1320px); display: grid; gap: 1rem; }

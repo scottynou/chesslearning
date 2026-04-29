@@ -60,6 +60,13 @@ type LocalBoardDetection = {
   referenceUrl: string;
 };
 
+type EloChange = {
+  id: number;
+  previous: number;
+  current: number;
+  delta: number;
+};
+
 type VerboseMove = Move & {
   before?: string;
   after?: string;
@@ -908,6 +915,7 @@ export default function HomePage() {
   const [moveSources, setMoveSources] = useState<MoveSource[]>([]);
   const [redoStack, setRedoStack] = useState<TimelineMove[]>([]);
   const [adaptiveBoost, setAdaptiveBoost] = useState(0);
+  const [eloChange, setEloChange] = useState<EloChange | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [imageImporting, setImageImporting] = useState(false);
   const [imageImportError, setImageImportError] = useState<string | null>(null);
@@ -917,6 +925,8 @@ export default function HomePage() {
   const skipNextHistoryReplace = useRef(false);
   const lastEloAdjustmentPly = useRef<number | null>(null);
   const eloTrend = useRef(freshEloTrendState());
+  const previousEffectiveElo = useRef<number | null>(null);
+  const eloChangeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const botRequestInFlight = useRef(false);
   const botPausedByTimelineNavigation = useRef(false);
   const timelineRef = useRef<{ historyUci: string[]; moveSources: MoveSource[]; redoStack: TimelineMove[] }>({
@@ -941,6 +951,13 @@ export default function HomePage() {
   }, [game]);
   const effectiveCoachElo = useMemo(() => effectiveElo(DEFAULT_BASE_ELO, adaptiveBoost), [adaptiveBoost]);
   const activeSkillLevel = useMemo(() => skillLevelForElo(effectiveCoachElo), [effectiveCoachElo]);
+  const eloPressureLabel = useMemo(() => {
+    const pressure = planRecommendations?.adaptiveSignal?.pressure;
+    if (pressure === "critical") return "Pression forte";
+    if (pressure === "drawish") return "Eviter la nulle";
+    if (pressure === "worse") return "Position tendue";
+    return "Stable";
+  }, [planRecommendations?.adaptiveSignal?.pressure]);
   const botTurnInBotMode = useMemo(() => {
     if (appStage !== "coach" || mode === "both" || game.isGameOver() || pendingPromotion) return false;
     return mode === "white" ? game.turn() === "b" : game.turn() === "w";
@@ -1022,6 +1039,8 @@ export default function HomePage() {
     setMoveSources(restoredMoveSources);
     setRedoStack([]);
     setAdaptiveBoost(0);
+    setEloChange(null);
+    previousEffectiveElo.current = DEFAULT_BASE_ELO;
     lastEloAdjustmentPly.current = null;
     botRequestInFlight.current = false;
     botPausedByTimelineNavigation.current = false;
@@ -1208,6 +1227,37 @@ export default function HomePage() {
       setAdaptiveBoost(result.boost);
     }
   }, [adaptiveBoost, appStage, historyUci.length, planRecommendations?.adaptiveSignal]);
+
+  useEffect(() => {
+    if (appStage !== "coach") {
+      previousEffectiveElo.current = effectiveCoachElo;
+      setEloChange(null);
+      return;
+    }
+
+    const previous = previousEffectiveElo.current;
+    previousEffectiveElo.current = effectiveCoachElo;
+    if (previous === null || previous === effectiveCoachElo) return;
+
+    if (eloChangeTimer.current) {
+      clearTimeout(eloChangeTimer.current);
+    }
+    setEloChange({
+      id: Date.now(),
+      previous,
+      current: effectiveCoachElo,
+      delta: effectiveCoachElo - previous
+    });
+    eloChangeTimer.current = setTimeout(() => setEloChange(null), 3600);
+  }, [appStage, effectiveCoachElo]);
+
+  useEffect(() => {
+    return () => {
+      if (eloChangeTimer.current) {
+        clearTimeout(eloChangeTimer.current);
+      }
+    };
+  }, []);
 
   const legalTargets = useMemo(() => {
     if (!selectedSquare || boardLocked) return [];
@@ -1421,6 +1471,8 @@ export default function HomePage() {
 
   const resetAdaptiveBoost = useCallback(() => {
     setAdaptiveBoost(0);
+    setEloChange(null);
+    previousEffectiveElo.current = DEFAULT_BASE_ELO;
     lastEloAdjustmentPly.current = null;
     eloTrend.current = freshEloTrendState();
   }, []);
@@ -1912,6 +1964,14 @@ export default function HomePage() {
           <button type="button" onClick={() => setOrientation(orientation === "white" ? "black" : "white")} className="control-button">Tourner</button>
         </div>
 
+        <EloLiveIndicator
+          baseElo={DEFAULT_BASE_ELO}
+          currentElo={effectiveCoachElo}
+          boost={adaptiveBoost}
+          change={eloChange}
+          pressureLabel={eloPressureLabel}
+        />
+
         {botError ? <div className="coach-board-error">{botError}</div> : null}
         {lastMessage ? <div className="coach-board-note">{lastMessage}</div> : null}
       </section>
@@ -1925,6 +1985,52 @@ export default function HomePage() {
         />
       </section>
     </main>
+  );
+}
+
+function EloLiveIndicator({
+  baseElo,
+  currentElo,
+  boost,
+  change,
+  pressureLabel
+}: {
+  baseElo: number;
+  currentElo: number;
+  boost: number;
+  change: EloChange | null;
+  pressureLabel: string;
+}) {
+  const direction = change ? (change.delta > 0 ? "up" : "down") : "stable";
+  const progress = Math.max(0, Math.min(100, ((currentElo - 600) / (3200 - 600)) * 100));
+
+  return (
+    <section className={`elo-live-indicator is-${direction}`} aria-live="polite" aria-label="Elo adaptatif actuel">
+      <div className="elo-live-main">
+        <span>Niveau actuel</span>
+        <strong>{currentElo}</strong>
+        {change ? (
+          <em key={change.id}>
+            {change.delta > 0 ? `+${change.delta}` : change.delta}
+          </em>
+        ) : null}
+      </div>
+      <div className="elo-live-track" aria-hidden="true">
+        <span style={{ width: `${progress}%` }} />
+      </div>
+      <div className="elo-live-meta">
+        <span>Base {baseElo}</span>
+        <span>{boost > 0 ? `Boost +${boost}` : "Boost 0"}</span>
+        <span>{pressureLabel}</span>
+      </div>
+      {change ? (
+        <p key={`change-${change.id}`} className="elo-live-change">
+          {change.delta > 0 ? "Le coach augmente le niveau." : "Le coach redescend le niveau."}
+        </p>
+      ) : (
+        <p className="elo-live-change is-quiet">Pas de changement recent.</p>
+      )}
+    </section>
   );
 }
 
