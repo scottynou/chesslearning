@@ -27,6 +27,7 @@ type ImageImportStatus = "loading" | "local" | "ready" | "manual";
 
 type ImageImportDraft = {
   previewUrl: string;
+  boardReferenceUrl: string | null;
   result: ImportPositionImageResponse | null;
   boardMap: EditableBoard;
   sideToMove: "white" | "black";
@@ -56,6 +57,7 @@ type LocalBoardDetection = {
   boardMap: EditableBoard;
   confidence: number;
   warnings: string[];
+  referenceUrl: string;
 };
 
 type VerboseMove = Move & {
@@ -322,9 +324,11 @@ function createImageImportDraft(params: {
   warnings?: string[];
   result?: ImportPositionImageResponse | null;
   boardMap?: EditableBoard;
+  boardReferenceUrl?: string | null;
 }): ImageImportDraft {
   return {
     previewUrl: params.previewUrl,
+    boardReferenceUrl: params.boardReferenceUrl ?? null,
     result: params.result ?? null,
     boardMap: params.boardMap ?? editableBoardFromFen(params.fen),
     sideToMove: params.sideToMove ?? sideToMoveFromFen(params.fen),
@@ -525,18 +529,20 @@ async function detectPositionLocally(dataUrls: string[]): Promise<LocalBoardDete
   for (const dataUrl of dataUrls.slice(0, 15)) {
     try {
       const detection = await detectPositionFromSquareImage(dataUrl);
-      detections.push(detection);
+      if (isUsableLocalDetection(detection)) detections.push(detection);
       detections.push({
         boardMap: rotateEditableBoard(detection.boardMap),
         confidence: Math.max(0, detection.confidence - 4),
-        warnings: [...detection.warnings, "Orientation retournee testee automatiquement."]
+        warnings: [...detection.warnings, "Orientation retournee testee automatiquement."],
+        referenceUrl: detection.referenceUrl
       });
     } catch {
       continue;
     }
   }
-  if (!detections.length) return null;
-  return detections.sort((a, b) => localDetectionScore(b) - localDetectionScore(a))[0];
+  const usable = detections.filter(isUsableLocalDetection);
+  if (!usable.length) return null;
+  return usable.sort((a, b) => localDetectionScore(b) - localDetectionScore(a))[0];
 }
 
 function localDetectionScore(detection: LocalBoardDetection) {
@@ -554,6 +560,28 @@ function localDetectionScore(detection: LocalBoardDetection) {
   return score;
 }
 
+function isUsableLocalDetection(detection: LocalBoardDetection) {
+  const pieces = Object.values(detection.boardMap).filter(Boolean) as EditablePiece[];
+  const whitePieces = pieces.filter((piece) => piece === piece.toUpperCase());
+  const blackPieces = pieces.filter((piece) => piece === piece.toLowerCase());
+  const whitePawns = pieces.filter((piece) => piece === "P").length;
+  const blackPawns = pieces.filter((piece) => piece === "p").length;
+  const whiteKings = pieces.filter((piece) => piece === "K").length;
+  const blackKings = pieces.filter((piece) => piece === "k").length;
+  const queens = pieces.filter((piece) => piece.toLowerCase() === "q").length;
+  const rooks = pieces.filter((piece) => piece.toLowerCase() === "r").length;
+  const bishops = pieces.filter((piece) => piece.toLowerCase() === "b").length;
+  const knights = pieces.filter((piece) => piece.toLowerCase() === "n").length;
+
+  if (pieces.length < 2 || pieces.length > 32) return false;
+  if (whitePieces.length > 16 || blackPieces.length > 16) return false;
+  if (whitePawns > 8 || blackPawns > 8) return false;
+  if (whiteKings !== 1 || blackKings !== 1) return false;
+  if (queens > 8 || rooks > 10 || bishops > 10 || knights > 10) return false;
+  if (detection.confidence < 38) return false;
+  return true;
+}
+
 async function detectPositionFromSquareImage(dataUrl: string): Promise<LocalBoardDetection> {
   const image = await loadImage(dataUrl);
   const sourceWidth = image.naturalWidth || image.width;
@@ -569,6 +597,7 @@ async function detectPositionFromSquareImage(dataUrl: string): Promise<LocalBoar
   context.fillStyle = "#ffffff";
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.drawImage(image, sourceX, sourceY, sourceSquare, sourceSquare, 0, 0, canvas.width, canvas.height);
+  const referenceUrl = canvas.toDataURL("image/jpeg", 0.86);
   const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
   const board = emptyEditableBoard();
   const detections: LocalSquareDetection[] = [];
@@ -596,7 +625,7 @@ async function detectPositionFromSquareImage(dataUrl: string): Promise<LocalBoar
   if (!editableBoardIsValid(board, "white")) {
     warnings.push("La detection locale peut etre incomplete; corrige les rois et les pieces manquantes.");
   }
-  return { boardMap: board, confidence, warnings };
+  return { boardMap: board, confidence, warnings, referenceUrl };
 }
 
 function detectLocalSquare(imageData: ImageData, square: string, x: number, y: number, size: number): LocalSquareDetection {
@@ -1541,17 +1570,18 @@ export default function HomePage() {
       const localDetection = await detectPositionLocally(prepared.localCandidateDataUrls);
       const manualDraft = createImageImportDraft({
         previewUrl: prepared.previewUrl,
+        boardReferenceUrl: localDetection?.referenceUrl ?? prepared.localCandidateDataUrls[1] ?? prepared.previewUrl,
         fen,
-        boardMap: localDetection?.boardMap,
+        boardMap: localDetection?.boardMap ?? emptyEditableBoard(),
         sideToMove: game.turn() === "b" ? "black" : "white",
         userSide: userSide === "black" ? "black" : "white",
         boardOrientation: boardOrientationFromOrientation(orientation),
         status: localDetection ? "local" : "loading",
         message: localDetection
           ? "Detection automatique locale active. Gemini peut encore ameliorer la lecture si disponible."
-          : "Reconnaissance en cours. Tu peux deja corriger le plateau si besoin.",
+          : "Detection locale rejetee car trop incertaine. L'image reste en calque pour corriger vite.",
         confidence: localDetection?.confidence ?? null,
-        warnings: localDetection?.warnings ?? []
+        warnings: localDetection?.warnings ?? ["Aucune position locale fiable n'a ete appliquee automatiquement."]
       });
       setImageImportDraft(manualDraft);
       draftOpened = true;
@@ -1565,6 +1595,7 @@ export default function HomePage() {
       setImageImportDraft(
         createImageImportDraft({
           previewUrl: prepared.previewUrl,
+          boardReferenceUrl: prepared.localCandidateDataUrls[1] ?? prepared.previewUrl,
           fen: result.fen,
           sideToMove: result.sideToMove,
           userSide: userSide === "black" ? "black" : "white",
@@ -1954,6 +1985,7 @@ function ImageImportConfirmDialog({
             board={draft.boardMap}
             orientation={detectedOrientation}
             selectedPiece={selectedPiece}
+            referenceUrl={draft.boardReferenceUrl}
             onSquareChange={onSquareChange}
           />
 
@@ -2072,16 +2104,22 @@ function EditablePositionBoard({
   board,
   orientation,
   selectedPiece,
+  referenceUrl,
   onSquareChange
 }: {
   board: EditableBoard;
   orientation: Orientation;
   selectedPiece: EditablePiece | null;
+  referenceUrl: string | null;
   onSquareChange: (square: string, piece: EditablePiece | null) => void;
 }) {
   const squares = orientedEditableSquares(orientation);
   return (
-    <div className="editable-position-board" aria-label="Position editable">
+    <div
+      className={referenceUrl ? "editable-position-board has-reference" : "editable-position-board"}
+      aria-label="Position editable"
+      style={referenceUrl ? { backgroundImage: `url(${referenceUrl})` } : undefined}
+    >
       {squares.map((square) => {
         const fileIndex = EDITABLE_FILES.indexOf(square[0] as (typeof EDITABLE_FILES)[number]);
         const rank = Number(square[1]);
