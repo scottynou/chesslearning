@@ -318,12 +318,12 @@ class AvailablePlansResponse(BaseModel):
     plans: list[dict[str, Any]]
 
 
-class ImportPositionImageRequest(BaseModel):
+class ImportPositionImageVariant(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     image_data: str = Field(alias="imageData", min_length=64, max_length=12_000_000)
     mime_type: str = Field(default="image/png", alias="mimeType")
-    file_name: str | None = Field(default=None, alias="fileName")
+    label: str | None = None
 
     @field_validator("mime_type")
     @classmethod
@@ -340,6 +340,13 @@ class ImportPositionImageRequest(BaseModel):
         if compact.startswith("data:"):
             compact = compact.split(",", 1)[-1]
         return compact
+
+
+class ImportPositionImageRequest(ImportPositionImageVariant):
+    model_config = ConfigDict(populate_by_name=True)
+
+    file_name: str | None = Field(default=None, alias="fileName")
+    image_variants: list[ImportPositionImageVariant] = Field(default_factory=list, alias="imageVariants", max_length=4)
 
 
 class ImportPositionImageResponse(BaseModel):

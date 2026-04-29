@@ -881,11 +881,17 @@ def adaptive_signal_for(
     mating_danger = mate_danger_from_side_to_move(engine_candidates)
     draw_level = str((draw_pressure or {}).get("level", "none"))
 
-    if warning or mating_danger == "critical" or position_score <= -260 or engine_score <= 45 or tactical_risk >= 45:
+    if mating_danger == "critical" or position_score <= -420 or engine_score <= 32 or tactical_risk >= 62:
         return {
             "pressure": "critical",
-            "suggestedBoostDelta": 100,
-            "reason": "La position est sous forte pression : le coach monte d'un cran pour chercher des coups plus precis.",
+            "suggestedBoostDelta": 200,
+            "reason": "La position est critique : le coach monte fortement pour chercher un coup de survie ou de gain.",
+        }
+    if warning or position_score <= -260 or engine_score <= 45 or tactical_risk >= 45:
+        return {
+            "pressure": "critical",
+            "suggestedBoostDelta": 150,
+            "reason": "La position est sous forte pression : le coach monte nettement en precision.",
         }
     if draw_level == "critical":
         return {
@@ -893,7 +899,13 @@ def adaptive_signal_for(
             "suggestedBoostDelta": 100,
             "reason": "La partie risque de s'aplatir vers nulle : le coach monte en precision pour garder des chances de gain.",
         }
-    if adapted or mating_danger == "warning" or position_score <= -90 or engine_score <= 65 or tactical_risk >= 28:
+    if opening_state == "abandoned" or mating_danger == "warning" or position_score <= -180 or engine_score <= 55 or tactical_risk >= 36:
+        return {
+            "pressure": "worse",
+            "suggestedBoostDelta": 100,
+            "reason": "L'adversaire met une vraie pression : le niveau cache augmente pour rester dans la partie.",
+        }
+    if adapted or position_score <= -90 or engine_score <= 65 or tactical_risk >= 28:
         return {
             "pressure": "worse",
             "suggestedBoostDelta": 50,
@@ -904,6 +916,12 @@ def adaptive_signal_for(
             "pressure": "drawish",
             "suggestedBoostDelta": 50,
             "reason": "La position devient trop egale : le coach augmente legerement le niveau cache.",
+        }
+    if position_score >= 320 and engine_score >= 82 and tactical_risk <= 10 and not warning:
+        return {
+            "pressure": "stable",
+            "suggestedBoostDelta": -100,
+            "reason": "La position est tres confortable : le coach redescend plus vite vers un style humain.",
         }
     if position_score >= 160 and engine_score >= 74 and tactical_risk <= 18 and not warning:
         return {

@@ -12,7 +12,7 @@ import { PlanFirstPanel } from "@/components/PlanFirstPanel";
 import { SideSelectionPanel } from "@/components/SideSelectionPanel";
 import { getPlanRecommendations, importPositionImage, listAvailablePlans, requestBotMove } from "@/lib/api";
 import { canMoveInMode, gameStatus, isPromotionAttempt, tryMove } from "@/lib/chess";
-import { DEFAULT_BASE_ELO, MAX_ADAPTIVE_BOOST, effectiveElo, skillLevelForElo } from "@/lib/eloAdaptation";
+import { DEFAULT_BASE_ELO, applyAdaptiveSignal, effectiveElo, freshEloTrendState, skillLevelForElo } from "@/lib/eloAdaptation";
 import { canStepBack, redoTimeline, undoTimeline, type MoveSource, type TimelineMove } from "@/lib/moveTimeline";
 import type { ImportPositionImageResponse, Orientation, PlanRecommendationsResponse, PlayMode, StrategyPlan } from "@/lib/types";
 
@@ -21,10 +21,27 @@ type PendingPromotion = {
   to: string;
 };
 
+type EditablePiece = "K" | "Q" | "R" | "B" | "N" | "P" | "k" | "q" | "r" | "b" | "n" | "p";
+type EditableBoard = Record<string, EditablePiece | null>;
+type ImageImportStatus = "loading" | "ready" | "manual";
+
 type ImageImportDraft = {
   previewUrl: string;
-  result: ImportPositionImageResponse;
+  result: ImportPositionImageResponse | null;
+  boardMap: EditableBoard;
   sideToMove: "white" | "black";
+  userSide: "white" | "black";
+  boardOrientation: "white_bottom" | "black_bottom" | "unknown";
+  status: ImageImportStatus;
+  message: string | null;
+  confidence: number | null;
+  warnings: string[];
+};
+
+type PreparedImageVariant = {
+  imageData: string;
+  mimeType: string;
+  label: string;
 };
 
 type VerboseMove = Move & {
@@ -52,10 +69,28 @@ const BOT_ENGINE_DEPTH = 14;
 const NAVIGATION_KEY = "chess-learning-navigation";
 const PLAYER_ARROW_FALLBACKS = ["rgba(224,185,118,0.82)", "rgba(125,183,154,0.78)", "rgba(126,166,224,0.76)"];
 const OPPONENT_EXPECTED_ARROW = "rgba(239,118,118,0.78)";
-const IMAGE_IMPORT_MAX_SOURCE_BYTES = 28 * 1024 * 1024;
-const IMAGE_IMPORT_TARGET_BYTES = 3.5 * 1024 * 1024;
-const IMAGE_IMPORT_DIMENSIONS = [1800, 1500, 1200, 960];
-const IMAGE_IMPORT_QUALITIES = [0.86, 0.76, 0.66];
+const IMAGE_IMPORT_MAX_SOURCE_BYTES = 24 * 1024 * 1024;
+const IMAGE_IMPORT_TARGET_BYTES = 1.4 * 1024 * 1024;
+const IMAGE_IMPORT_MAX_PAYLOAD_CHARS = 2.4 * 1024 * 1024;
+const IMAGE_IMPORT_DIMENSIONS = [1400, 1100, 900, 720];
+const IMAGE_IMPORT_QUALITIES = [0.82, 0.7, 0.58, 0.46];
+const EDITABLE_FILES = ["a", "b", "c", "d", "e", "f", "g", "h"] as const;
+const EDITABLE_RANKS = ["8", "7", "6", "5", "4", "3", "2", "1"] as const;
+const EDITABLE_PIECES: Array<{ value: EditablePiece | null; label: string; symbol: string }> = [
+  { value: null, label: "Vider", symbol: "×" },
+  { value: "K", label: "Roi blanc", symbol: "♔" },
+  { value: "Q", label: "Dame blanche", symbol: "♕" },
+  { value: "R", label: "Tour blanche", symbol: "♖" },
+  { value: "B", label: "Fou blanc", symbol: "♗" },
+  { value: "N", label: "Cavalier blanc", symbol: "♘" },
+  { value: "P", label: "Pion blanc", symbol: "♙" },
+  { value: "k", label: "Roi noir", symbol: "♚" },
+  { value: "q", label: "Dame noire", symbol: "♛" },
+  { value: "r", label: "Tour noire", symbol: "♜" },
+  { value: "b", label: "Fou noir", symbol: "♝" },
+  { value: "n", label: "Cavalier noir", symbol: "♞" },
+  { value: "p", label: "Pion noir", symbol: "♟" }
+];
 
 function buildGameFromHistory(moves: string[], startFen?: string | null) {
   const next = startFen ? new Chess(startFen) : new Chess();
@@ -130,7 +165,11 @@ function createNavigationSnapshot(overrides: Partial<NavigationSnapshot> = {}): 
 
 function dataUrlToBase64(dataUrl: string) {
   const commaIndex = dataUrl.indexOf(",");
-  return commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
+  const encoded = commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
+  if (encoded.length > IMAGE_IMPORT_MAX_PAYLOAD_CHARS) {
+    throw new Error("Image trop lourde apres compression. Recadre le plateau puis reessaie.");
+  }
+  return encoded;
 }
 
 function fenWithSideToMove(fen: string, sideToMove: "white" | "black") {
@@ -138,6 +177,120 @@ function fenWithSideToMove(fen: string, sideToMove: "white" | "black") {
   if (parts.length < 6) return fen;
   parts[1] = sideToMove === "white" ? "w" : "b";
   return parts.join(" ");
+}
+
+function emptyEditableBoard(): EditableBoard {
+  const board: EditableBoard = {};
+  for (const rank of EDITABLE_RANKS) {
+    for (const file of EDITABLE_FILES) {
+      board[`${file}${rank}`] = null;
+    }
+  }
+  return board;
+}
+
+function editableBoardFromFen(fen: string): EditableBoard {
+  const board = emptyEditableBoard();
+  const placement = fen.split(" ")[0] || "8/8/8/8/8/8/8/8";
+  const rows = placement.split("/");
+  rows.forEach((row, rowIndex) => {
+    const rank = String(8 - rowIndex);
+    let fileIndex = 0;
+    for (const char of row) {
+      const emptyCount = Number(char);
+      if (Number.isInteger(emptyCount) && emptyCount > 0) {
+        fileIndex += emptyCount;
+        continue;
+      }
+      const file = EDITABLE_FILES[fileIndex];
+      if (file && isEditablePiece(char)) {
+        board[`${file}${rank}`] = char;
+      }
+      fileIndex += 1;
+    }
+  });
+  return board;
+}
+
+function editableBoardToFen(board: EditableBoard, sideToMove: "white" | "black") {
+  const rows = EDITABLE_RANKS.map((rank) => {
+    let row = "";
+    let empty = 0;
+    for (const file of EDITABLE_FILES) {
+      const piece = board[`${file}${rank}`];
+      if (!piece) {
+        empty += 1;
+      } else {
+        if (empty) row += String(empty);
+        row += piece;
+        empty = 0;
+      }
+    }
+    if (empty) row += String(empty);
+    return row || "8";
+  });
+  return `${rows.join("/")} ${sideToMove === "white" ? "w" : "b"} - - 0 1`;
+}
+
+function editableBoardIsValid(board: EditableBoard, sideToMove: "white" | "black") {
+  try {
+    new Chess(editableBoardToFen(board, sideToMove));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isEditablePiece(value: string): value is EditablePiece {
+  return ["K", "Q", "R", "B", "N", "P", "k", "q", "r", "b", "n", "p"].includes(value);
+}
+
+function pieceSymbol(piece: EditablePiece | null) {
+  return EDITABLE_PIECES.find((item) => item.value === piece)?.symbol ?? "";
+}
+
+function orientedEditableSquares(orientation: Orientation) {
+  const files = orientation === "black" ? [...EDITABLE_FILES].reverse() : [...EDITABLE_FILES];
+  const ranks = orientation === "black" ? [...EDITABLE_RANKS].reverse() : [...EDITABLE_RANKS];
+  return ranks.flatMap((rank) => files.map((file) => `${file}${rank}`));
+}
+
+function boardOrientationFromOrientation(value: Orientation): ImageImportDraft["boardOrientation"] {
+  return value === "black" ? "black_bottom" : "white_bottom";
+}
+
+function orientationFromBoardOrientation(value: ImageImportDraft["boardOrientation"]): Orientation {
+  return value === "black_bottom" ? "black" : "white";
+}
+
+function sideToMoveFromFen(fen: string): "white" | "black" {
+  return fen.split(" ")[1] === "b" ? "black" : "white";
+}
+
+function createImageImportDraft(params: {
+  previewUrl: string;
+  fen: string;
+  sideToMove?: "white" | "black";
+  userSide: "white" | "black";
+  boardOrientation: ImageImportDraft["boardOrientation"];
+  status: ImageImportStatus;
+  message?: string | null;
+  confidence?: number | null;
+  warnings?: string[];
+  result?: ImportPositionImageResponse | null;
+}): ImageImportDraft {
+  return {
+    previewUrl: params.previewUrl,
+    result: params.result ?? null,
+    boardMap: editableBoardFromFen(params.fen),
+    sideToMove: params.sideToMove ?? sideToMoveFromFen(params.fen),
+    userSide: params.userSide,
+    boardOrientation: params.boardOrientation,
+    status: params.status,
+    message: params.message ?? null,
+    confidence: params.confidence ?? null,
+    warnings: params.warnings ?? []
+  };
 }
 
 function readFileAsDataUrl(file: File) {
@@ -160,10 +313,16 @@ async function prepareImageForImport(file: File) {
 
   const sourceDataUrl = await readFileAsDataUrl(file);
   const compressedDataUrl = await compressImageDataUrl(sourceDataUrl);
+  const cropDataUrls = await createImageImportCropDataUrls(sourceDataUrl);
   return {
     previewUrl: compressedDataUrl,
     imageData: dataUrlToBase64(compressedDataUrl),
     mimeType: mimeTypeFromDataUrl(compressedDataUrl) || "image/jpeg",
+    imageVariants: cropDataUrls.map<PreparedImageVariant>((variant) => ({
+      imageData: dataUrlToBase64(variant.dataUrl),
+      mimeType: mimeTypeFromDataUrl(variant.dataUrl) || "image/jpeg",
+      label: variant.label
+    })),
     fileName: file.name || "position.jpg"
   };
 }
@@ -196,6 +355,70 @@ async function compressImageDataUrl(dataUrl: string) {
     }
   }
 
+  return fallbackDataUrl;
+}
+
+async function createImageImportCropDataUrls(dataUrl: string) {
+  const image = await loadImage(dataUrl);
+  const width = image.naturalWidth || image.width;
+  const height = image.naturalHeight || image.height;
+  const crops = imageImportCropRects(width, height);
+  const variants: Array<{ label: string; dataUrl: string }> = [];
+
+  for (const crop of crops) {
+    const cropped = await compressImageCrop(image, crop);
+    if (cropped) variants.push({ label: crop.label, dataUrl: cropped });
+  }
+
+  return variants.slice(0, 4);
+}
+
+function imageImportCropRects(width: number, height: number) {
+  const square = Math.min(width, height);
+  const centerX = Math.max(0, Math.round((width - square) / 2));
+  const centerY = Math.max(0, Math.round((height - square) / 2));
+  const crops: Array<{ x: number; y: number; width: number; height: number; label: string }> = [
+    { x: centerX, y: centerY, width: square, height: square, label: "crop carre centre" }
+  ];
+
+  if (width > height * 1.12) {
+    crops.push({ x: 0, y: 0, width: square, height: square, label: "crop carre gauche" });
+    crops.push({ x: width - square, y: 0, width: square, height: square, label: "crop carre droit" });
+  }
+
+  if (height > width * 1.12) {
+    crops.push({ x: 0, y: 0, width: square, height: square, label: "crop carre haut" });
+    crops.push({ x: 0, y: height - square, width: square, height: square, label: "crop carre bas" });
+  }
+
+  return crops;
+}
+
+async function compressImageCrop(image: HTMLImageElement, crop: { x: number; y: number; width: number; height: number }) {
+  let fallbackDataUrl: string | null = null;
+  for (const maxDimension of [1000, 820, 680]) {
+    const scale = Math.min(1, maxDimension / Math.max(crop.width, crop.height));
+    const width = Math.max(1, Math.round(crop.width * scale));
+    const height = Math.max(1, Math.round(crop.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d", { alpha: false });
+    if (!context) throw new Error("Compression image indisponible sur ce navigateur.");
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, width, height);
+    context.drawImage(image, crop.x, crop.y, crop.width, crop.height, 0, 0, width, height);
+
+    for (const quality of [0.78, 0.62, 0.5]) {
+      const blob = await canvasToBlob(canvas, "image/jpeg", quality);
+      if (!blob) continue;
+      const nextDataUrl = await blobToDataUrl(blob);
+      fallbackDataUrl = nextDataUrl;
+      if (blob.size <= IMAGE_IMPORT_TARGET_BYTES) {
+        return nextDataUrl;
+      }
+    }
+  }
   return fallbackDataUrl;
 }
 
@@ -287,6 +510,7 @@ export default function HomePage() {
   const navigationReady = useRef(false);
   const skipNextHistoryReplace = useRef(false);
   const lastEloAdjustmentPly = useRef<number | null>(null);
+  const eloTrend = useRef(freshEloTrendState());
   const botRequestInFlight = useRef(false);
   const botPausedByTimelineNavigation = useRef(false);
   const timelineRef = useRef<{ historyUci: string[]; moveSources: MoveSource[]; redoStack: TimelineMove[] }>({
@@ -567,10 +791,17 @@ export default function HomePage() {
     if (lastEloAdjustmentPly.current === currentPly) return;
     lastEloAdjustmentPly.current = currentPly;
 
-    const delta = planRecommendations.adaptiveSignal.suggestedBoostDelta ?? 0;
-    if (!delta) return;
-    setAdaptiveBoost((current) => Math.max(0, Math.min(MAX_ADAPTIVE_BOOST, current + delta)));
-  }, [appStage, historyUci.length, planRecommendations?.adaptiveSignal]);
+    const result = applyAdaptiveSignal({
+      currentBoost: adaptiveBoost,
+      pressure: planRecommendations.adaptiveSignal.pressure,
+      suggestedBoostDelta: planRecommendations.adaptiveSignal.suggestedBoostDelta ?? 0,
+      trend: eloTrend.current
+    });
+    eloTrend.current = result.trend;
+    if (result.boost !== adaptiveBoost) {
+      setAdaptiveBoost(result.boost);
+    }
+  }, [adaptiveBoost, appStage, historyUci.length, planRecommendations?.adaptiveSignal]);
 
   const legalTargets = useMemo(() => {
     if (!selectedSquare || boardLocked) return [];
@@ -785,6 +1016,7 @@ export default function HomePage() {
   const resetAdaptiveBoost = useCallback(() => {
     setAdaptiveBoost(0);
     lastEloAdjustmentPly.current = null;
+    eloTrend.current = freshEloTrendState();
   }, []);
 
   function clearPositionDerivedState() {
@@ -891,6 +1123,29 @@ export default function HomePage() {
     imageInputRef.current?.click();
   }
 
+  function updateImageImportDraft(updater: (draft: ImageImportDraft) => ImageImportDraft) {
+    setImageImportDraft((current) => (current ? updater(current) : current));
+  }
+
+  function setImageImportSquare(square: string, piece: EditablePiece | null) {
+    updateImageImportDraft((draft) => ({
+      ...draft,
+      boardMap: {
+        ...draft.boardMap,
+        [square]: piece
+      },
+      status: draft.status === "loading" ? "manual" : draft.status
+    }));
+  }
+
+  function setImageImportBoard(boardMap: EditableBoard) {
+    updateImageImportDraft((draft) => ({
+      ...draft,
+      boardMap,
+      status: draft.status === "loading" ? "manual" : draft.status
+    }));
+  }
+
   async function handleImageFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -903,28 +1158,66 @@ export default function HomePage() {
 
     setImageImporting(true);
     setImageImportError(null);
+    let draftOpened = false;
     try {
       const prepared = await prepareImageForImport(file);
+      const manualDraft = createImageImportDraft({
+        previewUrl: prepared.previewUrl,
+        fen,
+        sideToMove: game.turn() === "b" ? "black" : "white",
+        userSide: userSide === "black" ? "black" : "white",
+        boardOrientation: boardOrientationFromOrientation(orientation),
+        status: "loading",
+        message: "Reconnaissance en cours. Tu peux deja corriger le plateau si besoin."
+      });
+      setImageImportDraft(manualDraft);
+      draftOpened = true;
+
       const result = await importPositionImage({
         imageData: prepared.imageData,
         mimeType: prepared.mimeType,
+        imageVariants: prepared.imageVariants,
         fileName: prepared.fileName
       });
-      setImageImportDraft({
-        previewUrl: prepared.previewUrl,
-        result,
-        sideToMove: result.sideToMove
-      });
+      setImageImportDraft(
+        createImageImportDraft({
+          previewUrl: prepared.previewUrl,
+          fen: result.fen,
+          sideToMove: result.sideToMove,
+          userSide: userSide === "black" ? "black" : "white",
+          boardOrientation: result.boardOrientation,
+          status: "ready",
+          message: result.confidence < 90 ? "Reconnaissance incertaine: verifie les pieces avant de valider." : "Position pre-remplie. Verifie puis valide.",
+          confidence: result.confidence,
+          warnings: result.warnings,
+          result
+        })
+      );
     } catch (error) {
-      setImageImportError(error instanceof Error ? error.message : "Impossible de lire cette image.");
+      const message = error instanceof Error ? error.message : "Reconnaissance automatique indisponible.";
+      setImageImportDraft((current) =>
+        current
+          ? {
+              ...current,
+              result: null,
+              status: "manual",
+              message: "Reconnaissance automatique indisponible, correction manuelle ouverte.",
+              warnings: [message]
+            }
+          : current
+      );
+      if (!draftOpened) {
+        setImageImportError(message);
+      }
     } finally {
       setImageImporting(false);
     }
   }
 
-  function confirmImageImport(side: "white" | "black") {
+  function confirmImageImport() {
     if (!imageImportDraft) return;
-    const importedFen = fenWithSideToMove(imageImportDraft.result.fen, imageImportDraft.sideToMove);
+    const side = imageImportDraft.userSide;
+    const importedFen = editableBoardToFen(imageImportDraft.boardMap, imageImportDraft.sideToMove);
     let importedGame: Chess;
     try {
       importedGame = new Chess(importedFen);
@@ -1018,6 +1311,12 @@ export default function HomePage() {
         <ImageImportConfirmDialog
           draft={imageImportDraft}
           onSideToMoveChange={(sideToMove) => setImageImportDraft((current) => current ? { ...current, sideToMove } : current)}
+          onUserSideChange={(side) => setImageImportDraft((current) => current ? { ...current, userSide: side } : current)}
+          onOrientationChange={(nextOrientation) => setImageImportDraft((current) => current ? { ...current, boardOrientation: boardOrientationFromOrientation(nextOrientation) } : current)}
+          onSquareChange={setImageImportSquare}
+          onClearBoard={() => setImageImportBoard(emptyEditableBoard())}
+          onUseCurrentBoard={() => setImageImportBoard(editableBoardFromFen(fen))}
+          onUseStartingBoard={() => setImageImportBoard(editableBoardFromFen(new Chess().fen()))}
           onCancel={() => setImageImportDraft(null)}
           onConfirm={confirmImageImport}
         />
@@ -1205,16 +1504,36 @@ export default function HomePage() {
 function ImageImportConfirmDialog({
   draft,
   onSideToMoveChange,
+  onUserSideChange,
+  onOrientationChange,
+  onSquareChange,
+  onClearBoard,
+  onUseCurrentBoard,
+  onUseStartingBoard,
   onCancel,
   onConfirm
 }: {
   draft: ImageImportDraft;
   onSideToMoveChange: (side: "white" | "black") => void;
+  onUserSideChange: (side: "white" | "black") => void;
+  onOrientationChange: (orientation: Orientation) => void;
+  onSquareChange: (square: string, piece: EditablePiece | null) => void;
+  onClearBoard: () => void;
+  onUseCurrentBoard: () => void;
+  onUseStartingBoard: () => void;
   onCancel: () => void;
-  onConfirm: (side: "white" | "black") => void;
+  onConfirm: () => void;
 }) {
-  const detectedOrientation: Orientation = draft.result.boardOrientation === "black_bottom" ? "black" : "white";
-  const detectedFen = fenWithSideToMove(draft.result.fen, draft.sideToMove);
+  const [selectedPiece, setSelectedPiece] = useState<EditablePiece | null>(null);
+  const detectedOrientation = orientationFromBoardOrientation(draft.boardOrientation);
+  const editableFen = editableBoardToFen(draft.boardMap, draft.sideToMove);
+  const canValidate = editableBoardIsValid(draft.boardMap, draft.sideToMove);
+  const statusLabel =
+    draft.status === "loading"
+      ? "Reconnaissance en cours"
+      : draft.status === "ready"
+        ? "Position pre-remplie"
+        : "Correction manuelle";
 
   return (
     <div className="image-import-layer" role="dialog" aria-modal="true" aria-label="Importer une position">
@@ -1225,25 +1544,50 @@ function ImageImportConfirmDialog({
           <img src={draft.previewUrl} alt="" />
         </div>
         <div className="image-import-content">
-          <p className="image-import-eyebrow">Position detectee</p>
-          <h2>Tu joues quel camp ?</h2>
-          <div className="image-import-board" aria-label="Plateau detecte">
-            <ChessCoachBoard
-              fen={detectedFen}
-              boardWidth={220}
-              orientation={detectedOrientation}
-              selectedSquare={null}
-              legalTargets={[]}
-              highlightedMove={null}
-              lastMove={null}
-              locked
-              onDrop={() => false}
-              onSquareClick={() => undefined}
-            />
+          <p className="image-import-eyebrow">{statusLabel}</p>
+          <h2>Verifie la position</h2>
+          <p className="image-import-copy">Choisis une piece, touche une case pour corriger, puis valide seulement quand le plateau est identique a l&apos;image.</p>
+
+          <EditablePositionBoard
+            board={draft.boardMap}
+            orientation={detectedOrientation}
+            selectedPiece={selectedPiece}
+            onSquareChange={onSquareChange}
+          />
+
+          <div className="image-import-tools" aria-label="Pieces a placer">
+            {EDITABLE_PIECES.map((piece) => (
+              <button
+                key={piece.label}
+                type="button"
+                className={selectedPiece === piece.value ? "is-active" : ""}
+                onClick={() => setSelectedPiece(piece.value)}
+                title={piece.label}
+                aria-label={piece.label}
+              >
+                {piece.symbol}
+              </button>
+            ))}
           </div>
-          <div className="image-import-confidence">
-            <span>Confiance</span>
-            <strong>{draft.result.confidence}%</strong>
+
+          <div className="image-import-turn">
+            <span>Tu joues</span>
+            <div>
+              <button
+                type="button"
+                className={draft.userSide === "white" ? "is-active" : ""}
+                onClick={() => onUserSideChange("white")}
+              >
+                Blancs
+              </button>
+              <button
+                type="button"
+                className={draft.userSide === "black" ? "is-active" : ""}
+                onClick={() => onUserSideChange("black")}
+              >
+                Noirs
+              </button>
+            </div>
           </div>
 
           <div className="image-import-turn">
@@ -1266,23 +1610,93 @@ function ImageImportConfirmDialog({
             </div>
           </div>
 
-          {draft.result.warnings.length ? (
-            <p className="image-import-warning">{draft.result.warnings[0]}</p>
+          <div className="image-import-turn">
+            <span>Orientation</span>
+            <div>
+              <button
+                type="button"
+                className={detectedOrientation === "white" ? "is-active" : ""}
+                onClick={() => onOrientationChange("white")}
+              >
+                Blancs bas
+              </button>
+              <button
+                type="button"
+                className={detectedOrientation === "black" ? "is-active" : ""}
+                onClick={() => onOrientationChange("black")}
+              >
+                Noirs bas
+              </button>
+            </div>
+          </div>
+
+          <div className="image-import-quick-actions">
+            <button type="button" onClick={onUseCurrentBoard}>Plateau actuel</button>
+            <button type="button" onClick={onUseStartingBoard}>Depart</button>
+            <button type="button" onClick={onClearBoard}>Vider</button>
+          </div>
+
+          {draft.confidence !== null ? (
+            <div className="image-import-confidence">
+              <span>Confiance auto</span>
+              <strong>{draft.confidence}%</strong>
+            </div>
+          ) : null}
+
+          {draft.message ? <p className="image-import-warning">{draft.message}</p> : null}
+          {draft.warnings.length ? (
+            <p className="image-import-warning">{draft.warnings[0]}</p>
+          ) : null}
+          {!canValidate ? (
+            <p className="image-import-warning">Position incomplete ou impossible: il faut au minimum une position d&apos;echecs valide avant validation.</p>
           ) : null}
 
           <div className="image-import-actions">
-            <button type="button" className="control-button" onClick={() => onConfirm("white")}>
-              Je joue les blancs
-            </button>
-            <button type="button" className="control-button" onClick={() => onConfirm("black")}>
-              Je joue les noirs
+            <button type="button" className="control-button" onClick={onConfirm} disabled={!canValidate}>
+              Valider la position
             </button>
             <button type="button" className="control-button is-muted" onClick={onCancel}>
               Annuler
             </button>
           </div>
+          <code className="image-import-fen">{editableFen}</code>
         </div>
       </section>
+    </div>
+  );
+}
+
+function EditablePositionBoard({
+  board,
+  orientation,
+  selectedPiece,
+  onSquareChange
+}: {
+  board: EditableBoard;
+  orientation: Orientation;
+  selectedPiece: EditablePiece | null;
+  onSquareChange: (square: string, piece: EditablePiece | null) => void;
+}) {
+  const squares = orientedEditableSquares(orientation);
+  return (
+    <div className="editable-position-board" aria-label="Position editable">
+      {squares.map((square) => {
+        const fileIndex = EDITABLE_FILES.indexOf(square[0] as (typeof EDITABLE_FILES)[number]);
+        const rank = Number(square[1]);
+        const isLight = (fileIndex + rank) % 2 === 1;
+        return (
+          <button
+            key={square}
+            type="button"
+            className={isLight ? "editable-square is-light" : "editable-square is-dark"}
+            onClick={() => onSquareChange(square, selectedPiece)}
+            aria-label={`${square} ${board[square] ? pieceSymbol(board[square]) : "vide"}`}
+          >
+            <span>{pieceSymbol(board[square])}</span>
+            <small>{square}</small>
+          </button>
+        );
+      })}
     </div>
   );
 }

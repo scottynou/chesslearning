@@ -19,7 +19,7 @@ from .ai_providers.selection import configured_provider_name
 from .cache import MemoryCache
 from .elo_ranker import rank_candidates
 from .explanation_service import explain_candidate, explain_move
-from .image_import_service import import_position_image
+from .image_import_service import ImageImportProviderError, import_position_image
 from .live_plan_service import live_plan_insight
 from .opening_coach import build_position_plan
 from .review_service import review_move
@@ -307,7 +307,7 @@ def position_plan_endpoint(request: PositionPlanRequest) -> PositionPlanResponse
 
 @app.post("/import-position-image", response_model=ImportPositionImageResponse)
 def import_position_image_endpoint(request: ImportPositionImageRequest) -> ImportPositionImageResponse:
-    image_hash = hashlib.sha256(request.image_data.encode("utf-8")).hexdigest()
+    image_hash = hashlib.sha256(request.model_dump_json(by_alias=True).encode("utf-8")).hexdigest()
     import_model = os.getenv("IMAGE_IMPORT_MODEL") or os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
     cache_key = f"{request.mime_type}|{image_hash}|{import_model}"
     cached = image_import_cache.get(cache_key)
@@ -318,6 +318,8 @@ def import_position_image_endpoint(request: ImportPositionImageRequest) -> Impor
         response = import_position_image(request)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="Impossible de lire une position d'echecs valide sur cette image.") from exc
+    except ImageImportProviderError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.public_message) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Import image indisponible: {type(exc).__name__}") from exc
 

@@ -184,6 +184,14 @@ def test_adaptive_signal_progressively_tracks_position_pressure() -> None:
         player_turn=True,
         engine_candidates=[SimpleNamespace(eval_cp=-320, mate_in=None)],
     )
+    survival = adaptive_signal_for(
+        primary_move=move,
+        phase_status="opening_in_progress",
+        blocked_expected_move=None,
+        opening_state="on_track",
+        player_turn=True,
+        engine_candidates=[SimpleNamespace(eval_cp=-520, mate_in=None)],
+    )
     stable = adaptive_signal_for(
         primary_move={**move, "engineScore": 82},
         phase_status="opening_in_progress",
@@ -192,10 +200,20 @@ def test_adaptive_signal_progressively_tracks_position_pressure() -> None:
         player_turn=True,
         engine_candidates=[SimpleNamespace(eval_cp=220, mate_in=None)],
     )
+    comfortable = adaptive_signal_for(
+        primary_move={**move, "engineScore": 90, "tacticalRisk": 4},
+        phase_status="opening_in_progress",
+        blocked_expected_move=None,
+        opening_state="on_track",
+        player_turn=True,
+        engine_candidates=[SimpleNamespace(eval_cp=360, mate_in=None)],
+    )
 
     assert worse["suggestedBoostDelta"] == 50
-    assert critical["suggestedBoostDelta"] == 100
+    assert critical["suggestedBoostDelta"] == 150
+    assert survival["suggestedBoostDelta"] == 200
     assert stable["suggestedBoostDelta"] == -50
+    assert comfortable["suggestedBoostDelta"] == -100
 
 
 def test_human_accuracy_shaping_prefers_strong_human_band() -> None:

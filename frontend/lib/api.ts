@@ -16,9 +16,13 @@ const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL === "same-origin"
     ? ""
     : process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const IMAGE_IMPORT_API_BASE_URL =
+  process.env.NEXT_PUBLIC_IMAGE_IMPORT_API_BASE_URL === "same-origin"
+    ? ""
+    : process.env.NEXT_PUBLIC_IMAGE_IMPORT_API_BASE_URL ?? API_BASE_URL;
 
-async function requestJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+async function requestJson<T>(path: string, body: unknown, signal?: AbortSignal, baseUrl = API_BASE_URL): Promise<T> {
+  const response = await fetch(`${baseUrl}${path}`, {
     method: "POST",
     headers: {
       // Keeps cross-origin POSTs CORS-simple; the API maps this body back to JSON.
@@ -147,11 +151,12 @@ export function getPlanRecommendations(params: {
 export function importPositionImage(params: {
   imageData: string;
   mimeType: string;
+  imageVariants?: Array<{ imageData: string; mimeType: string; label?: string }>;
   fileName?: string;
   signal?: AbortSignal;
 }): Promise<ImportPositionImageResponse> {
   const { signal, ...body } = params;
-  return requestJson<ImportPositionImageResponse>("/import-position-image", body, signal);
+  return requestJson<ImportPositionImageResponse>("/import-position-image", body, signal, IMAGE_IMPORT_API_BASE_URL);
 }
 
 export function getLivePlanInsight(params: {

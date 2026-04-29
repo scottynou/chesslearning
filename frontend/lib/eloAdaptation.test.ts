@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyAdaptiveSignal,
   effectiveElo,
+  freshEloTrendState,
   nextAdaptiveBoost,
   nextStablePlyCount,
   normalizeBaseElo,
@@ -25,9 +27,9 @@ describe("eloAdaptation", () => {
     expect(skillLevelForElo(2400)).toBe("pro");
   });
 
-  it("raises the adaptive boost after a serious mistake without jumping more than 100 Elo", () => {
-    expect(nextAdaptiveBoost({ currentBoost: 0, autoEnabled: true, playerReviewQuality: "blunder", stablePlyCount: 0 })).toBe(100);
-    expect(nextAdaptiveBoost({ currentBoost: 100, autoEnabled: true, playerReviewQuality: "mistake", stablePlyCount: 0 })).toBe(200);
+  it("raises the adaptive boost after a serious mistake without jumping more than 200 Elo", () => {
+    expect(nextAdaptiveBoost({ currentBoost: 0, autoEnabled: true, playerReviewQuality: "blunder", stablePlyCount: 0 })).toBe(200);
+    expect(nextAdaptiveBoost({ currentBoost: 100, autoEnabled: true, playerReviewQuality: "mistake", stablePlyCount: 0 })).toBe(300);
   });
 
   it("reduces the hidden adjustment after two stable plies", () => {
@@ -47,6 +49,71 @@ describe("eloAdaptation", () => {
         lastAdjustedPly: 7
       })
     ).toBe(100);
+  });
+
+  it("amplifies repeated pressure without exceeding the per-ply cap", () => {
+    const first = applyAdaptiveSignal({
+      currentBoost: 0,
+      pressure: "drawish",
+      suggestedBoostDelta: 100,
+      trend: freshEloTrendState()
+    });
+    expect(first.boost).toBe(100);
+
+    const repeated = applyAdaptiveSignal({
+      currentBoost: first.boost,
+      pressure: "drawish",
+      suggestedBoostDelta: 100,
+      trend: first.trend
+    });
+    expect(repeated.boost).toBe(250);
+    expect(repeated.appliedDelta).toBe(150);
+
+    const critical = applyAdaptiveSignal({
+      currentBoost: repeated.boost,
+      pressure: "critical",
+      suggestedBoostDelta: 200,
+      trend: repeated.trend
+    });
+    expect(critical.appliedDelta).toBe(200);
+  });
+
+  it("drops faster only after comfort is confirmed", () => {
+    const first = applyAdaptiveSignal({
+      currentBoost: 300,
+      pressure: "stable",
+      suggestedBoostDelta: -50,
+      trend: freshEloTrendState()
+    });
+    expect(first.boost).toBe(250);
+
+    const repeated = applyAdaptiveSignal({
+      currentBoost: first.boost,
+      pressure: "stable",
+      suggestedBoostDelta: -50,
+      trend: first.trend
+    });
+    expect(repeated.boost).toBe(150);
+    expect(repeated.appliedDelta).toBe(-100);
+  });
+
+  it("keeps the hidden boost inside the configured bounds", () => {
+    expect(
+      applyAdaptiveSignal({
+        currentBoost: 950,
+        pressure: "critical",
+        suggestedBoostDelta: 200,
+        trend: freshEloTrendState()
+      }).boost
+    ).toBe(1000);
+    expect(
+      applyAdaptiveSignal({
+        currentBoost: 0,
+        pressure: "stable",
+        suggestedBoostDelta: -100,
+        trend: freshEloTrendState()
+      }).boost
+    ).toBe(0);
   });
 
 });
