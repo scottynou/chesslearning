@@ -23,7 +23,7 @@ type PendingPromotion = {
 
 type EditablePiece = "K" | "Q" | "R" | "B" | "N" | "P" | "k" | "q" | "r" | "b" | "n" | "p";
 type EditableBoard = Record<string, EditablePiece | null>;
-type ImageImportStatus = "loading" | "ready" | "manual";
+type ImageImportStatus = "loading" | "local" | "ready" | "manual";
 
 type ImageImportDraft = {
   previewUrl: string;
@@ -42,6 +42,20 @@ type PreparedImageVariant = {
   imageData: string;
   mimeType: string;
   label: string;
+  dataUrl?: string;
+};
+
+type LocalSquareDetection = {
+  square: string;
+  piece: EditablePiece | null;
+  confidence: number;
+  occupied: boolean;
+};
+
+type LocalBoardDetection = {
+  boardMap: EditableBoard;
+  confidence: number;
+  warnings: string[];
 };
 
 type VerboseMove = Move & {
@@ -74,6 +88,7 @@ const IMAGE_IMPORT_TARGET_BYTES = 1.4 * 1024 * 1024;
 const IMAGE_IMPORT_MAX_PAYLOAD_CHARS = 2.4 * 1024 * 1024;
 const IMAGE_IMPORT_DIMENSIONS = [1400, 1100, 900, 720];
 const IMAGE_IMPORT_QUALITIES = [0.82, 0.7, 0.58, 0.46];
+const LOCAL_IMAGE_IMPORT_CANVAS_SIZE = 640;
 const EDITABLE_FILES = ["a", "b", "c", "d", "e", "f", "g", "h"] as const;
 const EDITABLE_RANKS = ["8", "7", "6", "5", "4", "3", "2", "1"] as const;
 const EDITABLE_PIECES: Array<{ value: EditablePiece | null; label: string; symbol: string }> = [
@@ -245,6 +260,20 @@ function isEditablePiece(value: string): value is EditablePiece {
   return ["K", "Q", "R", "B", "N", "P", "k", "q", "r", "b", "n", "p"].includes(value);
 }
 
+function rotateEditableBoard(board: EditableBoard): EditableBoard {
+  const rotated = emptyEditableBoard();
+  for (const [square, piece] of Object.entries(board)) {
+    if (!piece) continue;
+    const fileIndex = EDITABLE_FILES.indexOf(square[0] as (typeof EDITABLE_FILES)[number]);
+    const rankIndex = EDITABLE_RANKS.indexOf(square[1] as (typeof EDITABLE_RANKS)[number]);
+    if (fileIndex < 0 || rankIndex < 0) continue;
+    const nextFile = EDITABLE_FILES[7 - fileIndex];
+    const nextRank = EDITABLE_RANKS[7 - rankIndex];
+    rotated[`${nextFile}${nextRank}`] = piece;
+  }
+  return rotated;
+}
+
 function pieceSymbol(piece: EditablePiece | null) {
   return EDITABLE_PIECES.find((item) => item.value === piece)?.symbol ?? "";
 }
@@ -278,11 +307,12 @@ function createImageImportDraft(params: {
   confidence?: number | null;
   warnings?: string[];
   result?: ImportPositionImageResponse | null;
+  boardMap?: EditableBoard;
 }): ImageImportDraft {
   return {
     previewUrl: params.previewUrl,
     result: params.result ?? null,
-    boardMap: editableBoardFromFen(params.fen),
+    boardMap: params.boardMap ?? editableBoardFromFen(params.fen),
     sideToMove: params.sideToMove ?? sideToMoveFromFen(params.fen),
     userSide: params.userSide,
     boardOrientation: params.boardOrientation,
@@ -321,8 +351,10 @@ async function prepareImageForImport(file: File) {
     imageVariants: cropDataUrls.map<PreparedImageVariant>((variant) => ({
       imageData: dataUrlToBase64(variant.dataUrl),
       mimeType: mimeTypeFromDataUrl(variant.dataUrl) || "image/jpeg",
-      label: variant.label
+      label: variant.label,
+      dataUrl: variant.dataUrl
     })),
+    localCandidateDataUrls: [compressedDataUrl, ...cropDataUrls.map((variant) => variant.dataUrl)],
     fileName: file.name || "position.jpg"
   };
 }
@@ -450,6 +482,215 @@ function blobToDataUrl(blob: Blob) {
 function mimeTypeFromDataUrl(dataUrl: string) {
   const match = /^data:([^;,]+)[;,]/.exec(dataUrl);
   return match?.[1] ?? null;
+}
+
+async function detectPositionLocally(dataUrls: string[]): Promise<LocalBoardDetection | null> {
+  const detections: LocalBoardDetection[] = [];
+  for (const dataUrl of dataUrls.slice(0, 5)) {
+    try {
+      const detection = await detectPositionFromSquareImage(dataUrl);
+      detections.push(detection);
+    } catch {
+      continue;
+    }
+  }
+  if (!detections.length) return null;
+  return detections.sort((a, b) => b.confidence - a.confidence)[0];
+}
+
+async function detectPositionFromSquareImage(dataUrl: string): Promise<LocalBoardDetection> {
+  const image = await loadImage(dataUrl);
+  const sourceWidth = image.naturalWidth || image.width;
+  const sourceHeight = image.naturalHeight || image.height;
+  const sourceSquare = Math.min(sourceWidth, sourceHeight);
+  const sourceX = Math.max(0, Math.round((sourceWidth - sourceSquare) / 2));
+  const sourceY = Math.max(0, Math.round((sourceHeight - sourceSquare) / 2));
+  const canvas = document.createElement("canvas");
+  canvas.width = LOCAL_IMAGE_IMPORT_CANVAS_SIZE;
+  canvas.height = LOCAL_IMAGE_IMPORT_CANVAS_SIZE;
+  const context = canvas.getContext("2d", { alpha: false });
+  if (!context) throw new Error("Detection locale image indisponible.");
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(image, sourceX, sourceY, sourceSquare, sourceSquare, 0, 0, canvas.width, canvas.height);
+  const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+  const board = emptyEditableBoard();
+  const detections: LocalSquareDetection[] = [];
+  const squareSize = canvas.width / 8;
+
+  for (let row = 0; row < 8; row += 1) {
+    for (let col = 0; col < 8; col += 1) {
+      const square = `${EDITABLE_FILES[col]}${8 - row}`;
+      const detection = detectLocalSquare(imageData, square, col * squareSize, row * squareSize, squareSize);
+      detections.push(detection);
+      board[square] = detection.piece;
+    }
+  }
+
+  repairLocalBackRankPieces(board);
+  const occupied = detections.filter((item) => item.occupied);
+  const confidence = Math.max(0, Math.min(86, Math.round(
+    occupied.length
+      ? occupied.reduce((total, item) => total + item.confidence, 0) / occupied.length
+      : 18
+  )));
+  const warnings = [
+    "Detection locale automatique sans quota: verifie les pieces avant de valider."
+  ];
+  if (!editableBoardIsValid(board, "white")) {
+    warnings.push("La detection locale peut etre incomplete; corrige les rois et les pieces manquantes.");
+  }
+  return { boardMap: board, confidence, warnings };
+}
+
+function detectLocalSquare(imageData: ImageData, square: string, x: number, y: number, size: number): LocalSquareDetection {
+  const margin = Math.max(4, Math.round(size * 0.11));
+  const background = sampleSquareBackground(imageData, x, y, size);
+  let count = 0;
+  let lightCount = 0;
+  let darkCount = 0;
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = 0;
+  let maxY = 0;
+  let leftCount = 0;
+  let rightCount = 0;
+  let topCount = 0;
+  let middleCount = 0;
+  let bottomCount = 0;
+
+  for (let py = Math.round(y + margin); py < Math.round(y + size - margin); py += 2) {
+    for (let px = Math.round(x + margin); px < Math.round(x + size - margin); px += 2) {
+      const index = (py * imageData.width + px) * 4;
+      const r = imageData.data[index];
+      const g = imageData.data[index + 1];
+      const b = imageData.data[index + 2];
+      const distance = colorDistance({ r, g, b }, background);
+      const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      const isForeground = distance > 42 || luminance < background.luminance - 48 || luminance > background.luminance + 54;
+      if (!isForeground) continue;
+      count += 1;
+      if (luminance > 150) lightCount += 1;
+      if (luminance < 112) darkCount += 1;
+      minX = Math.min(minX, px);
+      minY = Math.min(minY, py);
+      maxX = Math.max(maxX, px);
+      maxY = Math.max(maxY, py);
+      if (px < x + size / 2) leftCount += 1;
+      else rightCount += 1;
+      const relativeY = (py - y) / size;
+      if (relativeY < 0.34) topCount += 1;
+      else if (relativeY < 0.68) middleCount += 1;
+      else bottomCount += 1;
+    }
+  }
+
+  const sampledArea = Math.max(1, ((size - margin * 2) / 2) ** 2);
+  const fillRatio = count / sampledArea;
+  if (fillRatio < 0.045 || count < 24) {
+    return { square, piece: null, confidence: 0, occupied: false };
+  }
+
+  const pieceColor = lightCount >= darkCount * 0.72 ? "white" : "black";
+  const pieceType = classifyLocalPiece({
+    square,
+    fillRatio,
+    widthRatio: Math.max(0, (maxX - minX) / size),
+    heightRatio: Math.max(0, (maxY - minY) / size),
+    asymmetry: Math.abs(leftCount - rightCount) / Math.max(1, count),
+    topRatio: topCount / Math.max(1, count),
+    middleRatio: middleCount / Math.max(1, count),
+    bottomRatio: bottomCount / Math.max(1, count)
+  });
+  const piece = pieceColor === "white" ? pieceType.toUpperCase() : pieceType;
+  const confidence = Math.round(Math.max(38, Math.min(84, 44 + fillRatio * 100 + Math.min(18, count / 38))));
+  return { square, piece: piece as EditablePiece, confidence, occupied: true };
+}
+
+function sampleSquareBackground(imageData: ImageData, x: number, y: number, size: number) {
+  const patches = [
+    [x + size * 0.13, y + size * 0.13],
+    [x + size * 0.87, y + size * 0.13],
+    [x + size * 0.13, y + size * 0.87],
+    [x + size * 0.87, y + size * 0.87]
+  ];
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let total = 0;
+  for (const [cx, cy] of patches) {
+    for (let dy = -3; dy <= 3; dy += 3) {
+      for (let dx = -3; dx <= 3; dx += 3) {
+        const px = Math.max(0, Math.min(imageData.width - 1, Math.round(cx + dx)));
+        const py = Math.max(0, Math.min(imageData.height - 1, Math.round(cy + dy)));
+        const index = (py * imageData.width + px) * 4;
+        r += imageData.data[index];
+        g += imageData.data[index + 1];
+        b += imageData.data[index + 2];
+        total += 1;
+      }
+    }
+  }
+  const color = {
+    r: r / total,
+    g: g / total,
+    b: b / total
+  };
+  return {
+    ...color,
+    luminance: 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b
+  };
+}
+
+function colorDistance(color: { r: number; g: number; b: number }, background: { r: number; g: number; b: number }) {
+  return Math.sqrt((color.r - background.r) ** 2 + (color.g - background.g) ** 2 + (color.b - background.b) ** 2);
+}
+
+function classifyLocalPiece(features: {
+  square: string;
+  fillRatio: number;
+  widthRatio: number;
+  heightRatio: number;
+  asymmetry: number;
+  topRatio: number;
+  middleRatio: number;
+  bottomRatio: number;
+}): Lowercase<EditablePiece> {
+  const file = features.square[0];
+  const rank = Number(features.square[1]);
+
+  if (rank === 2 || rank === 7) return "p";
+  if (rank === 1 || rank === 8) {
+    if (file === "a" || file === "h") return "r";
+    if (file === "b" || file === "g") return "n";
+    if (file === "c" || file === "f") return "b";
+    if (file === "d") return "q";
+    if (file === "e") return "k";
+  }
+
+  if (features.heightRatio < 0.54 && features.widthRatio < 0.58) return "p";
+  if (features.asymmetry > 0.18 && features.widthRatio > 0.38 && features.middleRatio > 0.30) return "n";
+  if (features.widthRatio > 0.62 && features.topRatio > 0.20 && features.bottomRatio > 0.25) return "r";
+  if (features.heightRatio > 0.68 && features.widthRatio < 0.52) return "b";
+  if (features.heightRatio > 0.66 && features.widthRatio > 0.58 && features.topRatio > 0.24) return "q";
+  if (features.heightRatio > 0.64 && features.widthRatio > 0.50) return "k";
+  return features.fillRatio > 0.18 ? "b" : "p";
+}
+
+function repairLocalBackRankPieces(board: EditableBoard) {
+  const backRanks: Array<{ color: "white" | "black"; rank: string; pieces: EditablePiece[] }> = [
+    { color: "white", rank: "1", pieces: ["R", "N", "B", "Q", "K", "B", "N", "R"] },
+    { color: "black", rank: "8", pieces: ["r", "n", "b", "q", "k", "b", "n", "r"] }
+  ];
+  for (const backRank of backRanks) {
+    for (let index = 0; index < EDITABLE_FILES.length; index += 1) {
+      const square = `${EDITABLE_FILES[index]}${backRank.rank}`;
+      const piece = board[square];
+      if (!piece) continue;
+      const isSameColor = backRank.color === "white" ? piece === piece.toUpperCase() : piece === piece.toLowerCase();
+      if (isSameColor) board[square] = backRank.pieces[index];
+    }
+  }
 }
 
 function urlForSnapshot(snapshot: NavigationSnapshot) {
@@ -1161,14 +1402,20 @@ export default function HomePage() {
     let draftOpened = false;
     try {
       const prepared = await prepareImageForImport(file);
+      const localDetection = await detectPositionLocally(prepared.localCandidateDataUrls);
       const manualDraft = createImageImportDraft({
         previewUrl: prepared.previewUrl,
         fen,
+        boardMap: localDetection?.boardMap,
         sideToMove: game.turn() === "b" ? "black" : "white",
         userSide: userSide === "black" ? "black" : "white",
         boardOrientation: boardOrientationFromOrientation(orientation),
-        status: "loading",
-        message: "Reconnaissance en cours. Tu peux deja corriger le plateau si besoin."
+        status: localDetection ? "local" : "loading",
+        message: localDetection
+          ? "Detection automatique locale active. Gemini peut encore ameliorer la lecture si disponible."
+          : "Reconnaissance en cours. Tu peux deja corriger le plateau si besoin.",
+        confidence: localDetection?.confidence ?? null,
+        warnings: localDetection?.warnings ?? []
       });
       setImageImportDraft(manualDraft);
       draftOpened = true;
@@ -1200,8 +1447,10 @@ export default function HomePage() {
           ? {
               ...current,
               result: null,
-              status: "manual",
-              message: "Reconnaissance automatique indisponible, correction manuelle ouverte.",
+              status: current.status === "local" ? "local" : "manual",
+              message: current.status === "local"
+                ? "Detection locale conservee. Tu peux corriger puis valider."
+                : "Reconnaissance automatique indisponible, correction manuelle ouverte.",
               warnings: []
             }
           : current
@@ -1312,7 +1561,18 @@ export default function HomePage() {
           draft={imageImportDraft}
           onSideToMoveChange={(sideToMove) => setImageImportDraft((current) => current ? { ...current, sideToMove } : current)}
           onUserSideChange={(side) => setImageImportDraft((current) => current ? { ...current, userSide: side } : current)}
-          onOrientationChange={(nextOrientation) => setImageImportDraft((current) => current ? { ...current, boardOrientation: boardOrientationFromOrientation(nextOrientation) } : current)}
+          onOrientationChange={(nextOrientation) =>
+            setImageImportDraft((current) => {
+              if (!current) return current;
+              const nextBoardOrientation = boardOrientationFromOrientation(nextOrientation);
+              if (current.boardOrientation === nextBoardOrientation) return current;
+              return {
+                ...current,
+                boardOrientation: nextBoardOrientation,
+                boardMap: rotateEditableBoard(current.boardMap)
+              };
+            })
+          }
           onSquareChange={setImageImportSquare}
           onClearBoard={() => setImageImportBoard(emptyEditableBoard())}
           onUseCurrentBoard={() => setImageImportBoard(editableBoardFromFen(fen))}
@@ -1531,7 +1791,9 @@ function ImageImportConfirmDialog({
   const statusLabel =
     draft.status === "loading"
       ? "Reconnaissance en cours"
-      : draft.status === "ready"
+      : draft.status === "local"
+        ? "Detection locale"
+        : draft.status === "ready"
         ? "Position pre-remplie"
         : "Correction manuelle";
 
