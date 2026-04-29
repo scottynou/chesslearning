@@ -212,6 +212,24 @@ function fenWithSideToMove(fen: string, sideToMove: "white" | "black") {
   return parts.join(" ");
 }
 
+function normalizeFenInput(input: string) {
+  const cleaned = input
+    .replace(/```(?:text|fen)?/gi, " ")
+    .replace(/```/g, " ")
+    .replace(/^fen\s*[:=]\s*/i, "")
+    .trim()
+    .split(/\s+/)
+    .join(" ");
+  const placementMatch = cleaned.match(/[pnbrqkPNBRQK1-8]+(?:\/[pnbrqkPNBRQK1-8]+){7}(?:\s+[wb](?:\s+(?:K?Q?k?q?|-)(?:\s+(?:-|[a-h][36])(?:\s+\d+\s+\d+)?)?)?)?/);
+  const candidate = placementMatch?.[0]?.trim() ?? cleaned;
+  const parts = candidate.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return `${parts[0]} w - - 0 1`;
+  if (parts.length === 2) return `${parts[0]} ${parts[1]} - - 0 1`;
+  if (parts.length === 3) return `${parts[0]} ${parts[1]} ${parts[2]} - 0 1`;
+  if (parts.length === 4) return `${parts[0]} ${parts[1]} ${parts[2]} ${parts[3]} 0 1`;
+  return parts.slice(0, 6).join(" ");
+}
+
 function emptyEditableBoard(): EditableBoard {
   const board: EditableBoard = {};
   for (const rank of EDITABLE_RANKS) {
@@ -920,6 +938,10 @@ export default function HomePage() {
   const [imageImporting, setImageImporting] = useState(false);
   const [imageImportError, setImageImportError] = useState<string | null>(null);
   const [imageImportDraft, setImageImportDraft] = useState<ImageImportDraft | null>(null);
+  const [fenImportOpen, setFenImportOpen] = useState(false);
+  const [fenImportValue, setFenImportValue] = useState("");
+  const [fenImportError, setFenImportError] = useState<string | null>(null);
+  const [fenImportUserSide, setFenImportUserSide] = useState<"white" | "black">("white");
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const navigationReady = useRef(false);
   const skipNextHistoryReplace = useRef(false);
@@ -1061,6 +1083,8 @@ export default function HomePage() {
     setImageImportError(null);
     setImageImportDraft(null);
     setImageImporting(false);
+    setFenImportOpen(false);
+    setFenImportError(null);
     setMenuOpen(false);
   }, []);
 
@@ -1581,6 +1605,81 @@ export default function HomePage() {
     imageInputRef.current?.click();
   }
 
+  function openFenImport() {
+    setFenImportUserSide(userSide === "black" ? "black" : "white");
+    setFenImportValue("");
+    setFenImportError(null);
+    setFenImportOpen(true);
+  }
+
+  async function pasteFenFromClipboard() {
+    try {
+      const text = await navigator.clipboard.readText();
+      setFenImportValue(text);
+      setFenImportError(null);
+    } catch {
+      setFenImportError("Impossible de lire le presse-papiers. Colle le FEN manuellement.");
+    }
+  }
+
+  function applyImportedFen(importedFen: string, side: "white" | "black", message: string) {
+    let importedGame: Chess;
+    try {
+      importedGame = new Chess(importedFen);
+    } catch {
+      throw new Error("FEN invalide. Verifie le texte copie.");
+    }
+
+    const keepSelectedPlan = selectedPlan?.side === side || selectedPlan?.side === "universal";
+    timelineRef.current = { historyUci: [], moveSources: [], redoStack: [] };
+    botPausedByTimelineNavigation.current = false;
+    setBaseFen(importedFen);
+    setGame(importedGame);
+    setMoveSources([]);
+    setRedoStack([]);
+    setSelectedSquare(null);
+    setPendingPromotion(null);
+    setHighlightedMove(null);
+    setLastMessage(message);
+    setPlanRecommendations(null);
+    setPlanRecommendationsFen(null);
+    setPlanError(null);
+    setBotError(null);
+    botRequestInFlight.current = false;
+    setBotThinking(false);
+    setBotStrategyState({});
+    resetAdaptiveBoost();
+    setAppStage("coach");
+    setUserSide(side);
+    setOrientation(side);
+    setSelectedPlanId(keepSelectedPlan ? selectedPlanId : null);
+    setFirstOpponentMove(null);
+    writeNavigationSnapshot(
+      makeNavigationSnapshot({
+        appStage: "coach",
+        userSide: side,
+        orientation: side,
+        selectedPlanId: keepSelectedPlan ? selectedPlanId : null,
+        firstOpponentMove: null,
+        historyUci: [],
+        importedFen
+      }),
+      "push"
+    );
+  }
+
+  function confirmFenImport() {
+    try {
+      const importedFen = normalizeFenInput(fenImportValue);
+      applyImportedFen(importedFen, fenImportUserSide, "Position importee depuis le FEN.");
+      setFenImportOpen(false);
+      setFenImportError(null);
+      setMenuOpen(false);
+    } catch (error) {
+      setFenImportError(error instanceof Error ? error.message : "FEN invalide.");
+    }
+  }
+
   function updateImageImportDraft(updater: (draft: ImageImportDraft) => ImageImportDraft) {
     setImageImportDraft((current) => (current ? updater(current) : current));
   }
@@ -1686,52 +1785,14 @@ export default function HomePage() {
     if (!imageImportDraft) return;
     const side = imageImportDraft.userSide;
     const importedFen = editableBoardToFen(imageImportDraft.boardMap, imageImportDraft.sideToMove);
-    let importedGame: Chess;
     try {
-      importedGame = new Chess(importedFen);
-    } catch {
-      setImageImportError("La position detectee n'est pas valide.");
+      applyImportedFen(importedFen, side, "Position importee depuis l'image.");
+    } catch (error) {
+      setImageImportError(error instanceof Error ? error.message : "La position detectee n'est pas valide.");
       return;
     }
-
-    const keepSelectedPlan = selectedPlan?.side === side || selectedPlan?.side === "universal";
-    timelineRef.current = { historyUci: [], moveSources: [], redoStack: [] };
-    botPausedByTimelineNavigation.current = false;
-    setBaseFen(importedFen);
-    setGame(importedGame);
-    setMoveSources([]);
-    setRedoStack([]);
-    setSelectedSquare(null);
-    setPendingPromotion(null);
-    setHighlightedMove(null);
-    setLastMessage("Position importee depuis l'image.");
-    setPlanRecommendations(null);
-    setPlanRecommendationsFen(null);
-    setPlanError(null);
-    setBotError(null);
-    botRequestInFlight.current = false;
-    setBotThinking(false);
-    setBotStrategyState({});
-    resetAdaptiveBoost();
-    setAppStage("coach");
-    setUserSide(side);
-    setOrientation(side);
-    setSelectedPlanId(keepSelectedPlan ? selectedPlanId : null);
-    setFirstOpponentMove(null);
     setImageImportDraft(null);
     setImageImportError(null);
-    writeNavigationSnapshot(
-      makeNavigationSnapshot({
-        appStage: "coach",
-        userSide: side,
-        orientation: side,
-        selectedPlanId: keepSelectedPlan ? selectedPlanId : null,
-        firstOpponentMove: null,
-        historyUci: [],
-        importedFen
-      }),
-      "push"
-    );
   }
 
   function handleHistoryClick(_ply: number, move: Move) {
@@ -1746,6 +1807,7 @@ export default function HomePage() {
         menuOpen={menuOpen}
         imageImporting={imageImporting}
         onHome={goHome}
+        onImportFen={openFenImport}
         onImportImage={openImageImport}
         onToggleMenu={() => setMenuOpen((open) => !open)}
       />
@@ -1798,6 +1860,18 @@ export default function HomePage() {
           onUseStartingBoard={() => setImageImportBoard(editableBoardFromFen(new Chess().fen()))}
           onCancel={() => setImageImportDraft(null)}
           onConfirm={confirmImageImport}
+        />
+      ) : null}
+      {fenImportOpen ? (
+        <FenImportDialog
+          value={fenImportValue}
+          error={fenImportError}
+          userSide={fenImportUserSide}
+          onValueChange={setFenImportValue}
+          onUserSideChange={setFenImportUserSide}
+          onPaste={pasteFenFromClipboard}
+          onCancel={() => setFenImportOpen(false)}
+          onConfirm={confirmFenImport}
         />
       ) : null}
       {content}
@@ -2253,11 +2327,91 @@ function EditablePositionBoard({
   );
 }
 
+function FenImportDialog({
+  value,
+  error,
+  userSide,
+  onValueChange,
+  onUserSideChange,
+  onPaste,
+  onCancel,
+  onConfirm
+}: {
+  value: string;
+  error: string | null;
+  userSide: "white" | "black";
+  onValueChange: (value: string) => void;
+  onUserSideChange: (side: "white" | "black") => void;
+  onPaste: () => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const previewFen = value.trim() ? normalizeFenInput(value) : null;
+  let previewError: string | null = null;
+  if (previewFen) {
+    try {
+      new Chess(previewFen);
+    } catch {
+      previewError = "Le FEN n'est pas encore valide.";
+    }
+  }
+
+  return (
+    <div className="fen-import-layer" role="dialog" aria-modal="true" aria-label="Importer une position FEN">
+      <button type="button" className="fen-import-backdrop" aria-label="Annuler l'import FEN" onClick={onCancel} />
+      <section className="fen-import-panel">
+        <p className="image-import-eyebrow">Import FEN</p>
+        <h2>Colle la position</h2>
+        <p className="fen-import-copy">Colle le FEN donne par ChatGPT, Chessvision ou un autre scanner. Le plateau sera reconstruit directement.</p>
+
+        <textarea
+          value={value}
+          onChange={(event) => onValueChange(event.target.value)}
+          placeholder="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+          className="fen-import-textarea"
+          rows={5}
+          autoFocus
+        />
+
+        <div className="image-import-turn">
+          <span>Tu joues</span>
+          <div>
+            <button type="button" className={userSide === "white" ? "is-active" : ""} onClick={() => onUserSideChange("white")}>
+              Blancs
+            </button>
+            <button type="button" className={userSide === "black" ? "is-active" : ""} onClick={() => onUserSideChange("black")}>
+              Noirs
+            </button>
+          </div>
+        </div>
+
+        {previewFen && !previewError ? (
+          <code className="fen-import-preview">{previewFen}</code>
+        ) : null}
+        {error || previewError ? <p className="image-import-warning">{error ?? previewError}</p> : null}
+
+        <div className="fen-import-actions">
+          <button type="button" className="control-button is-muted" onClick={onPaste}>
+            Coller
+          </button>
+          <button type="button" className="control-button" onClick={onConfirm}>
+            Importer
+          </button>
+          <button type="button" className="control-button is-muted" onClick={onCancel}>
+            Annuler
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function SiteHeader({
   status,
   menuOpen,
   imageImporting,
   onHome,
+  onImportFen,
   onImportImage,
   onToggleMenu
 }: {
@@ -2265,6 +2419,7 @@ function SiteHeader({
   menuOpen: boolean;
   imageImporting: boolean;
   onHome: () => void;
+  onImportFen: () => void;
   onImportImage: () => void;
   onToggleMenu: () => void;
 }) {
@@ -2279,6 +2434,15 @@ function SiteHeader({
         </button>
         <div className="site-header-actions">
           {status ? <span className="site-status">{status}</span> : null}
+          <button
+            type="button"
+            onClick={onImportFen}
+            className="site-menu-button site-fen-button"
+            aria-label="Importer une position au format FEN"
+            title="Importer FEN"
+          >
+            FEN
+          </button>
           <button
             type="button"
             onClick={onImportImage}

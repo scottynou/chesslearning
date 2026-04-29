@@ -224,6 +224,7 @@ button:disabled { cursor: not-allowed; }
 .site-menu-button, .site-menu-close { display: inline-grid; width: 2.75rem; height: 2.75rem; place-items: center; border: 1px solid rgba(247, 239, 224, 0.13); border-radius: 50%; background: rgba(247, 239, 224, 0.055); color: #f7efe0; box-shadow: 0 14px 34px rgba(0,0,0,0.26); transition: transform 180ms ease, border-color 180ms ease, background 180ms ease; }
 .site-menu-button:hover, .site-menu-close:hover { transform: translateY(-1px); border-color: rgba(247,239,224,0.42); background: rgba(247,239,224,0.13); }
 .site-menu-button:disabled { cursor: wait; opacity: 0.48; transform: none; }
+.site-fen-button { width: auto; min-width: 3.2rem; border-radius: 999px; padding: 0 0.75rem; font-size: 0.72rem; font-weight: 950; letter-spacing: 0.08em; }
 .site-menu-layer { position: fixed; inset: 0; z-index: 60; pointer-events: none; }
 .site-menu-backdrop { position: absolute; inset: 0; pointer-events: auto; border: 0; background: rgba(13, 17, 23, 0.18); backdrop-filter: blur(4px); }
 .site-menu-popover { position: absolute; right: 0.85rem; top: 5.25rem; width: min(460px, calc(100vw - 1.7rem)); max-height: calc(100vh - 6.4rem); overflow-y: auto; pointer-events: auto; border: 1px solid rgba(255,255,255,0.36); border-radius: 28px; background: linear-gradient(180deg, rgba(255,252,245,0.96), rgba(255,255,255,0.9)); padding: 1rem; box-shadow: var(--shadow-strong); backdrop-filter: blur(22px); }
@@ -283,6 +284,17 @@ button:disabled { cursor: not-allowed; }
 .image-import-tools button:first-child { grid-column: span 2; font-family: var(--font-sans); font-size: 0.78rem; font-weight: 950; letter-spacing: 0.04em; text-transform: uppercase; }
 .image-import-tools button.is-active { border-color: rgba(231,185,106,0.58); background: rgba(231,185,106,0.18); box-shadow: inset 0 0 0 1px rgba(231,185,106,0.18); }
 .image-import-tools button span { pointer-events: none; }
+.fen-import-layer { position: fixed; inset: 0; z-index: 92; display: grid; place-items: center; padding: 1rem; }
+.fen-import-backdrop { position: absolute; inset: 0; border: 0; background: rgba(0,0,0,0.70); backdrop-filter: blur(10px); }
+.fen-import-panel { position: relative; display: grid; width: min(560px, 100%); gap: 0.85rem; border: 1px solid rgba(247,239,224,0.16); border-radius: 24px; background: linear-gradient(145deg, rgba(17,20,26,0.98), rgba(4,6,10,0.98)); color: #f7efe0; padding: clamp(1rem, 3vw, 1.35rem); box-shadow: 0 50px 160px rgba(0,0,0,0.64), inset 0 1px 0 rgba(255,255,255,0.08); }
+.fen-import-panel h2 { margin: 0; font-size: clamp(1.8rem, 4vw, 2.55rem); font-weight: 940; line-height: 1; }
+.fen-import-copy { margin: -0.2rem 0 0; color: rgba(247,239,224,0.62); font-size: 0.9rem; font-weight: 740; line-height: 1.45; }
+.fen-import-textarea { width: 100%; min-height: 8.5rem; resize: vertical; border: 1px solid rgba(247,239,224,0.14); border-radius: 16px; background: rgba(0,0,0,0.30); color: #f7efe0; padding: 0.85rem; font-family: var(--font-mono, monospace); font-size: 0.9rem; line-height: 1.45; outline: none; }
+.fen-import-textarea:focus { border-color: rgba(231,185,106,0.52); box-shadow: 0 0 0 3px rgba(231,185,106,0.14); }
+.fen-import-preview { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid rgba(247,239,224,0.08); border-radius: 12px; background: rgba(0,0,0,0.28); color: rgba(247,239,224,0.58); padding: 0.55rem 0.7rem; font-size: 0.72rem; }
+.fen-import-actions { display: grid; grid-template-columns: 0.7fr 1fr 0.7fr; gap: 0.55rem; }
+.fen-import-actions .control-button { width: 100%; border-color: rgba(247,239,224,0.14); background: rgba(247,239,224,0.09); color: #f7efe0; box-shadow: none; }
+.fen-import-actions .control-button.is-muted { color: rgba(247,239,224,0.60); background: transparent; }
 
 /* Landing */
 .landing-shell {
@@ -753,6 +765,7 @@ button:disabled { cursor: not-allowed; }
   .image-import-tools { grid-template-columns: repeat(7, minmax(0, 1fr)); }
   .image-import-tools button { min-height: 2.05rem; font-size: 1.05rem; }
   .image-import-quick-actions { grid-template-columns: 1fr; }
+  .fen-import-actions { grid-template-columns: 1fr; }
   .promotion-popover { position: static; margin-top: 0.65rem; }
   .plan-path-list { grid-template-columns: 1fr; }
 }
