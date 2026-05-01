@@ -150,6 +150,12 @@ def get_plan_recommendations(
         move_history=move_history,
         player_turn=player_turn,
     )
+    opponent_strength = opponent_move_strength_for(
+        move_history=move_history,
+        player_color=plan_color,
+        player_turn=player_turn,
+        engine_depth=engine_depth,
+    )
     if player_turn and visible_merged and should_shape_for_human_accuracy(phase_display, phase_status, opening_state):
         visible_merged = shape_recommendations_for_accuracy(visible_merged, accuracy_profile)
         primary_move = choose_primary_move([], visible_merged)
@@ -191,6 +197,7 @@ def get_plan_recommendations(
         player_turn=player_turn,
         engine_candidates=engine_candidates,
         draw_pressure=accuracy_profile.get("drawPressure"),
+        opponent_strength=opponent_strength,
     )
     current_objective = current_objective_for(active_plan, phase, primary_move)
     progress = plan_progress_for(board, active_plan, move_history, phase_status)
@@ -252,6 +259,7 @@ def get_plan_recommendations(
             "phaseCoach": phase_coach_context,
             "skillLevel": level_settings,
             "accuracyProfile": accuracy_profile,
+            "opponentStrength": opponent_strength,
         },
         "selectedPlan": active_plan,
         "phase": phase,
@@ -793,6 +801,117 @@ def pure_engine_expected_opponent_move(fen: str, engine_depth: int, movetime_ms:
     return expected_opponent_move_for(recommendation_from_candidate(fen, candidates[0]))
 
 
+def opponent_move_strength_for(
+    *,
+    move_history: list[str],
+    player_color: chess.Color | None,
+    player_turn: bool,
+    engine_depth: int,
+) -> dict[str, Any]:
+    if not player_turn or player_color is None or not move_history:
+        return {"level": "none", "suggestedBoostDelta": 0, "reason": "Pas de coup adverse a mesurer."}
+
+    last_move_index = len(move_history) - 1
+    last_move_color = chess.WHITE if last_move_index % 2 == 0 else chess.BLACK
+    if last_move_color == player_color:
+        return {"level": "none", "suggestedBoostDelta": 0, "reason": "Le dernier coup est un coup joueur."}
+
+    previous_board = board_from_standard_history(move_history[:-1])
+    if previous_board is None:
+        return {"level": "unknown", "suggestedBoostDelta": 0, "reason": "Historique trop atypique pour mesurer le coup adverse."}
+
+    try:
+        move = chess.Move.from_uci(move_history[-1])
+    except ValueError:
+        return {"level": "unknown", "suggestedBoostDelta": 0, "reason": "Dernier coup adverse illisible."}
+    if move not in previous_board.legal_moves:
+        return {"level": "unknown", "suggestedBoostDelta": 0, "reason": "Dernier coup adverse non legal dans la position reconstruite."}
+
+    strength_ms = _int_env("STOCKFISH_OPPONENT_STRENGTH_MS", 450)
+    try:
+        lines = StockfishEngine().analyze(
+            previous_board.fen(),
+            multipv=8,
+            depth=max(engine_depth, 10),
+            movetime_ms=strength_ms,
+        )
+    except Exception:
+        return {"level": "unknown", "suggestedBoostDelta": 0, "reason": "Mesure Stockfish du coup adverse indisponible."}
+    return opponent_move_strength_from_lines(move_history[-1], lines)
+
+
+def opponent_move_strength_from_lines(move_uci: str, lines: list[Any]) -> dict[str, Any]:
+    if not lines:
+        return {"level": "unknown", "suggestedBoostDelta": 0, "reason": "Stockfish n'a pas pu mesurer le coup adverse."}
+
+    scored = sorted(lines, key=engine_line_score, reverse=True)
+    best_score = engine_line_score(scored[0])
+    played_line = next((line for line in scored if getattr(line, "move_uci", None) == move_uci), None)
+    if played_line is None:
+        return {
+            "level": "weak",
+            "suggestedBoostDelta": 0,
+            "reason": "Le coup adverse n'apparait pas dans les meilleurs choix Stockfish.",
+        }
+
+    played_score = engine_line_score(played_line)
+    delta = max(0, best_score - played_score)
+    rank = int(getattr(played_line, "stockfish_rank", 99) or 99)
+    if rank == 1 or delta <= 20:
+        return {
+            "level": "elite",
+            "suggestedBoostDelta": 200,
+            "reason": "L'adversaire a joue quasiment le meilleur coup Stockfish : le niveau cache monte nettement.",
+            "rank": rank,
+            "deltaCp": delta,
+        }
+    if rank <= 3 or delta <= 55:
+        return {
+            "level": "strong",
+            "suggestedBoostDelta": 150,
+            "reason": "L'adversaire joue tres proche du moteur : le niveau cache monte.",
+            "rank": rank,
+            "deltaCp": delta,
+        }
+    if rank <= 6 or delta <= 110:
+        return {
+            "level": "good",
+            "suggestedBoostDelta": 100,
+            "reason": "L'adversaire joue un bon coup moteur : le niveau cache augmente progressivement.",
+            "rank": rank,
+            "deltaCp": delta,
+        }
+    return {
+        "level": "normal",
+        "suggestedBoostDelta": 50,
+        "reason": "L'adversaire garde une qualite correcte : petit ajustement offensif.",
+        "rank": rank,
+        "deltaCp": delta,
+    }
+
+
+def board_from_standard_history(move_history: list[str]) -> chess.Board | None:
+    board = chess.Board()
+    for move_uci in move_history:
+        try:
+            move = chess.Move.from_uci(move_uci)
+        except ValueError:
+            return None
+        if move not in board.legal_moves:
+            return None
+        board.push(move)
+    return board
+
+
+def engine_line_score(line: Any) -> int:
+    mate_in = getattr(line, "mate_in", None)
+    if mate_in is not None:
+        sign = 1 if mate_in > 0 else -1
+        return sign * (100_000 - abs(int(mate_in)) * 1_000)
+    eval_cp = getattr(line, "eval_cp", None)
+    return int(eval_cp or 0)
+
+
 def _int_env(name: str, default: int) -> int:
     try:
         return int(os.getenv(name, str(default)))
@@ -876,6 +995,7 @@ def adaptive_signal_for(
     player_turn: bool,
     engine_candidates: list[Any],
     draw_pressure: dict[str, Any] | None = None,
+    opponent_strength: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not player_turn:
         return {
@@ -897,6 +1017,8 @@ def adaptive_signal_for(
     position_score = score_from_side_to_move(engine_candidates)
     mating_danger = mate_danger_from_side_to_move(engine_candidates)
     draw_level = str((draw_pressure or {}).get("level", "none"))
+    opponent_delta = int((opponent_strength or {}).get("suggestedBoostDelta") or 0)
+    opponent_level = str((opponent_strength or {}).get("level", "none"))
 
     if mating_danger == "critical" or position_score <= -420 or engine_score <= 32 or tactical_risk >= 62:
         return {
@@ -910,11 +1032,23 @@ def adaptive_signal_for(
             "suggestedBoostDelta": 200,
             "reason": "La partie risque vraiment de finir nulle : le coach monte fort pour garder des chances de gain.",
         }
+    if opponent_delta >= 200:
+        return {
+            "pressure": "worse",
+            "suggestedBoostDelta": 200,
+            "reason": "L'adversaire vient de jouer un coup quasi Stockfish : le niveau cache monte pour ne pas subir.",
+        }
     if warning or position_score <= -260 or engine_score <= 45 or tactical_risk >= 45:
         return {
             "pressure": "critical",
             "suggestedBoostDelta": 150,
             "reason": "La position est sous forte pression : le coach monte nettement en precision.",
+        }
+    if opponent_delta >= 150:
+        return {
+            "pressure": "worse",
+            "suggestedBoostDelta": 150,
+            "reason": "L'adversaire joue tres proche des meilleurs coups : le niveau cache suit progressivement.",
         }
     if draw_level == "warning":
         return {
@@ -922,11 +1056,23 @@ def adaptive_signal_for(
             "suggestedBoostDelta": 150,
             "reason": "La position devient trop egale : le coach monte pour eviter une nulle passive.",
         }
+    if opponent_delta >= 100:
+        return {
+            "pressure": "worse",
+            "suggestedBoostDelta": 100,
+            "reason": "L'adversaire garde une bonne qualite moteur : on augmente le niveau cache.",
+        }
     if opening_state == "abandoned" or mating_danger == "warning" or position_score <= -180 or engine_score <= 55 or tactical_risk >= 36:
         return {
             "pressure": "worse",
             "suggestedBoostDelta": 150,
             "reason": "L'adversaire met une vraie pression : le niveau cache augmente pour rester dans la partie.",
+        }
+    if opponent_delta >= 50 and opponent_level != "weak":
+        return {
+            "pressure": "worse",
+            "suggestedBoostDelta": 50,
+            "reason": "L'adversaire joue assez proprement : petit boost pour rester ambitieux.",
         }
     if adapted or position_score <= -90 or engine_score <= 65 or tactical_risk >= 28:
         return {

@@ -16,7 +16,7 @@ describe("eloAdaptation", () => {
     expect(normalizeBaseElo(3900)).toBe(3200);
     expect(effectiveElo(3150, 400)).toBe(3200);
     expect(effectiveElo(1200, -200)).toBe(1200);
-    expect(effectiveElo(1200, 1800)).toBe(2200);
+    expect(effectiveElo(1200, 1800)).toBe(2600);
   });
 
   it("maps Elo to the internal skill level", () => {
@@ -101,12 +101,12 @@ describe("eloAdaptation", () => {
   it("keeps the hidden boost inside the configured bounds", () => {
     expect(
       applyAdaptiveSignal({
-        currentBoost: 950,
+        currentBoost: 1350,
         pressure: "critical",
         suggestedBoostDelta: 200,
         trend: freshEloTrendState()
       }).boost
-    ).toBe(1000);
+    ).toBe(1400);
     expect(
       applyAdaptiveSignal({
         currentBoost: 0,

@@ -356,6 +356,32 @@ def test_drawish_adaptive_signal_boosts_precision() -> None:
     assert signal["suggestedBoostDelta"] == 200
 
 
+def test_opponent_engine_quality_raises_adaptive_signal() -> None:
+    from app.strategy.plan_engine import adaptive_signal_for, opponent_move_strength_from_lines
+
+    strength = opponent_move_strength_from_lines(
+        "e7e5",
+        [
+            SimpleNamespace(stockfish_rank=1, move_uci="e7e5", eval_cp=34, mate_in=None),
+            SimpleNamespace(stockfish_rank=2, move_uci="c7c5", eval_cp=18, mate_in=None),
+        ],
+    )
+    signal = adaptive_signal_for(
+        primary_move={"engineScore": 88, "tacticalRisk": 8, "warning": None},
+        phase_status="opening_in_progress",
+        blocked_expected_move=None,
+        opening_state="on_track",
+        player_turn=True,
+        engine_candidates=[SimpleNamespace(eval_cp=60, mate_in=None)],
+        draw_pressure={"level": "none"},
+        opponent_strength=strength,
+    )
+
+    assert strength["level"] == "elite"
+    assert signal["pressure"] == "worse"
+    assert signal["suggestedBoostDelta"] == 200
+
+
 def test_draw_break_shaping_prefers_winning_chances_over_flat_move() -> None:
     from app.strategy.plan_engine import shape_recommendations_for_accuracy
 

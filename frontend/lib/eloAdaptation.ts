@@ -3,8 +3,8 @@ import type { SkillLevel } from "./types";
 export const ELO_MIN = 600;
 export const ELO_MAX = 3200;
 export const ELO_STEP = 50;
-export const DEFAULT_BASE_ELO = 1200;
-export const MAX_ADAPTIVE_BOOST = 1000;
+export const DEFAULT_BASE_ELO = 1600;
+export const MAX_ADAPTIVE_BOOST = 1400;
 export const MIN_ADAPTIVE_BOOST = 0;
 
 export type EloQuality = "excellent" | "good" | "playable" | "inaccurate" | "mistake" | "blunder";
