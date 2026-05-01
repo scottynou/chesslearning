@@ -1188,11 +1188,6 @@ export default function HomePage() {
       setPlanRecommendationsFen(null);
       return;
     }
-    if (!selectedPlanId && userSide !== "both") {
-      setPlanRecommendations(null);
-      setPlanRecommendationsFen(null);
-      return;
-    }
     if (botTurnInBotMode) {
       setPlanLoading(false);
       setPlanError(null);
