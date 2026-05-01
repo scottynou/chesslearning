@@ -253,12 +253,12 @@ button:disabled { cursor: not-allowed; }
 .image-import-active-tool strong { color: #f7d89b; font-size: 0.86rem; font-weight: 940; }
 .image-import-board { display: grid; justify-content: center; border: 1px solid rgba(247,239,224,0.10); border-radius: 18px; background: rgba(247,239,224,0.04); padding: 0.65rem; }
 .image-import-board .coach-board-frame { box-shadow: 0 22px 70px rgba(0,0,0,0.34); }
-.image-import-confidence, .image-import-turn { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; border: 1px solid rgba(247,239,224,0.10); border-radius: 16px; background: rgba(247,239,224,0.055); padding: 0.75rem 0.85rem; }
-.image-import-confidence span, .image-import-turn span { color: rgba(247,239,224,0.58); font-size: 0.78rem; font-weight: 850; }
+.image-import-confidence, .image-import-turn, .import-profile-choice { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; border: 1px solid rgba(247,239,224,0.10); border-radius: 16px; background: rgba(247,239,224,0.055); padding: 0.75rem 0.85rem; }
+.image-import-confidence span, .image-import-turn span, .import-profile-choice > span { color: rgba(247,239,224,0.58); font-size: 0.78rem; font-weight: 850; }
 .image-import-confidence strong { color: #f7d89b; font-size: 1rem; font-weight: 950; }
-.image-import-turn > div { display: inline-flex; gap: 0.35rem; border: 1px solid rgba(247,239,224,0.10); border-radius: 999px; padding: 0.25rem; }
-.image-import-turn button { border: 0; border-radius: 999px; background: transparent; color: rgba(247,239,224,0.62); padding: 0.42rem 0.7rem; font-size: 0.78rem; font-weight: 900; }
-.image-import-turn button.is-active { background: rgba(231,185,106,0.18); color: #f7d89b; }
+.image-import-turn > div, .import-profile-choice > div { display: inline-flex; gap: 0.35rem; border: 1px solid rgba(247,239,224,0.10); border-radius: 999px; padding: 0.25rem; }
+.image-import-turn button, .import-profile-choice button { border: 0; border-radius: 999px; background: transparent; color: rgba(247,239,224,0.62); padding: 0.42rem 0.7rem; font-size: 0.78rem; font-weight: 900; }
+.image-import-turn button.is-active, .import-profile-choice button.is-active { background: rgba(231,185,106,0.18); color: #f7d89b; }
 .image-import-warning { margin: 0; border: 1px solid rgba(231,185,106,0.20); border-radius: 14px; background: rgba(231,185,106,0.08); color: rgba(247,239,224,0.70); padding: 0.75rem; font-size: 0.82rem; font-weight: 760; line-height: 1.45; }
 .image-import-actions { display: grid; gap: 0.55rem; margin-top: 0.25rem; }
 .image-import-actions .control-button { width: 100%; border-color: rgba(247,239,224,0.14); background: rgba(247,239,224,0.09); color: #f7efe0; box-shadow: none; }
@@ -847,7 +847,7 @@ button:disabled { cursor: not-allowed; }
   .image-import-layer { padding: 0.45rem; align-items: stretch; }
   .image-import-panel { grid-template-columns: 1fr; max-height: calc(100svh - 0.9rem); overflow-y: auto; }
   .image-import-preview { min-height: 11rem; max-height: 26vh; }
-  .image-import-confidence, .image-import-turn { align-items: flex-start; flex-direction: column; }
+  .image-import-confidence, .image-import-turn, .import-profile-choice { align-items: flex-start; flex-direction: column; }
   .editable-position-board { width: min(100%, calc(100vw - 2.4rem)); }
   .image-import-tools { grid-template-columns: repeat(7, minmax(0, 1fr)); }
   .image-import-tools button { min-height: 2.05rem; font-size: 1.05rem; }

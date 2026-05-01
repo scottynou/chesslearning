@@ -346,7 +346,7 @@ def test_drawish_positions_raise_hidden_accuracy_profile() -> None:
     )
 
     assert profile["mode"] == "draw_break"
-    assert profile["target"] >= 96
+    assert profile["target"] >= 91
     assert profile["drawPressure"]["level"] == "critical"
 
 
@@ -384,9 +384,9 @@ def test_accuracy_profile_follows_selected_hidden_elo() -> None:
         "opponent_strength": {"level": "none", "suggestedBoostDelta": 0},
     }
 
-    assert accuracy_profile_for(**common, elo=1200)["target"] == 84
-    assert accuracy_profile_for(**common, elo=1600)["target"] == 90
-    assert accuracy_profile_for(**common, elo=1800)["target"] == 92
+    assert accuracy_profile_for(**common, elo=1200)["target"] == 74
+    assert accuracy_profile_for(**common, elo=1600)["target"] == 76
+    assert accuracy_profile_for(**common, elo=1800)["target"] == 82
 
 
 def test_ai_rerank_prompt_uses_strong_human_profile_without_1200() -> None:
@@ -518,6 +518,43 @@ def test_draw_break_shaping_prefers_winning_chances_over_flat_move() -> None:
 
     assert shaped[0]["moveUci"] == "e2e4"
     assert shaped[0]["accuracyBand"] == "draw_break"
+
+
+def test_normal_accuracy_shaping_avoids_unnecessary_perfection() -> None:
+    from app.strategy.plan_engine import accuracy_bands_for_elo, shape_recommendations_for_accuracy
+
+    perfect_move = {
+        "moveUci": "d1a4",
+        "source": "engine",
+        "engineRank": 1,
+        "planFitScore": 42,
+        "engineScore": 96,
+        "beginnerSimplicityScore": 58,
+        "tacticalRisk": 8,
+        "finalCoachScore": 90,
+        "warning": None,
+        "candidate": {"evalCp": 140},
+    }
+    practical_move = {
+        "moveUci": "g1f3",
+        "source": "engine",
+        "engineRank": 3,
+        "planFitScore": 58,
+        "engineScore": 78,
+        "beginnerSimplicityScore": 82,
+        "tacticalRisk": 10,
+        "finalCoachScore": 82,
+        "warning": None,
+        "candidate": {"evalCp": 88},
+    }
+
+    shaped = shape_recommendations_for_accuracy(
+        [perfect_move, practical_move],
+        {"mode": "normal", **accuracy_bands_for_elo(1600)["normal"]},
+    )
+
+    assert shaped[0]["moveUci"] == "g1f3"
+    assert shaped[0]["humanAccuracyEstimate"] < 90
 
 
 def test_player_turn_after_deviation_returns_primary_move(monkeypatch) -> None:

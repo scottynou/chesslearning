@@ -238,14 +238,15 @@ def _prompt(
             "Rank only these legal candidate moves. Do not invent a move. Prefer the selected opening plan when safe, "
             "then engine safety, then practical human simplicity. Choose like a strong practical human trying to win: "
             "avoid flat draws, keep initiative, and never pick a move with tactical danger just because it looks human. "
-            "In normal positions, stay inside the hidden strongHumanProfile band when the move is healthy. In pressure, "
-            "draw-break, or survival modes, prioritize the strongest safe move and allow the top engine move."
+            "In normal positions, prefer the lowest healthy accuracy band that still keeps winning chances. Do not look "
+            "perfect when a safe practical move is enough. In pressure, draw-break, or survival modes, prioritize the "
+            "strongest safe move and allow the top engine move."
         ),
         "output": {"orderedMoveUci": ["only candidate moveUci values in best order"], "confidence": "0-100"},
         "fen": fen,
         "phase": phase,
         "openingState": opening_state,
-        "strongHumanProfile": strong_human_profile or {"mode": "normal", "targetMin": 90, "targetMax": 94},
+        "strongHumanProfile": strong_human_profile or {"mode": "normal", "targetMin": 70, "targetMax": 84},
         "selectedPlan": {
             "id": selected_plan.get("id"),
             "nameFr": selected_plan.get("nameFr"),

@@ -609,37 +609,37 @@ def accuracy_profile_for(
 def accuracy_bands_for_elo(elo: int) -> dict[str, dict[str, int]]:
     if elo < 1450:
         return {
-            "normal": {"target": 84, "min": 78, "max": 89},
-            "favorable": {"target": 84, "min": 78, "max": 90},
-            "pressure": {"target": 90, "min": 84, "max": 96},
-            "strong_pressure": {"target": 91, "min": 85, "max": 97},
-            "elite_pressure": {"target": 92, "min": 86, "max": 98},
-            "draw_warning": {"target": 92, "min": 86, "max": 98},
-            "draw_critical": {"target": 94, "min": 88, "max": 99},
-            "conversion": {"target": 88, "min": 82, "max": 94},
+            "normal": {"target": 74, "min": 68, "max": 82},
+            "favorable": {"target": 73, "min": 68, "max": 82},
+            "pressure": {"target": 84, "min": 78, "max": 92},
+            "strong_pressure": {"target": 87, "min": 81, "max": 95},
+            "elite_pressure": {"target": 90, "min": 84, "max": 97},
+            "draw_warning": {"target": 86, "min": 80, "max": 94},
+            "draw_critical": {"target": 91, "min": 86, "max": 98},
+            "conversion": {"target": 80, "min": 74, "max": 90},
             "survival": {"target": 97, "min": 92, "max": 100},
         }
     if elo < 1750:
         return {
-            "normal": {"target": 90, "min": 87, "max": 93},
-            "favorable": {"target": 89, "min": 86, "max": 94},
-            "pressure": {"target": 93, "min": 89, "max": 97},
-            "strong_pressure": {"target": 94, "min": 90, "max": 98},
-            "elite_pressure": {"target": 95, "min": 91, "max": 99},
-            "draw_warning": {"target": 94, "min": 90, "max": 98},
-            "draw_critical": {"target": 96, "min": 92, "max": 100},
-            "conversion": {"target": 91, "min": 86, "max": 96},
+            "normal": {"target": 76, "min": 70, "max": 84},
+            "favorable": {"target": 75, "min": 70, "max": 84},
+            "pressure": {"target": 88, "min": 82, "max": 95},
+            "strong_pressure": {"target": 91, "min": 85, "max": 97},
+            "elite_pressure": {"target": 94, "min": 89, "max": 99},
+            "draw_warning": {"target": 90, "min": 84, "max": 97},
+            "draw_critical": {"target": 94, "min": 89, "max": 100},
+            "conversion": {"target": 84, "min": 78, "max": 94},
             "survival": {"target": 98, "min": 94, "max": 100},
         }
     return {
-        "normal": {"target": 92, "min": 90, "max": 94},
-        "favorable": {"target": 91, "min": 88, "max": 95},
-        "pressure": {"target": 94, "min": 90, "max": 98},
-        "strong_pressure": {"target": 95, "min": 91, "max": 98},
+        "normal": {"target": 82, "min": 76, "max": 88},
+        "favorable": {"target": 80, "min": 74, "max": 88},
+        "pressure": {"target": 91, "min": 85, "max": 97},
+        "strong_pressure": {"target": 93, "min": 88, "max": 98},
         "elite_pressure": {"target": 96, "min": 92, "max": 99},
-        "draw_warning": {"target": 95, "min": 91, "max": 99},
-        "draw_critical": {"target": 97, "min": 93, "max": 100},
-        "conversion": {"target": 93, "min": 89, "max": 98},
+        "draw_warning": {"target": 93, "min": 87, "max": 98},
+        "draw_critical": {"target": 96, "min": 91, "max": 100},
+        "conversion": {"target": 88, "min": 82, "max": 96},
         "survival": {"target": 98, "min": 94, "max": 100},
     }
 
@@ -797,19 +797,19 @@ def human_accuracy_sort_score(item: dict[str, Any], profile: dict[str, Any]) -> 
         distance_penalty = 0.70
         weights = (0.36, 0.17, 0.07, 0.21)
     elif mode == "conversion":
-        over_penalty = 0.18
+        over_penalty = 0.55
         under_penalty = 4.2
         distance_penalty = 0.78
         weights = (0.35, 0.15, 0.07, 0.22)
     elif mode == "comfortable":
-        over_penalty = 0.45
+        over_penalty = 1.30
         under_penalty = 4.0
         distance_penalty = 0.95
         weights = (0.31, 0.18, 0.08, 0.19)
     else:
-        over_penalty = 0.35
+        over_penalty = 1.15
         under_penalty = 4.3
-        distance_penalty = 0.90
+        distance_penalty = 1.05
         weights = (0.31, 0.20, 0.08, 0.18)
 
     in_band_bonus = 26 if minimum <= engine_score <= maximum else 0

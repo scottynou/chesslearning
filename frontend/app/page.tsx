@@ -42,6 +42,7 @@ type ImageImportDraft = {
   boardMap: EditableBoard;
   sideToMove: "white" | "black";
   userSide: "white" | "black";
+  humanProfile: CoachHumanProfile;
   boardOrientation: "white_bottom" | "black_bottom" | "unknown";
   status: ImageImportStatus;
   message: string | null;
@@ -379,6 +380,7 @@ function createImageImportDraft(params: {
   fen: string;
   sideToMove?: "white" | "black";
   userSide: "white" | "black";
+  humanProfile: CoachHumanProfile;
   boardOrientation: ImageImportDraft["boardOrientation"];
   status: ImageImportStatus;
   message?: string | null;
@@ -395,6 +397,7 @@ function createImageImportDraft(params: {
     boardMap: params.boardMap ?? editableBoardFromFen(params.fen),
     sideToMove: params.sideToMove ?? sideToMoveFromFen(params.fen),
     userSide: params.userSide,
+    humanProfile: params.humanProfile,
     boardOrientation: params.boardOrientation,
     status: params.status,
     message: params.message ?? null,
@@ -986,6 +989,7 @@ export default function HomePage() {
   const [fenImportValue, setFenImportValue] = useState("");
   const [fenImportError, setFenImportError] = useState<string | null>(null);
   const [fenImportUserSide, setFenImportUserSide] = useState<"white" | "black">("white");
+  const [fenImportProfile, setFenImportProfile] = useState<CoachHumanProfile>(DEFAULT_HUMAN_PROFILE);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const navigationReady = useRef(false);
   const skipNextHistoryReplace = useRef(false);
@@ -995,6 +999,7 @@ export default function HomePage() {
   const eloChangeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const botRequestInFlight = useRef(false);
   const botRequestSerial = useRef(0);
+  const imageImportSerial = useRef(0);
   const botPausedByTimelineNavigation = useRef(false);
   const lastTimelineTouchAt = useRef(0);
   const timelineRef = useRef<{ historyUci: string[]; moveSources: MoveSource[]; redoStack: TimelineMove[] }>({
@@ -1120,6 +1125,14 @@ export default function HomePage() {
     setSelectedSquare(null);
     setPendingPromotion(null);
     setLastMessage(null);
+    imageImportSerial.current += 1;
+    setImageImporting(false);
+    setImageImportError(null);
+    setImageImportDraft(null);
+    setFenImportOpen(false);
+    setFenImportValue("");
+    setFenImportError(null);
+    setFenImportProfile(normalizeHumanProfile(snapshot.humanProfile));
     if (snapshot.appStage === "side-selection" || snapshot.appStage === "black-first-move") {
       setPlans([]);
     }
@@ -1506,7 +1519,11 @@ export default function HomePage() {
         appStage: "white-plan-selection",
         userSide: "white",
         orientation: "white",
-        humanProfile: profile
+        humanProfile: profile,
+        selectedPlanId: null,
+        firstOpponentMove: null,
+        historyUci: [],
+        importedFen: null
       })
     );
   }
@@ -1519,7 +1536,11 @@ export default function HomePage() {
         appStage: "black-first-move",
         userSide: "black",
         orientation: "black",
-        humanProfile: profile
+        humanProfile: profile,
+        selectedPlanId: null,
+        firstOpponentMove: null,
+        historyUci: [],
+        importedFen: null
       })
     );
   }
@@ -1529,7 +1550,11 @@ export default function HomePage() {
       makeNavigationSnapshot({
         appStage: "coach",
         userSide: "both",
-        orientation: "white"
+        orientation: "white",
+        selectedPlanId: null,
+        firstOpponentMove: null,
+        historyUci: [],
+        importedFen: null
       })
     );
   }
@@ -1552,13 +1577,13 @@ export default function HomePage() {
     [firstOpponentMove, historyUci, makeNavigationSnapshot, navigateToSnapshot, plans, userSide]
   );
 
-  const resetAdaptiveBoost = useCallback(() => {
+  const resetAdaptiveBoost = useCallback((profile: CoachHumanProfile = humanProfile) => {
     setAdaptiveBoost(0);
     setEloChange(null);
-    previousEffectiveElo.current = baseCoachElo;
+    previousEffectiveElo.current = baseEloForProfile(profile);
     lastEloAdjustmentPly.current = null;
     eloTrend.current = freshEloTrendState();
-  }, [baseCoachElo]);
+  }, [humanProfile]);
 
   function clearPositionDerivedState() {
     botRequestSerial.current += 1;
@@ -1659,7 +1684,7 @@ export default function HomePage() {
   }
 
   function changePlan() {
-    navigateToSnapshot(makeNavigationSnapshot({ appStage: "side-selection", userSide: "white", orientation: "white", selectedPlanId: null, firstOpponentMove: null, historyUci: [] }));
+    navigateToSnapshot(makeNavigationSnapshot({ appStage: "side-selection", userSide: "white", orientation: "white", selectedPlanId: null, firstOpponentMove: null, historyUci: [], importedFen: null }));
   }
 
   function goHome() {
@@ -1679,6 +1704,7 @@ export default function HomePage() {
 
   function openFenImport() {
     setFenImportUserSide(userSide === "black" ? "black" : "white");
+    setFenImportProfile(humanProfile);
     setFenImportValue("");
     setFenImportError(null);
     setFenImportOpen(true);
@@ -1694,7 +1720,7 @@ export default function HomePage() {
     }
   }
 
-  function applyImportedFen(importedFen: string, side: "white" | "black", message: string) {
+  function applyImportedFen(importedFen: string, side: "white" | "black", message: string, profile: CoachHumanProfile = humanProfile) {
     let importedGame: Chess;
     try {
       importedGame = new Chess(importedFen);
@@ -1705,8 +1731,10 @@ export default function HomePage() {
     const keepSelectedPlan = selectedPlan?.side === side || selectedPlan?.side === "universal";
     timelineRef.current = { historyUci: [], moveSources: [], redoStack: [] };
     botPausedByTimelineNavigation.current = false;
+    imageImportSerial.current += 1;
     setBaseFen(importedFen);
     setGame(importedGame);
+    setHumanProfile(profile);
     setMoveSources([]);
     setRedoStack([]);
     setSelectedSquare(null);
@@ -1720,7 +1748,7 @@ export default function HomePage() {
     botRequestInFlight.current = false;
     setBotThinking(false);
     setBotStrategyState({});
-    resetAdaptiveBoost();
+    resetAdaptiveBoost(profile);
     setAppStage("coach");
     setUserSide(side);
     setOrientation(side);
@@ -1731,6 +1759,7 @@ export default function HomePage() {
         appStage: "coach",
         userSide: side,
         orientation: side,
+        humanProfile: profile,
         selectedPlanId: keepSelectedPlan ? selectedPlanId : null,
         firstOpponentMove: null,
         historyUci: [],
@@ -1743,7 +1772,7 @@ export default function HomePage() {
   function confirmFenImport() {
     try {
       const importedFen = normalizeFenInput(fenImportValue);
-      applyImportedFen(importedFen, fenImportUserSide, "Position importee depuis le FEN.");
+      applyImportedFen(importedFen, fenImportUserSide, "Position importee depuis le FEN.", fenImportProfile);
       setFenImportOpen(false);
       setFenImportError(null);
       setMenuOpen(false);
@@ -1785,12 +1814,15 @@ export default function HomePage() {
       return;
     }
 
+    const importId = ++imageImportSerial.current;
     setImageImporting(true);
     setImageImportError(null);
     let draftOpened = false;
     try {
       const prepared = await prepareImageForImport(file);
+      if (importId !== imageImportSerial.current) return;
       const localDetection = await detectPositionLocally(prepared.localCandidateDataUrls);
+      if (importId !== imageImportSerial.current) return;
       const manualDraft = createImageImportDraft({
         previewUrl: prepared.previewUrl,
         boardReferenceUrl: localDetection?.referenceUrl ?? prepared.localCandidateDataUrls[1] ?? prepared.previewUrl,
@@ -1798,6 +1830,7 @@ export default function HomePage() {
         boardMap: localDetection?.boardMap ?? emptyEditableBoard(),
         sideToMove: game.turn() === "b" ? "black" : "white",
         userSide: userSide === "black" ? "black" : "white",
+        humanProfile,
         boardOrientation: boardOrientationFromOrientation(orientation),
         status: localDetection ? "local" : "loading",
         message: localDetection
@@ -1815,13 +1848,15 @@ export default function HomePage() {
         imageVariants: prepared.imageVariants,
         fileName: prepared.fileName
       });
-      setImageImportDraft(
+      if (importId !== imageImportSerial.current) return;
+      setImageImportDraft((current) =>
         createImageImportDraft({
           previewUrl: prepared.previewUrl,
           boardReferenceUrl: prepared.localCandidateDataUrls[1] ?? prepared.previewUrl,
           fen: result.fen,
           sideToMove: result.sideToMove,
           userSide: userSide === "black" ? "black" : "white",
+          humanProfile: current?.humanProfile ?? humanProfile,
           boardOrientation: result.boardOrientation,
           status: "ready",
           message: result.confidence < 90 ? "Reconnaissance incertaine: verifie les pieces avant de valider." : "Position pre-remplie. Verifie puis valide.",
@@ -1831,6 +1866,7 @@ export default function HomePage() {
         })
       );
     } catch (error) {
+      if (importId !== imageImportSerial.current) return;
       const message = error instanceof Error ? error.message : "Reconnaissance automatique indisponible.";
       setImageImportDraft((current) =>
         current
@@ -1849,7 +1885,7 @@ export default function HomePage() {
         setImageImportError(message);
       }
     } finally {
-      setImageImporting(false);
+      if (importId === imageImportSerial.current) setImageImporting(false);
     }
   }
 
@@ -1858,12 +1894,19 @@ export default function HomePage() {
     const side = imageImportDraft.userSide;
     const importedFen = editableBoardToFen(imageImportDraft.boardMap, imageImportDraft.sideToMove);
     try {
-      applyImportedFen(importedFen, side, "Position importee depuis l'image.");
+      applyImportedFen(importedFen, side, "Position importee depuis l'image.", imageImportDraft.humanProfile);
     } catch (error) {
       setImageImportError(error instanceof Error ? error.message : "La position detectee n'est pas valide.");
       return;
     }
     setImageImportDraft(null);
+    setImageImportError(null);
+  }
+
+  function cancelImageImportDraft() {
+    imageImportSerial.current += 1;
+    setImageImportDraft(null);
+    setImageImporting(false);
     setImageImportError(null);
   }
 
@@ -1914,6 +1957,7 @@ export default function HomePage() {
           draft={imageImportDraft}
           onSideToMoveChange={(sideToMove) => setImageImportDraft((current) => current ? { ...current, sideToMove } : current)}
           onUserSideChange={(side) => setImageImportDraft((current) => current ? { ...current, userSide: side } : current)}
+          onProfileChange={(profile) => setImageImportDraft((current) => current ? { ...current, humanProfile: profile } : current)}
           onOrientationChange={(nextOrientation) =>
             setImageImportDraft((current) => {
               if (!current) return current;
@@ -1930,7 +1974,7 @@ export default function HomePage() {
           onClearBoard={() => setImageImportBoard(emptyEditableBoard())}
           onUseCurrentBoard={() => setImageImportBoard(editableBoardFromFen(fen))}
           onUseStartingBoard={() => setImageImportBoard(editableBoardFromFen(new Chess().fen()))}
-          onCancel={() => setImageImportDraft(null)}
+          onCancel={cancelImageImportDraft}
           onConfirm={confirmImageImport}
         />
       ) : null}
@@ -1939,8 +1983,10 @@ export default function HomePage() {
           value={fenImportValue}
           error={fenImportError}
           userSide={fenImportUserSide}
+          profile={fenImportProfile}
           onValueChange={setFenImportValue}
           onUserSideChange={setFenImportUserSide}
+          onProfileChange={setFenImportProfile}
           onPaste={pasteFenFromClipboard}
           onCancel={() => setFenImportOpen(false)}
           onConfirm={confirmFenImport}
@@ -2188,6 +2234,7 @@ function ImageImportConfirmDialog({
   draft,
   onSideToMoveChange,
   onUserSideChange,
+  onProfileChange,
   onOrientationChange,
   onSquareChange,
   onClearBoard,
@@ -2199,6 +2246,7 @@ function ImageImportConfirmDialog({
   draft: ImageImportDraft;
   onSideToMoveChange: (side: "white" | "black") => void;
   onUserSideChange: (side: "white" | "black") => void;
+  onProfileChange: (profile: CoachHumanProfile) => void;
   onOrientationChange: (orientation: Orientation) => void;
   onSquareChange: (square: string, piece: EditablePiece | null) => void;
   onClearBoard: () => void;
@@ -2279,6 +2327,8 @@ function ImageImportConfirmDialog({
               </button>
             </div>
           </div>
+
+          <HumanProfileSelector value={draft.humanProfile} onChange={onProfileChange} />
 
           <div className="image-import-turn">
             <span>Trait</span>
@@ -2403,12 +2453,30 @@ function EditablePositionBoard({
   );
 }
 
+function HumanProfileSelector({ value, onChange }: { value: CoachHumanProfile; onChange: (profile: CoachHumanProfile) => void }) {
+  const profiles = Object.entries(HUMAN_PROFILE_SETTINGS) as Array<[CoachHumanProfile, (typeof HUMAN_PROFILE_SETTINGS)[CoachHumanProfile]]>;
+  return (
+    <div className="import-profile-choice" aria-label="Niveau des conseils">
+      <span>Niveau conseil</span>
+      <div>
+        {profiles.map(([id, profile]) => (
+          <button key={id} type="button" className={value === id ? "is-active" : ""} onClick={() => onChange(id)} title={profile.description}>
+            {profile.shortLabel}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function FenImportDialog({
   value,
   error,
   userSide,
+  profile,
   onValueChange,
   onUserSideChange,
+  onProfileChange,
   onPaste,
   onCancel,
   onConfirm
@@ -2416,8 +2484,10 @@ function FenImportDialog({
   value: string;
   error: string | null;
   userSide: "white" | "black";
+  profile: CoachHumanProfile;
   onValueChange: (value: string) => void;
   onUserSideChange: (side: "white" | "black") => void;
+  onProfileChange: (profile: CoachHumanProfile) => void;
   onPaste: () => void;
   onCancel: () => void;
   onConfirm: () => void;
@@ -2460,6 +2530,8 @@ function FenImportDialog({
             </button>
           </div>
         </div>
+
+        <HumanProfileSelector value={profile} onChange={onProfileChange} />
 
         {previewFen && !previewError ? (
           <code className="fen-import-preview">{previewFen}</code>
