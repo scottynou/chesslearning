@@ -141,6 +141,10 @@ function buildGameFromHistory(moves: string[], startFen?: string | null) {
   return next;
 }
 
+function sameMoveList(left: string[], right: string[]) {
+  return left.length === right.length && left.every((move, index) => move === right[index]);
+}
+
 function isNavigationSnapshot(value: unknown): value is NavigationSnapshot {
   return Boolean(value && typeof value === "object" && (value as NavigationSnapshot).key === NAVIGATION_KEY);
 }
@@ -1286,6 +1290,21 @@ export default function HomePage() {
     return game.moves({ square: selectedSquare as Square, verbose: true }).map((move) => move.to);
   }, [boardLocked, game, selectedSquare]);
 
+  const getCurrentTimeline = useCallback(() => {
+    const currentTimeline = timelineRef.current;
+    if (sameMoveList(currentTimeline.historyUci, historyUci)) {
+      return currentTimeline;
+    }
+
+    const syncedTimeline = {
+      historyUci,
+      moveSources: historyUci.map((_, index) => currentTimeline.moveSources[index] ?? moveSources[index] ?? "manual" as MoveSource),
+      redoStack: currentTimeline.redoStack
+    };
+    timelineRef.current = syncedTimeline;
+    return syncedTimeline;
+  }, [historyUci, moveSources]);
+
   const applyMove = useCallback(
     (from: string, to: string, promotion?: string, source: MoveSource = "manual") => {
       if (boardLocked) {
@@ -1304,7 +1323,7 @@ export default function HomePage() {
       }
 
       const moveUci = `${from}${to}${promotion ?? ""}`;
-      const currentTimeline = timelineRef.current;
+      const currentTimeline = getCurrentTimeline();
       const nextHistoryUci = [...currentTimeline.historyUci, moveUci];
       const nextMoveSources = [...currentTimeline.moveSources.slice(0, currentTimeline.historyUci.length), source];
       timelineRef.current = { historyUci: nextHistoryUci, moveSources: nextMoveSources, redoStack: [] };
@@ -1337,7 +1356,7 @@ export default function HomePage() {
       }
       return true;
     },
-    [appStage, boardLocked, game, history.length, makeNavigationSnapshot, mode, writeNavigationSnapshot]
+    [appStage, boardLocked, game, getCurrentTimeline, history.length, makeNavigationSnapshot, mode, writeNavigationSnapshot]
   );
 
   const requestMove = useCallback(
@@ -1529,7 +1548,7 @@ export default function HomePage() {
   }
 
   function undo() {
-    const currentTimeline = timelineRef.current;
+    const currentTimeline = getCurrentTimeline();
     const timeline = undoTimeline(
       currentTimeline.historyUci,
       currentTimeline.moveSources,
@@ -1554,7 +1573,7 @@ export default function HomePage() {
   }
 
   function redo() {
-    const currentTimeline = timelineRef.current;
+    const currentTimeline = getCurrentTimeline();
     const timeline = redoTimeline(currentTimeline.redoStack);
     if (!timeline.nextMove || boardLocked) return;
 
@@ -2033,7 +2052,7 @@ export default function HomePage() {
             onClick={() => runTimelineClick(undo)}
             onTouchEnd={(event) => runTimelineTouch(event, undo)}
             className="control-button icon-control"
-            disabled={!canStepBackward}
+            aria-disabled={!canStepBackward}
             aria-label="Coup precedent"
             title="Coup precedent"
           >
@@ -2044,7 +2063,7 @@ export default function HomePage() {
             onClick={() => runTimelineClick(redo)}
             onTouchEnd={(event) => runTimelineTouch(event, redo)}
             className="control-button icon-control"
-            disabled={!canStepForward}
+            aria-disabled={!canStepForward}
             aria-label="Coup suivant"
             title="Coup suivant"
           >
