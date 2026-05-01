@@ -156,6 +156,7 @@ def get_plan_recommendations(
         move_history=move_history,
         player_turn=player_turn,
         opponent_strength=opponent_strength,
+        elo=elo,
     )
     strong_human_profile = strong_human_profile_for(accuracy_profile, opponent_strength)
     if player_turn and visible_merged and should_shape_for_human_accuracy(phase_display, phase_status, opening_state):
@@ -508,6 +509,7 @@ def accuracy_profile_for(
     move_history: list[str],
     player_turn: bool,
     opponent_strength: dict[str, Any] | None = None,
+    elo: int = 1600,
 ) -> dict[str, Any]:
     draw_pressure = draw_pressure_for(
         board=board,
@@ -515,12 +517,12 @@ def accuracy_profile_for(
         move_history=move_history,
         engine_candidates=engine_candidates,
     )
+    bands = accuracy_bands_for_elo(elo)
+
     if not player_turn:
         return {
             "mode": "idle",
-            "target": 92,
-            "min": 90,
-            "max": 94,
+            **bands["normal"],
             "reason": "Hors tour joueur.",
             "drawPressure": draw_pressure,
         }
@@ -534,9 +536,7 @@ def accuracy_profile_for(
     if mating_danger == "critical" or position_score <= -260:
         return {
             "mode": "survival",
-            "target": 98,
-            "min": 94,
-            "max": 100,
+            **bands["survival"],
             "reason": "Position critique : le meilleur coup moteur est autorise sans penalite.",
             "drawPressure": draw_pressure,
             "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
@@ -544,9 +544,7 @@ def accuracy_profile_for(
     if draw_pressure["level"] == "critical":
         return {
             "mode": "draw_break",
-            "target": 97,
-            "min": 93,
-            "max": 100,
+            **bands["draw_critical"],
             "reason": "La position devient trop nulle : on cherche des coups precis qui gardent des chances de gain.",
             "drawPressure": draw_pressure,
             "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
@@ -554,9 +552,7 @@ def accuracy_profile_for(
     if opponent_delta >= 200 or opponent_level == "elite":
         return {
             "mode": "pressure",
-            "target": 96,
-            "min": 92,
-            "max": 99,
+            **bands["elite_pressure"],
             "reason": "L'adversaire joue proche de Stockfish : les conseils montent vers un humain tres fort.",
             "drawPressure": draw_pressure,
             "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
@@ -564,9 +560,7 @@ def accuracy_profile_for(
     if opponent_delta >= 150 or opponent_level == "strong":
         return {
             "mode": "pressure",
-            "target": 95,
-            "min": 91,
-            "max": 98,
+            **bands["strong_pressure"],
             "reason": "L'adversaire joue tres precis : le ranking devient plus exigeant tout de suite.",
             "drawPressure": draw_pressure,
             "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
@@ -574,9 +568,7 @@ def accuracy_profile_for(
     if phase_status in {"adapted", "fallback"} or opening_state in {"recoverable", "abandoned"} or position_score <= -90:
         return {
             "mode": "pressure",
-            "min": 90,
-            "target": 94,
-            "max": 98,
+            **bands["pressure"],
             "reason": "Sous pression : on choisit un coup humain fort, pas un compromis mou.",
             "drawPressure": draw_pressure,
             "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
@@ -584,9 +576,7 @@ def accuracy_profile_for(
     if draw_pressure["level"] == "warning":
         return {
             "mode": "draw_break",
-            "target": 95,
-            "min": 91,
-            "max": 99,
+            **bands["draw_warning"],
             "reason": "Risque de simplification vers nulle : on augmente la precision pour garder du jeu.",
             "drawPressure": draw_pressure,
             "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
@@ -594,9 +584,7 @@ def accuracy_profile_for(
     if phase_key == "endgame":
         return {
             "mode": "conversion",
-            "target": 93,
-            "min": 89,
-            "max": 98,
+            **bands["conversion"],
             "reason": "Finale : les coups doivent convertir proprement sans laisser filer la victoire.",
             "drawPressure": draw_pressure,
             "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
@@ -604,21 +592,55 @@ def accuracy_profile_for(
     if position_score >= 220:
         return {
             "mode": "normal",
-            "target": 91,
-            "min": 88,
-            "max": 95,
+            **bands["favorable"],
             "reason": "Position favorable : on convertit activement au lieu de relacher vers la nulle.",
             "drawPressure": draw_pressure,
             "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
         }
     return {
         "mode": "normal",
-        "target": 92,
-        "min": 90,
-        "max": 94,
+        **bands["normal"],
         "reason": "Humain fort : viser la victoire avec un coup sain, pas forcement le top moteur automatique.",
         "drawPressure": draw_pressure,
         "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
+    }
+
+
+def accuracy_bands_for_elo(elo: int) -> dict[str, dict[str, int]]:
+    if elo < 1450:
+        return {
+            "normal": {"target": 84, "min": 78, "max": 89},
+            "favorable": {"target": 84, "min": 78, "max": 90},
+            "pressure": {"target": 90, "min": 84, "max": 96},
+            "strong_pressure": {"target": 91, "min": 85, "max": 97},
+            "elite_pressure": {"target": 92, "min": 86, "max": 98},
+            "draw_warning": {"target": 92, "min": 86, "max": 98},
+            "draw_critical": {"target": 94, "min": 88, "max": 99},
+            "conversion": {"target": 88, "min": 82, "max": 94},
+            "survival": {"target": 97, "min": 92, "max": 100},
+        }
+    if elo < 1750:
+        return {
+            "normal": {"target": 90, "min": 87, "max": 93},
+            "favorable": {"target": 89, "min": 86, "max": 94},
+            "pressure": {"target": 93, "min": 89, "max": 97},
+            "strong_pressure": {"target": 94, "min": 90, "max": 98},
+            "elite_pressure": {"target": 95, "min": 91, "max": 99},
+            "draw_warning": {"target": 94, "min": 90, "max": 98},
+            "draw_critical": {"target": 96, "min": 92, "max": 100},
+            "conversion": {"target": 91, "min": 86, "max": 96},
+            "survival": {"target": 98, "min": 94, "max": 100},
+        }
+    return {
+        "normal": {"target": 92, "min": 90, "max": 94},
+        "favorable": {"target": 91, "min": 88, "max": 95},
+        "pressure": {"target": 94, "min": 90, "max": 98},
+        "strong_pressure": {"target": 95, "min": 91, "max": 98},
+        "elite_pressure": {"target": 96, "min": 92, "max": 99},
+        "draw_warning": {"target": 95, "min": 91, "max": 99},
+        "draw_critical": {"target": 97, "min": 93, "max": 100},
+        "conversion": {"target": 93, "min": 89, "max": 98},
+        "survival": {"target": 98, "min": 94, "max": 100},
     }
 
 

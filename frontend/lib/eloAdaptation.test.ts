@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   applyAdaptiveSignal,
+  baseEloForProfile,
   effectiveElo,
   freshEloTrendState,
   nextAdaptiveBoost,
   nextStablePlyCount,
   normalizeBaseElo,
+  normalizeHumanProfile,
   skillLevelForElo
 } from "./eloAdaptation";
 
@@ -30,6 +32,13 @@ describe("eloAdaptation", () => {
   it("raises the adaptive boost after a serious mistake without jumping more than 200 Elo", () => {
     expect(nextAdaptiveBoost({ currentBoost: 0, autoEnabled: true, playerReviewQuality: "blunder", stablePlyCount: 0 })).toBe(200);
     expect(nextAdaptiveBoost({ currentBoost: 100, autoEnabled: true, playerReviewQuality: "mistake", stablePlyCount: 0 })).toBe(300);
+  });
+
+  it("maps human profiles to their hidden base Elo", () => {
+    expect(baseEloForProfile("lambda")).toBe(1200);
+    expect(baseEloForProfile("strong")).toBe(1600);
+    expect(baseEloForProfile("veryStrong")).toBe(1800);
+    expect(normalizeHumanProfile("unknown")).toBe("strong");
   });
 
   it("reduces the hidden adjustment after two stable plies", () => {

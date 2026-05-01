@@ -14,6 +14,15 @@ describe("SideSelectionPanel", () => {
     const onChooseBlack = vi.fn();
     render(<SideSelectionPanel onChooseWhite={() => undefined} onChooseBlack={onChooseBlack} onChooseFreeMode={() => undefined} />);
     fireEvent.click(screen.getByRole("button", { name: "Je joue les noirs" }));
-    expect(onChooseBlack).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: /Humain fort/i }));
+    expect(onChooseBlack).toHaveBeenCalledWith("strong");
+  });
+
+  it("can start the very strong white flow", () => {
+    const onChooseWhite = vi.fn();
+    render(<SideSelectionPanel onChooseWhite={onChooseWhite} onChooseBlack={() => undefined} onChooseFreeMode={() => undefined} />);
+    fireEvent.click(screen.getByRole("button", { name: "Je joue les blancs" }));
+    fireEvent.click(screen.getByRole("button", { name: /Humain très fort/i }));
+    expect(onChooseWhite).toHaveBeenCalledWith("veryStrong");
   });
 });

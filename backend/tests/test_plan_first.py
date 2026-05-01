@@ -362,11 +362,31 @@ def test_elite_opponent_move_raises_accuracy_profile_immediately() -> None:
         move_history=["e2e4", "e7e5"],
         player_turn=True,
         opponent_strength={"level": "elite", "suggestedBoostDelta": 200},
+        elo=1800,
     )
 
     assert profile["mode"] == "pressure"
     assert profile["target"] >= 96
     assert profile["min"] >= 92
+
+
+def test_accuracy_profile_follows_selected_hidden_elo() -> None:
+    from app.strategy.plan_engine import accuracy_profile_for
+
+    common = {
+        "board": chess.Board(),
+        "phase_display": {"key": "middlegame"},
+        "phase_status": "opening_success",
+        "opening_state": "completed",
+        "engine_candidates": [SimpleNamespace(eval_cp=60, mate_in=None)],
+        "move_history": ["e2e4", "e7e5"],
+        "player_turn": True,
+        "opponent_strength": {"level": "none", "suggestedBoostDelta": 0},
+    }
+
+    assert accuracy_profile_for(**common, elo=1200)["target"] == 84
+    assert accuracy_profile_for(**common, elo=1600)["target"] == 90
+    assert accuracy_profile_for(**common, elo=1800)["target"] == 92
 
 
 def test_ai_rerank_prompt_uses_strong_human_profile_without_1200() -> None:

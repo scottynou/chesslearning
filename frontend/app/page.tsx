@@ -12,7 +12,17 @@ import { PlanFirstPanel } from "@/components/PlanFirstPanel";
 import { SideSelectionPanel } from "@/components/SideSelectionPanel";
 import { getPlanRecommendations, importPositionImage, listAvailablePlans, requestBotMove } from "@/lib/api";
 import { canMoveInMode, gameStatus, isPromotionAttempt, tryMove } from "@/lib/chess";
-import { DEFAULT_BASE_ELO, applyAdaptiveSignal, effectiveElo, freshEloTrendState, skillLevelForElo } from "@/lib/eloAdaptation";
+import {
+  DEFAULT_HUMAN_PROFILE,
+  HUMAN_PROFILE_SETTINGS,
+  applyAdaptiveSignal,
+  baseEloForProfile,
+  effectiveElo,
+  freshEloTrendState,
+  normalizeHumanProfile,
+  skillLevelForElo,
+  type CoachHumanProfile
+} from "@/lib/eloAdaptation";
 import { canStepBack, redoTimeline, undoTimeline, type MoveSource, type TimelineMove } from "@/lib/moveTimeline";
 import type { ImportPositionImageResponse, Orientation, PlanRecommendationsResponse, PlayMode, StrategyPlan } from "@/lib/types";
 
@@ -80,6 +90,7 @@ type NavigationSnapshot = {
   userSide: UserSide;
   orientation: Orientation;
   mode: PlayMode;
+  humanProfile: CoachHumanProfile;
   selectedPlanId: string | null;
   firstOpponentMove: string | null;
   historyUci: string[];
@@ -156,18 +167,20 @@ function snapshotFromLocation(): NavigationSnapshot {
   const userSide: UserSide = sideParam === "black" || sideParam === "both" ? sideParam : "white";
   const plan = params.get("plan");
   const first = params.get("first");
+  const humanProfile = normalizeHumanProfile(params.get("profile"));
 
   if (view === "white-plans") {
-    return createNavigationSnapshot({ appStage: "white-plan-selection", userSide: "white", orientation: "white" });
+    return createNavigationSnapshot({ appStage: "white-plan-selection", userSide: "white", orientation: "white", humanProfile });
   }
   if (view === "black-first-move") {
-    return createNavigationSnapshot({ appStage: "black-first-move", userSide: "black", orientation: "black" });
+    return createNavigationSnapshot({ appStage: "black-first-move", userSide: "black", orientation: "black", humanProfile });
   }
   if (view === "black-plans") {
     return createNavigationSnapshot({
       appStage: "black-plan-selection",
       userSide: "black",
       orientation: "black",
+      humanProfile,
       firstOpponentMove: first,
       historyUci: first ? [first] : []
     });
@@ -177,6 +190,7 @@ function snapshotFromLocation(): NavigationSnapshot {
       appStage: "coach",
       userSide,
       orientation: userSide === "black" ? "black" : "white",
+      humanProfile,
       selectedPlanId: plan,
       firstOpponentMove: first,
       historyUci: first ? [first] : []
@@ -192,6 +206,7 @@ function createNavigationSnapshot(overrides: Partial<NavigationSnapshot> = {}): 
     userSide: "white",
     orientation: "white",
     mode: "both",
+    humanProfile: DEFAULT_HUMAN_PROFILE,
     selectedPlanId: null,
     firstOpponentMove: null,
     historyUci: [],
@@ -902,6 +917,9 @@ function urlForSnapshot(snapshot: NavigationSnapshot) {
     if (snapshot.selectedPlanId) params.set("plan", snapshot.selectedPlanId);
     if (snapshot.firstOpponentMove) params.set("first", snapshot.firstOpponentMove);
   }
+  if (snapshot.appStage !== "side-selection") {
+    params.set("profile", snapshot.humanProfile);
+  }
   const query = params.toString();
   return `${window.location.pathname}${query ? `?${query}` : ""}`;
 }
@@ -917,6 +935,7 @@ export default function HomePage() {
   const [userSide, setUserSide] = useState<UserSide>("white");
   const [orientation, setOrientation] = useState<Orientation>("white");
   const [mode, setMode] = useState<PlayMode>("both");
+  const [humanProfile, setHumanProfile] = useState<CoachHumanProfile>(DEFAULT_HUMAN_PROFILE);
   const [boardWidth, setBoardWidth] = useState(360);
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion | null>(null);
@@ -977,7 +996,8 @@ export default function HomePage() {
       detail: `Le roi ${matedKing} n'a plus d'echappatoire.`
     };
   }, [game]);
-  const effectiveCoachElo = useMemo(() => effectiveElo(DEFAULT_BASE_ELO, adaptiveBoost), [adaptiveBoost]);
+  const baseCoachElo = useMemo(() => baseEloForProfile(humanProfile), [humanProfile]);
+  const effectiveCoachElo = useMemo(() => effectiveElo(baseCoachElo, adaptiveBoost), [adaptiveBoost, baseCoachElo]);
   const activeSkillLevel = useMemo(() => skillLevelForElo(effectiveCoachElo), [effectiveCoachElo]);
   const eloPressureLabel = useMemo(() => {
     const pressure = planRecommendations?.adaptiveSignal?.pressure;
@@ -1033,13 +1053,14 @@ export default function HomePage() {
         userSide,
         orientation,
         mode,
+        humanProfile,
         selectedPlanId,
         firstOpponentMove,
         historyUci,
         importedFen: baseFen,
         ...overrides
       }),
-    [appStage, baseFen, firstOpponentMove, historyUci, mode, orientation, selectedPlanId, userSide]
+    [appStage, baseFen, firstOpponentMove, historyUci, humanProfile, mode, orientation, selectedPlanId, userSide]
   );
 
   const writeNavigationSnapshot = useCallback((snapshot: NavigationSnapshot, action: "push" | "replace") => {
@@ -1062,13 +1083,14 @@ export default function HomePage() {
     setUserSide(snapshot.userSide);
     setOrientation(snapshot.orientation);
     setMode(snapshot.mode);
+    setHumanProfile(normalizeHumanProfile(snapshot.humanProfile));
     setSelectedPlanId(snapshot.selectedPlanId);
     setFirstOpponentMove(snapshot.firstOpponentMove);
     setMoveSources(restoredMoveSources);
     setRedoStack([]);
     setAdaptiveBoost(0);
     setEloChange(null);
-    previousEffectiveElo.current = DEFAULT_BASE_ELO;
+    previousEffectiveElo.current = baseEloForProfile(normalizeHumanProfile(snapshot.humanProfile));
     lastEloAdjustmentPly.current = null;
     botRequestSerial.current += 1;
     botRequestInFlight.current = false;
@@ -1167,7 +1189,7 @@ export default function HomePage() {
     setPlansLoading(true);
     setPlansError(null);
 
-    listAvailablePlans(side, undefined, firstMove)
+    listAvailablePlans(side, baseCoachElo, firstMove)
       .then((response) => {
         if (!active) return;
         setPlans(response.plans);
@@ -1184,7 +1206,7 @@ export default function HomePage() {
     return () => {
       active = false;
     };
-  }, [appStage, firstOpponentMove]);
+  }, [appStage, baseCoachElo, firstOpponentMove]);
 
   useEffect(() => {
     if (appStage !== "coach") {
@@ -1465,22 +1487,28 @@ export default function HomePage() {
     [boardLocked, game, mode, requestMove, selectedSquare]
   );
 
-  function startWhiteFlow() {
+  function startWhiteFlow(profile: CoachHumanProfile) {
+    setHumanProfile(profile);
+    setAdaptiveBoost(0);
     navigateToSnapshot(
       makeNavigationSnapshot({
         appStage: "white-plan-selection",
         userSide: "white",
-        orientation: "white"
+        orientation: "white",
+        humanProfile: profile
       })
     );
   }
 
-  function startBlackFlow() {
+  function startBlackFlow(profile: CoachHumanProfile) {
+    setHumanProfile(profile);
+    setAdaptiveBoost(0);
     navigateToSnapshot(
       makeNavigationSnapshot({
         appStage: "black-first-move",
         userSide: "black",
-        orientation: "black"
+        orientation: "black",
+        humanProfile: profile
       })
     );
   }
@@ -1516,10 +1544,10 @@ export default function HomePage() {
   const resetAdaptiveBoost = useCallback(() => {
     setAdaptiveBoost(0);
     setEloChange(null);
-    previousEffectiveElo.current = DEFAULT_BASE_ELO;
+    previousEffectiveElo.current = baseCoachElo;
     lastEloAdjustmentPly.current = null;
     eloTrend.current = freshEloTrendState();
-  }, []);
+  }, [baseCoachElo]);
 
   function clearPositionDerivedState() {
     botRequestSerial.current += 1;
@@ -2074,7 +2102,7 @@ export default function HomePage() {
         </div>
 
         <EloLiveIndicator
-          baseElo={DEFAULT_BASE_ELO}
+          baseElo={baseCoachElo}
           currentElo={effectiveCoachElo}
           boost={adaptiveBoost}
           change={eloChange}

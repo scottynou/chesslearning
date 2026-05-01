@@ -6,9 +6,40 @@ export const ELO_STEP = 50;
 export const DEFAULT_BASE_ELO = 1600;
 export const MAX_ADAPTIVE_BOOST = 1400;
 export const MIN_ADAPTIVE_BOOST = 0;
+export const DEFAULT_HUMAN_PROFILE: CoachHumanProfile = "strong";
 
 export type EloQuality = "excellent" | "good" | "playable" | "inaccurate" | "mistake" | "blunder";
 export type AdaptivePressure = "stable" | "worse" | "critical" | "drawish";
+export type CoachHumanProfile = "lambda" | "strong" | "veryStrong";
+
+export const HUMAN_PROFILE_SETTINGS: Record<
+  CoachHumanProfile,
+  {
+    label: string;
+    shortLabel: string;
+    baseElo: number;
+    description: string;
+  }
+> = {
+  lambda: {
+    label: "Humain lambda",
+    shortLabel: "Lambda",
+    baseElo: 1200,
+    description: "Plus simple, plus naturel, moins précis."
+  },
+  strong: {
+    label: "Humain fort",
+    shortLabel: "Fort",
+    baseElo: 1600,
+    description: "Le bon équilibre : solide, humain, ambitieux."
+  },
+  veryStrong: {
+    label: "Humain très fort",
+    shortLabel: "Très fort",
+    baseElo: 1800,
+    description: "Plus exigeant, proche du mode actuel."
+  }
+};
 
 export type EloTrendState = {
   lastPressure: AdaptivePressure | null;
@@ -43,6 +74,15 @@ export function clampElo(value: number) {
 export function normalizeBaseElo(value: number) {
   const stepped = Math.round(value / ELO_STEP) * ELO_STEP;
   return clampElo(stepped);
+}
+
+export function normalizeHumanProfile(value: string | null | undefined): CoachHumanProfile {
+  if (value === "lambda" || value === "strong" || value === "veryStrong") return value;
+  return DEFAULT_HUMAN_PROFILE;
+}
+
+export function baseEloForProfile(profile: CoachHumanProfile) {
+  return HUMAN_PROFILE_SETTINGS[normalizeHumanProfile(profile)].baseElo;
 }
 
 export function normalizeAdaptiveBoost(value: number) {
