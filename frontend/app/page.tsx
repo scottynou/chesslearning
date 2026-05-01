@@ -1001,6 +1001,7 @@ export default function HomePage() {
   const botRequestSerial = useRef(0);
   const imageImportSerial = useRef(0);
   const botPausedByTimelineNavigation = useRef(false);
+  const skipNextAdaptiveSignalForTimeline = useRef(false);
   const lastTimelineTouchAt = useRef(0);
   const timelineRef = useRef<{ historyUci: string[]; moveSources: MoveSource[]; redoStack: TimelineMove[] }>({
     historyUci: [],
@@ -1296,6 +1297,11 @@ export default function HomePage() {
   useEffect(() => {
     if (appStage !== "coach" || !planRecommendations?.adaptiveSignal) return;
     const currentPly = historyUci.length;
+    if (skipNextAdaptiveSignalForTimeline.current) {
+      skipNextAdaptiveSignalForTimeline.current = false;
+      lastEloAdjustmentPly.current = currentPly;
+      return;
+    }
     if (lastEloAdjustmentPly.current === currentPly) return;
     lastEloAdjustmentPly.current = currentPly;
     const lastMoveIndex = currentPly - 1;
@@ -1382,6 +1388,7 @@ export default function HomePage() {
       setRedoStack([]);
       if (source === "manual") {
         botPausedByTimelineNavigation.current = false;
+        skipNextAdaptiveSignalForTimeline.current = false;
       }
       setSelectedSquare(null);
       setPendingPromotion(null);
@@ -1590,7 +1597,7 @@ export default function HomePage() {
     eloTrend.current = freshEloTrendState();
   }, [humanProfile]);
 
-  function clearPositionDerivedState() {
+  function clearPositionDerivedState({ resetAdaptive = false }: { resetAdaptive?: boolean } = {}) {
     botRequestSerial.current += 1;
     setSelectedSquare(null);
     setPendingPromotion(null);
@@ -1603,7 +1610,10 @@ export default function HomePage() {
     setBotThinking(false);
     setBotError(null);
     setBotStrategyState({});
-    resetAdaptiveBoost();
+    if (resetAdaptive) {
+      skipNextAdaptiveSignalForTimeline.current = false;
+      resetAdaptiveBoost();
+    }
   }
 
   function resetBoardOnly() {
@@ -1613,7 +1623,7 @@ export default function HomePage() {
     setGame(new Chess());
     setMoveSources([]);
     setRedoStack([]);
-    clearPositionDerivedState();
+    clearPositionDerivedState({ resetAdaptive: true });
   }
 
   function undo() {
@@ -1627,6 +1637,7 @@ export default function HomePage() {
 
     timelineRef.current = { historyUci: timeline.historyUci, moveSources: timeline.moveSources, redoStack: timeline.redoStack };
     botPausedByTimelineNavigation.current = true;
+    skipNextAdaptiveSignalForTimeline.current = true;
     setGame(buildGameFromHistory(timeline.historyUci, baseFen));
     setMoveSources(timeline.moveSources);
     setRedoStack(timeline.redoStack);
@@ -1660,6 +1671,7 @@ export default function HomePage() {
     const nextGame = buildGameFromHistory(nextHistoryUci, baseFen);
     timelineRef.current = { historyUci: nextHistoryUci, moveSources: nextMoveSources, redoStack: timeline.redoStack };
     botPausedByTimelineNavigation.current = true;
+    skipNextAdaptiveSignalForTimeline.current = true;
     setGame(nextGame);
     setMoveSources(nextMoveSources);
     setRedoStack(timeline.redoStack);
