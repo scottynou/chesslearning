@@ -152,8 +152,24 @@ function buildGameFromHistory(moves: string[], startFen?: string | null) {
   return next;
 }
 
-function sameMoveList(left: string[], right: string[]) {
-  return left.length === right.length && left.every((move, index) => move === right[index]);
+function historyFromGame(game: Chess) {
+  return (game.history({ verbose: true }) as VerboseMove[]).map((move) => `${move.from}${move.to}${move.promotion ?? ""}`);
+}
+
+function isUciMove(value: string) {
+  return /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(value);
+}
+
+function parseHistoryParam(params: URLSearchParams, fallbackFirstMove: string | null) {
+  const movesParam = params.get("moves");
+  if (movesParam !== null) {
+    return movesParam
+      .split(/[,\s]+/)
+      .map((move) => move.trim())
+      .filter(isUciMove);
+  }
+
+  return fallbackFirstMove && isUciMove(fallbackFirstMove) ? [fallbackFirstMove] : [];
 }
 
 function isNavigationSnapshot(value: unknown): value is NavigationSnapshot {
@@ -166,7 +182,9 @@ function snapshotFromLocation(): NavigationSnapshot {
   const sideParam = params.get("side");
   const userSide: UserSide = sideParam === "black" || sideParam === "both" ? sideParam : "white";
   const plan = params.get("plan");
-  const first = params.get("first");
+  const firstParam = params.get("first");
+  const first = firstParam && isUciMove(firstParam) ? firstParam : null;
+  const historyMoves = parseHistoryParam(params, first);
   const humanProfile = normalizeHumanProfile(params.get("profile"));
 
   if (view === "white-plans") {
@@ -182,7 +200,7 @@ function snapshotFromLocation(): NavigationSnapshot {
       orientation: "black",
       humanProfile,
       firstOpponentMove: first,
-      historyUci: first ? [first] : []
+      historyUci: historyMoves
     });
   }
   if (view === "coach" || view === "plan-intro") {
@@ -193,7 +211,7 @@ function snapshotFromLocation(): NavigationSnapshot {
       humanProfile,
       selectedPlanId: plan,
       firstOpponentMove: first,
-      historyUci: first ? [first] : []
+      historyUci: historyMoves
     });
   }
   return createNavigationSnapshot();
@@ -917,6 +935,9 @@ function urlForSnapshot(snapshot: NavigationSnapshot) {
     if (snapshot.selectedPlanId) params.set("plan", snapshot.selectedPlanId);
     if (snapshot.firstOpponentMove) params.set("first", snapshot.firstOpponentMove);
   }
+  if (snapshot.historyUci.length > 0 || (snapshot.appStage === "coach" && Boolean(snapshot.firstOpponentMove))) {
+    params.set("moves", snapshot.historyUci.join(","));
+  }
   if (snapshot.appStage !== "side-selection") {
     params.set("profile", snapshot.humanProfile);
   }
@@ -1018,8 +1039,7 @@ export default function HomePage() {
     return plans.find((plan) => plan.id === selectedPlanId) ?? (planRecommendations?.selectedPlan as StrategyPlan | null) ?? null;
   }, [plans, planRecommendations?.selectedPlan, selectedPlanId]);
   const boardLocked = appStage === "black-plan-selection" || appStage === "white-plan-selection" || appStage === "side-selection";
-  const protectedTimelinePlyCount = appStage === "coach" && userSide === "black" && firstOpponentMove ? 1 : 0;
-  const canStepBackward = canStepBack(historyUci.length, protectedTimelinePlyCount);
+  const canStepBackward = canStepBack(historyUci.length);
   const canStepForward = !boardLocked && redoStack.length > 0;
   const firstMoveLabel = firstOpponentMove ? history[0]?.san ?? firstOpponentMove : null;
   const visibleRecommendations = useMemo(
@@ -1074,11 +1094,13 @@ export default function HomePage() {
   }, []);
 
   const restoreNavigationSnapshot = useCallback((snapshot: NavigationSnapshot) => {
-    const restoredMoveSources: MoveSource[] = snapshot.historyUci.map(() => "manual");
-    timelineRef.current = { historyUci: snapshot.historyUci, moveSources: restoredMoveSources, redoStack: [] };
     const importedFen = snapshot.importedFen ?? null;
+    const restoredGame = buildGameFromHistory(snapshot.historyUci, importedFen);
+    const restoredHistoryUci = historyFromGame(restoredGame);
+    const restoredMoveSources: MoveSource[] = restoredHistoryUci.map(() => "manual");
+    timelineRef.current = { historyUci: restoredHistoryUci, moveSources: restoredMoveSources, redoStack: [] };
     setBaseFen(importedFen);
-    setGame(buildGameFromHistory(snapshot.historyUci, importedFen));
+    setGame(restoredGame);
     setAppStage(snapshot.appStage);
     setUserSide(snapshot.userSide);
     setOrientation(snapshot.orientation);
@@ -1312,20 +1334,7 @@ export default function HomePage() {
     return game.moves({ square: selectedSquare as Square, verbose: true }).map((move) => move.to);
   }, [boardLocked, game, selectedSquare]);
 
-  const getCurrentTimeline = useCallback(() => {
-    const currentTimeline = timelineRef.current;
-    if (sameMoveList(currentTimeline.historyUci, historyUci)) {
-      return currentTimeline;
-    }
-
-    const syncedTimeline = {
-      historyUci,
-      moveSources: historyUci.map((_, index) => currentTimeline.moveSources[index] ?? moveSources[index] ?? "manual" as MoveSource),
-      redoStack: currentTimeline.redoStack
-    };
-    timelineRef.current = syncedTimeline;
-    return syncedTimeline;
-  }, [historyUci, moveSources]);
+  const getCurrentTimeline = useCallback(() => timelineRef.current, []);
 
   const applyMove = useCallback(
     (from: string, to: string, promotion?: string, source: MoveSource = "manual") => {
@@ -1348,8 +1357,9 @@ export default function HomePage() {
       const currentTimeline = getCurrentTimeline();
       const nextHistoryUci = [...currentTimeline.historyUci, moveUci];
       const nextMoveSources = [...currentTimeline.moveSources.slice(0, currentTimeline.historyUci.length), source];
+      const nextGame = buildGameFromHistory(nextHistoryUci, baseFen);
       timelineRef.current = { historyUci: nextHistoryUci, moveSources: nextMoveSources, redoStack: [] };
-      setGame(result.game);
+      setGame(nextGame);
       setMoveSources(nextMoveSources);
       setRedoStack([]);
       if (source === "manual") {
@@ -1378,7 +1388,7 @@ export default function HomePage() {
       }
       return true;
     },
-    [appStage, boardLocked, game, getCurrentTimeline, history.length, makeNavigationSnapshot, mode, writeNavigationSnapshot]
+    [appStage, baseFen, boardLocked, game, getCurrentTimeline, history.length, makeNavigationSnapshot, mode, writeNavigationSnapshot]
   );
 
   const requestMove = useCallback(
@@ -1434,8 +1444,9 @@ export default function HomePage() {
         const currentTimeline = timelineRef.current;
         const nextHistoryUci = [...currentTimeline.historyUci, response.move.moveUci];
         const nextMoveSources = [...currentTimeline.moveSources.slice(0, currentTimeline.historyUci.length), "bot" as MoveSource];
+        const nextGame = buildGameFromHistory(nextHistoryUci, baseFen);
         timelineRef.current = { historyUci: nextHistoryUci, moveSources: nextMoveSources, redoStack: [] };
-        setGame(result.game);
+        setGame(nextGame);
         setMoveSources(nextMoveSources);
         setRedoStack([]);
         setHighlightedMove(null);
@@ -1459,7 +1470,7 @@ export default function HomePage() {
         setBotThinking(false);
       }
     };
-  }, [appStage, botError, botStrategyState, game, historyUci, mode, pendingPromotion, selectedPlanId]);
+  }, [appStage, baseFen, botError, botStrategyState, game, historyUci, mode, pendingPromotion, selectedPlanId]);
 
   const handleSquareClick = useCallback(
     (square: string) => {
@@ -1580,8 +1591,7 @@ export default function HomePage() {
     const timeline = undoTimeline(
       currentTimeline.historyUci,
       currentTimeline.moveSources,
-      currentTimeline.redoStack,
-      protectedTimelinePlyCount
+      currentTimeline.redoStack
     );
     if (!timeline.undoneMove) return;
 
@@ -1617,9 +1627,10 @@ export default function HomePage() {
 
     const nextHistoryUci = [...currentTimeline.historyUci, moveUci];
     const nextMoveSources = [...currentTimeline.moveSources, source];
+    const nextGame = buildGameFromHistory(nextHistoryUci, baseFen);
     timelineRef.current = { historyUci: nextHistoryUci, moveSources: nextMoveSources, redoStack: timeline.redoStack };
     botPausedByTimelineNavigation.current = true;
-    setGame(result.game);
+    setGame(nextGame);
     setMoveSources(nextMoveSources);
     setRedoStack(timeline.redoStack);
     clearPositionDerivedState();

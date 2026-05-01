@@ -10,7 +10,16 @@ describe("move timeline", () => {
     expect(result.redoStack).toEqual([{ moveUci: "d2d4", source: "manual" }]);
   });
 
-  it("protects the first black-repertoire ply from being removed", () => {
+  it("allows the first ply to be undone by default", () => {
+    expect(canStepBack(1)).toBe(true);
+
+    const result = undoTimeline(["e2e4"], ["manual"], []);
+    expect(result.undoneMove).toEqual({ moveUci: "e2e4", source: "manual" });
+    expect(result.historyUci).toEqual([]);
+    expect(result.redoStack).toEqual([{ moveUci: "e2e4", source: "manual" }]);
+  });
+
+  it("supports explicitly protected plies when a caller needs them", () => {
     expect(canStepBack(1, 1)).toBe(false);
 
     const result = undoTimeline(["e2e4"], ["manual"], [], 1);
