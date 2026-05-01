@@ -235,7 +235,7 @@ def test_human_accuracy_shaping_prefers_strong_human_band() -> None:
         "source": "plan_and_engine",
         "engineRank": 3,
         "planFitScore": 92,
-        "engineScore": 86,
+        "engineScore": 91,
         "beginnerSimplicityScore": 82,
         "tacticalRisk": 6,
         "finalCoachScore": 90,
@@ -255,12 +255,46 @@ def test_human_accuracy_shaping_prefers_strong_human_band() -> None:
 
     shaped = shape_recommendations_for_accuracy(
         [engine_perfect, human_plan_move, weaker_move],
-        {"mode": "human", "target": 84, "min": 78, "max": 89},
+        {"mode": "normal", "target": 92, "min": 90, "max": 94},
     )
 
     assert shaped[0]["moveUci"] == "g1f3"
-    assert shaped[0]["accuracyBand"] == "human"
-    assert shaped[0]["humanAccuracyEstimate"] <= 89
+    assert shaped[0]["accuracyBand"] == "normal"
+    assert 90 <= shaped[0]["humanAccuracyEstimate"] <= 94
+
+
+def test_strong_human_shaping_rejects_weak_plan_move() -> None:
+    from app.strategy.plan_engine import shape_recommendations_for_accuracy
+
+    engine_move = {
+        "moveUci": "d1h5",
+        "source": "engine",
+        "engineRank": 1,
+        "planFitScore": 35,
+        "engineScore": 94,
+        "beginnerSimplicityScore": 54,
+        "tacticalRisk": 12,
+        "finalCoachScore": 86,
+        "warning": None,
+    }
+    weak_plan_move = {
+        "moveUci": "g1f3",
+        "source": "plan_and_engine",
+        "engineRank": 6,
+        "planFitScore": 96,
+        "engineScore": 82,
+        "beginnerSimplicityScore": 86,
+        "tacticalRisk": 8,
+        "finalCoachScore": 91,
+        "warning": None,
+    }
+
+    shaped = shape_recommendations_for_accuracy(
+        [weak_plan_move, engine_move],
+        {"mode": "normal", "target": 92, "min": 90, "max": 94},
+    )
+
+    assert shaped[0]["moveUci"] == "d1h5"
 
 
 def test_survival_accuracy_shaping_keeps_best_engine_move() -> None:
@@ -312,8 +346,55 @@ def test_drawish_positions_raise_hidden_accuracy_profile() -> None:
     )
 
     assert profile["mode"] == "draw_break"
-    assert profile["target"] >= 91
+    assert profile["target"] >= 96
     assert profile["drawPressure"]["level"] == "critical"
+
+
+def test_elite_opponent_move_raises_accuracy_profile_immediately() -> None:
+    from app.strategy.plan_engine import accuracy_profile_for
+
+    profile = accuracy_profile_for(
+        board=chess.Board(),
+        phase_display={"key": "middlegame"},
+        phase_status="opening_success",
+        opening_state="completed",
+        engine_candidates=[SimpleNamespace(eval_cp=60, mate_in=None)],
+        move_history=["e2e4", "e7e5"],
+        player_turn=True,
+        opponent_strength={"level": "elite", "suggestedBoostDelta": 200},
+    )
+
+    assert profile["mode"] == "pressure"
+    assert profile["target"] >= 96
+    assert profile["min"] >= 92
+
+
+def test_ai_rerank_prompt_uses_strong_human_profile_without_1200() -> None:
+    from app.ai_reranker import _prompt
+
+    payload = json.loads(
+        _prompt(
+            fen=chess.STARTING_FEN,
+            selected_plan={"id": "italian_game_beginner", "nameFr": "Partie italienne", "side": "white", "coreIdeas": []},
+            phase="middlegame",
+            opening_state="completed",
+            move_history=["e2e4", "e7e5"],
+            recommendations=[
+                {
+                    "moveUci": "g1f3",
+                    "engineScore": 93,
+                    "planFitScore": 90,
+                    "tacticalRisk": 8,
+                    "humanAccuracyEstimate": 93,
+                    "accuracyBand": "normal",
+                }
+            ],
+            strong_human_profile={"mode": "normal", "targetMin": 90, "targetMax": 94},
+        )
+    )
+
+    assert "1200" not in payload["task"]
+    assert payload["strongHumanProfile"]["targetMin"] == 90
 
 
 def test_flat_middlegame_raises_draw_pressure_early() -> None:

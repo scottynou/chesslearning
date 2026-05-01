@@ -30,6 +30,7 @@ def rerank_recommendations(
     opening_state: str,
     move_history: list[str],
     recommendations: list[dict[str, Any]],
+    strong_human_profile: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     if len(recommendations) <= 1:
         return recommendations, _status("disabled", fallback_reason="single_or_empty_candidate_list")
@@ -49,6 +50,7 @@ def rerank_recommendations(
                 opening_state=opening_state,
                 move_history=move_history,
                 recommendations=recommendations,
+                strong_human_profile=strong_human_profile,
                 timeout_seconds=timeout_seconds,
             )
             return _apply_order(recommendations, ordered), _status(
@@ -67,6 +69,7 @@ def rerank_recommendations(
                 opening_state=opening_state,
                 move_history=move_history,
                 recommendations=recommendations,
+                strong_human_profile=strong_human_profile,
                 timeout_seconds=timeout_seconds,
             )
             return _apply_order(recommendations, ordered), _status(
@@ -100,6 +103,7 @@ def _gemini_rerank(
     opening_state: str,
     move_history: list[str],
     recommendations: list[dict[str, Any]],
+    strong_human_profile: dict[str, Any] | None,
     timeout_seconds: float,
 ) -> list[str]:
     api_key = os.getenv("GEMINI_API_KEY")
@@ -115,7 +119,19 @@ def _gemini_rerank(
             "contents": [
                 {
                     "role": "user",
-                    "parts": [{"text": _prompt(fen, selected_plan, phase, opening_state, move_history, recommendations)}],
+                    "parts": [
+                        {
+                            "text": _prompt(
+                                fen,
+                                selected_plan,
+                                phase,
+                                opening_state,
+                                move_history,
+                                recommendations,
+                                strong_human_profile,
+                            )
+                        }
+                    ],
                 }
             ],
             "generationConfig": {
@@ -140,6 +156,7 @@ def _openai_compatible_rerank(
     opening_state: str,
     move_history: list[str],
     recommendations: list[dict[str, Any]],
+    strong_human_profile: dict[str, Any] | None,
     timeout_seconds: float,
 ) -> list[str]:
     api_key = os.getenv("AI_RERANK_API_KEY")
@@ -166,7 +183,15 @@ def _openai_compatible_rerank(
                 },
                 {
                     "role": "user",
-                    "content": _prompt(fen, selected_plan, phase, opening_state, move_history, recommendations),
+                    "content": _prompt(
+                        fen,
+                        selected_plan,
+                        phase,
+                        opening_state,
+                        move_history,
+                        recommendations,
+                        strong_human_profile,
+                    ),
                 },
             ],
             "response_format": {"type": "json_object"},
@@ -187,6 +212,7 @@ def _prompt(
     opening_state: str,
     move_history: list[str],
     recommendations: list[dict[str, Any]],
+    strong_human_profile: dict[str, Any] | None = None,
 ) -> str:
     compact_candidates = [
         {
@@ -210,14 +236,16 @@ def _prompt(
     payload = {
         "task": (
             "Rank only these legal candidate moves. Do not invent a move. Prefer the selected opening plan when safe, "
-            "then engine safety, then human simplicity around 1200 Elo. In stable positions, prefer the hidden "
-            "humanAccuracyEstimate band over always choosing the top engine move. In pressure or survival positions, "
-            "prioritize the strongest safe move."
+            "then engine safety, then practical human simplicity. Choose like a strong practical human trying to win: "
+            "avoid flat draws, keep initiative, and never pick a move with tactical danger just because it looks human. "
+            "In normal positions, stay inside the hidden strongHumanProfile band when the move is healthy. In pressure, "
+            "draw-break, or survival modes, prioritize the strongest safe move and allow the top engine move."
         ),
         "output": {"orderedMoveUci": ["only candidate moveUci values in best order"], "confidence": "0-100"},
         "fen": fen,
         "phase": phase,
         "openingState": opening_state,
+        "strongHumanProfile": strong_human_profile or {"mode": "normal", "targetMin": 90, "targetMax": 94},
         "selectedPlan": {
             "id": selected_plan.get("id"),
             "nameFr": selected_plan.get("nameFr"),

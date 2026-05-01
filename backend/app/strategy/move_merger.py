@@ -92,9 +92,9 @@ def final_coach_score(engine_score: int, plan_fit: int, simplicity: int, tactica
     if elo <= 1000:
         weights = (0.35, 0.40, 0.22, 0.18)
     elif elo <= 1800:
-        weights = (0.45, 0.35, 0.15, 0.15)
+        weights = (0.58, 0.27, 0.10, 0.16)
     elif elo < 2800:
-        weights = (0.65, 0.22, 0.10, 0.10)
+        weights = (0.72, 0.18, 0.07, 0.12)
     else:
         weights = (0.90, 0.06, 0.03, 0.04)
     score = weights[0] * engine_score + weights[1] * plan_fit + weights[2] * simplicity - weights[3] * tactical_risk

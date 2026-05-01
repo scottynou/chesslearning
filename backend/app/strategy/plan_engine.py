@@ -141,6 +141,12 @@ def get_plan_recommendations(
             primary_move = choose_primary_move([], visible_merged)
 
     phase_display = phase_display_for(phase, phase_status)
+    opponent_strength = opponent_move_strength_for(
+        move_history=move_history,
+        player_color=plan_color,
+        player_turn=player_turn,
+        engine_depth=engine_depth,
+    )
     accuracy_profile = accuracy_profile_for(
         board=board,
         phase_display=phase_display,
@@ -149,13 +155,9 @@ def get_plan_recommendations(
         engine_candidates=engine_candidates,
         move_history=move_history,
         player_turn=player_turn,
+        opponent_strength=opponent_strength,
     )
-    opponent_strength = opponent_move_strength_for(
-        move_history=move_history,
-        player_color=plan_color,
-        player_turn=player_turn,
-        engine_depth=engine_depth,
-    )
+    strong_human_profile = strong_human_profile_for(accuracy_profile, opponent_strength)
     if player_turn and visible_merged and should_shape_for_human_accuracy(phase_display, phase_status, opening_state):
         visible_merged = shape_recommendations_for_accuracy(visible_merged, accuracy_profile)
         primary_move = choose_primary_move([], visible_merged)
@@ -179,6 +181,7 @@ def get_plan_recommendations(
             opening_state=opening_state,
             move_history=move_history,
             recommendations=visible_recommendations,
+            strong_human_profile=strong_human_profile,
         )
         if should_shape_for_human_accuracy(phase_display, phase_status, opening_state):
             visible_recommendations = shape_recommendations_for_accuracy(visible_recommendations, accuracy_profile)
@@ -260,6 +263,7 @@ def get_plan_recommendations(
             "skillLevel": level_settings,
             "accuracyProfile": accuracy_profile,
             "opponentStrength": opponent_strength,
+            "strongHumanProfile": strong_human_profile,
         },
         "selectedPlan": active_plan,
         "phase": phase,
@@ -503,6 +507,7 @@ def accuracy_profile_for(
     engine_candidates: list[Any],
     move_history: list[str],
     player_turn: bool,
+    opponent_strength: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     draw_pressure = draw_pressure_for(
         board=board,
@@ -513,9 +518,9 @@ def accuracy_profile_for(
     if not player_turn:
         return {
             "mode": "idle",
-            "target": 84,
-            "min": 78,
-            "max": 88,
+            "target": 92,
+            "min": 90,
+            "max": 94,
             "reason": "Hors tour joueur.",
             "drawPressure": draw_pressure,
         }
@@ -523,68 +528,110 @@ def accuracy_profile_for(
     position_score = score_from_side_to_move(engine_candidates)
     mating_danger = mate_danger_from_side_to_move(engine_candidates)
     phase_key = str(phase_display.get("key", "opening"))
+    opponent_delta = int((opponent_strength or {}).get("suggestedBoostDelta") or 0)
+    opponent_level = str((opponent_strength or {}).get("level", "none"))
 
     if mating_danger == "critical" or position_score <= -260:
         return {
             "mode": "survival",
-            "target": 97,
-            "min": 92,
+            "target": 98,
+            "min": 94,
             "max": 100,
-            "reason": "Position critique : on accepte des coups tres proches du moteur pour ne pas perdre.",
+            "reason": "Position critique : le meilleur coup moteur est autorise sans penalite.",
             "drawPressure": draw_pressure,
-        }
-    if phase_status in {"adapted", "fallback"} or opening_state in {"recoverable", "abandoned"} or position_score <= -90:
-        return {
-            "mode": "pressure",
-            "target": 90,
-            "min": 84,
-            "max": 96,
-            "reason": "Sous pression : on monte la qualite sans devenir systematiquement machine.",
-            "drawPressure": draw_pressure,
+            "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
         }
     if draw_pressure["level"] == "critical":
         return {
             "mode": "draw_break",
-            "target": 96,
-            "min": 90,
+            "target": 97,
+            "min": 93,
             "max": 100,
-            "reason": "La position devient trop nulle : on cherche des coups plus precis qui gardent des chances de gain.",
+            "reason": "La position devient trop nulle : on cherche des coups precis qui gardent des chances de gain.",
             "drawPressure": draw_pressure,
+            "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
+        }
+    if opponent_delta >= 200 or opponent_level == "elite":
+        return {
+            "mode": "pressure",
+            "target": 96,
+            "min": 92,
+            "max": 99,
+            "reason": "L'adversaire joue proche de Stockfish : les conseils montent vers un humain tres fort.",
+            "drawPressure": draw_pressure,
+            "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
+        }
+    if opponent_delta >= 150 or opponent_level == "strong":
+        return {
+            "mode": "pressure",
+            "target": 95,
+            "min": 91,
+            "max": 98,
+            "reason": "L'adversaire joue tres precis : le ranking devient plus exigeant tout de suite.",
+            "drawPressure": draw_pressure,
+            "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
+        }
+    if phase_status in {"adapted", "fallback"} or opening_state in {"recoverable", "abandoned"} or position_score <= -90:
+        return {
+            "mode": "pressure",
+            "min": 90,
+            "target": 94,
+            "max": 98,
+            "reason": "Sous pression : on choisit un coup humain fort, pas un compromis mou.",
+            "drawPressure": draw_pressure,
+            "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
         }
     if draw_pressure["level"] == "warning":
         return {
             "mode": "draw_break",
-            "target": 94,
-            "min": 88,
+            "target": 95,
+            "min": 91,
             "max": 99,
             "reason": "Risque de simplification vers nulle : on augmente la precision pour garder du jeu.",
             "drawPressure": draw_pressure,
+            "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
         }
     if phase_key == "endgame":
         return {
             "mode": "conversion",
-            "target": 88,
-            "min": 82,
-            "max": 94,
-            "reason": "Finale : les coups doivent convertir proprement.",
+            "target": 93,
+            "min": 89,
+            "max": 98,
+            "reason": "Finale : les coups doivent convertir proprement sans laisser filer la victoire.",
             "drawPressure": draw_pressure,
+            "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
         }
     if position_score >= 220:
         return {
-            "mode": "comfortable",
-            "target": 81,
-            "min": 76,
-            "max": 86,
-            "reason": "Position confortable : on evite les coups inutilement parfaits.",
+            "mode": "normal",
+            "target": 91,
+            "min": 88,
+            "max": 95,
+            "reason": "Position favorable : on convertit activement au lieu de relacher vers la nulle.",
             "drawPressure": draw_pressure,
+            "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
         }
     return {
-        "mode": "human",
-        "target": 84,
-        "min": 78,
-        "max": 89,
-        "reason": "Zone humaine forte : proche du moteur, mais pas toujours top engine.",
+        "mode": "normal",
+        "target": 92,
+        "min": 90,
+        "max": 94,
+        "reason": "Humain fort : viser la victoire avec un coup sain, pas forcement le top moteur automatique.",
         "drawPressure": draw_pressure,
+        "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
+    }
+
+
+def strong_human_profile_for(profile: dict[str, Any], opponent_strength: dict[str, Any] | None) -> dict[str, Any]:
+    mode = str(profile.get("mode", "normal"))
+    if mode not in {"normal", "pressure", "draw_break", "survival"}:
+        mode = "pressure" if mode == "conversion" else "normal"
+    return {
+        "mode": mode,
+        "targetMin": int(profile.get("min", 90)),
+        "targetMax": int(profile.get("max", 94)),
+        "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
+        "drawPressure": profile.get("drawPressure", {"level": "none"}),
     }
 
 
@@ -658,7 +705,7 @@ def shape_recommendations_for_accuracy(items: list[dict[str, Any]], profile: dic
     if len(items) <= 1:
         return [annotate_accuracy(dict(item), profile) for item in items]
 
-    mode = str(profile.get("mode", "human"))
+    mode = str(profile.get("mode", "normal"))
     if mode == "survival":
         ordered = sorted(
             items,
@@ -680,7 +727,11 @@ def shape_recommendations_for_accuracy(items: list[dict[str, Any]], profile: dic
         item
         for item in candidates
         if int(item.get("engineScore") or 0) >= minimum
-        or (int(item.get("planFitScore") or 0) >= 90 and int(item.get("engineScore") or 0) >= minimum - 6)
+        or (
+            int(item.get("planFitScore") or 0) >= 90
+            and int(item.get("engineScore") or 0) >= minimum - 4
+            and int(item.get("tacticalRisk") or 0) <= 22
+        )
     ]
     if not viable:
         viable = sorted(candidates, key=lambda item: -int(item.get("engineScore") or 0))[: max(1, min(3, len(candidates)))]
@@ -708,43 +759,56 @@ def human_accuracy_sort_score(item: dict[str, Any], profile: dict[str, Any]) -> 
     simplicity = int(item.get("beginnerSimplicityScore") or 0)
     risk = int(item.get("tacticalRisk") or 0)
     final_score = int(item.get("finalCoachScore") or 0)
-    target = int(profile.get("target", 84))
-    minimum = int(profile.get("min", 78))
-    maximum = int(profile.get("max", 89))
-    mode = str(profile.get("mode", "human"))
+    target = int(profile.get("target", 92))
+    minimum = int(profile.get("min", 90))
+    maximum = int(profile.get("max", 94))
+    mode = str(profile.get("mode", "normal"))
 
     if mode == "draw_break":
-        over_penalty = 0.25
-        under_penalty = 3.6
-        distance_penalty = 1.05
+        over_penalty = 0.10
+        under_penalty = 4.8
+        distance_penalty = 0.55
+        weights = (0.34, 0.16, 0.06, 0.24)
     elif mode == "pressure":
-        over_penalty = 0.45
-        under_penalty = 3.4
-        distance_penalty = 1.35
+        over_penalty = 0.16
+        under_penalty = 4.6
+        distance_penalty = 0.70
+        weights = (0.36, 0.17, 0.07, 0.21)
     elif mode == "conversion":
-        over_penalty = 0.75
-        under_penalty = 3.1
-        distance_penalty = 1.45
+        over_penalty = 0.18
+        under_penalty = 4.2
+        distance_penalty = 0.78
+        weights = (0.35, 0.15, 0.07, 0.22)
     elif mode == "comfortable":
-        over_penalty = 2.1
-        under_penalty = 2.7
-        distance_penalty = 1.7
+        over_penalty = 0.45
+        under_penalty = 4.0
+        distance_penalty = 0.95
+        weights = (0.31, 0.18, 0.08, 0.19)
     else:
-        over_penalty = 1.65
-        under_penalty = 3.0
-        distance_penalty = 1.55
+        over_penalty = 0.35
+        under_penalty = 4.3
+        distance_penalty = 0.90
+        weights = (0.31, 0.20, 0.08, 0.18)
 
-    in_band_bonus = 22 if minimum <= engine_score <= maximum else 0
-    plan_bonus = 9 if item.get("source") in {"plan", "plan_and_engine"} else 0
+    in_band_bonus = 26 if minimum <= engine_score <= maximum else 0
+    top_engine_bonus = 8 if int(item.get("engineRank") or 99) == 1 and engine_score >= minimum else 0
+    plan_bonus = (
+        10
+        if item.get("source") in {"plan", "plan_and_engine"}
+        and engine_score >= minimum - 4
+        and risk <= 22
+        else 0
+    )
     return (
         in_band_bonus
+        + top_engine_bonus
         + plan_bonus
-        + final_score * 0.24
-        + plan_fit * 0.23
-        + simplicity * 0.15
-        + engine_score * 0.14
+        + final_score * weights[3]
+        + plan_fit * weights[1]
+        + simplicity * weights[2]
+        + engine_score * weights[0]
         + draw_avoidance_bonus(item, profile)
-        - risk * 0.42
+        - risk * 0.50
         - abs(engine_score - target) * distance_penalty
         - max(0, minimum - engine_score) * under_penalty
         - max(0, engine_score - maximum) * over_penalty
@@ -752,15 +816,22 @@ def human_accuracy_sort_score(item: dict[str, Any], profile: dict[str, Any]) -> 
 
 
 def draw_avoidance_bonus(item: dict[str, Any], profile: dict[str, Any]) -> float:
-    if str(profile.get("mode")) != "draw_break":
-        return 0.0
     candidate_eval = candidate_eval_cp(item)
     engine_rank = item.get("engineRank") or 8
     tactical_risk = int(item.get("tacticalRisk") or 0)
-    positive_eval_bonus = max(-40, min(220, candidate_eval)) * 0.10
-    initiative_bonus = max(0, 8 - int(engine_rank)) * 1.2
-    risk_penalty = max(0, tactical_risk - 26) * 0.45
-    return positive_eval_bonus + initiative_bonus - risk_penalty
+    mode = str(profile.get("mode", "normal"))
+    if mode == "draw_break":
+        positive_eval_bonus = max(-60, min(260, candidate_eval)) * 0.14
+        initiative_bonus = max(0, 8 - int(engine_rank)) * 1.7
+        flat_penalty = 8 if abs(candidate_eval) <= 25 and int(engine_rank) <= 2 else 0
+        risk_penalty = max(0, tactical_risk - 26) * 0.45
+        return positive_eval_bonus + initiative_bonus - flat_penalty - risk_penalty
+    if mode in {"normal", "pressure", "conversion"}:
+        positive_eval_bonus = max(-30, min(180, candidate_eval)) * 0.035
+        initiative_bonus = max(0, 5 - int(engine_rank)) * 0.75
+        passive_penalty = 4 if abs(candidate_eval) <= 20 and int(profile.get("drawPressure", {}).get("spreadCp", 999)) <= 40 else 0
+        return positive_eval_bonus + initiative_bonus - passive_penalty
+    return 0.0
 
 
 def candidate_eval_cp(item: dict[str, Any]) -> int:
@@ -777,9 +848,9 @@ def candidate_eval_cp(item: dict[str, Any]) -> int:
 
 def annotate_accuracy(item: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
     engine_score = int(item.get("engineScore") or 0)
-    target = int(profile.get("target", 84))
+    target = int(profile.get("target", 92))
     item["humanAccuracyEstimate"] = max(0, min(99, round(engine_score * 0.92 + target * 0.08)))
-    item["accuracyBand"] = str(profile.get("mode", "human"))
+    item["accuracyBand"] = str(profile.get("mode", "normal"))
     return item
 
 
