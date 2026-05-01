@@ -30,7 +30,10 @@
 }
 
 * { box-sizing: border-box; }
-html, body { min-height: 100%; }
+html, body {
+  min-height: 100%;
+  overflow-x: hidden;
+}
 html { scroll-behavior: smooth; }
 body {
   margin: 0;
@@ -816,13 +819,20 @@ button:disabled { cursor: not-allowed; }
   .plan-story-card.is-large { grid-column: span 2; }
 }
 @media (max-width: 540px) {
+  .site-header-inner { height: 3.75rem; gap: 0.45rem; padding: 0 0.55rem; }
+  .site-brand { min-width: 0; gap: 0.45rem; }
+  .site-brand-mark { width: 2rem; height: 2rem; flex: 0 0 auto; }
+  .site-brand-text { max-width: 8.2rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 0.92rem; }
+  .site-header-actions { flex: 0 0 auto; gap: 0.38rem; }
+  .site-menu-button, .site-menu-close { width: 2.35rem; height: 2.35rem; }
+  .site-fen-button { min-width: 2.75rem; padding: 0 0.5rem; font-size: 0.66rem; letter-spacing: 0.06em; }
   .review-score-card { grid-template-columns: 1fr; }
   .history-row { grid-template-columns: 1.8rem 1fr; }
   .history-row .history-move:last-child { grid-column: 2; }
   .landing-shell { padding: 1rem; }
   .landing-backdrop-image { object-position: center center; }
   .landing-decision-panel { transform: translateY(-8vh); }
-  .landing-choice-grid { width: min(100%, 330px); }
+  .landing-choice-grid { width: min(100%, 312px); }
   .landing-side-button span { font-size: clamp(1.12rem, 6vw, 1.55rem); }
   .coach-live-shell { width: 100%; min-height: calc(100svh - 3.75rem); gap: 0.75rem; padding: 0.45rem 0.25rem 1.2rem; }
   .first-move-shell, .plan-selection-shell { padding-inline: 0.45rem; }

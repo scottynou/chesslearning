@@ -2080,6 +2080,7 @@ export default function HomePage() {
             onClick={() => runTimelineClick(undo)}
             onTouchEnd={(event) => runTimelineTouch(event, undo)}
             className="control-button icon-control"
+            disabled={!canStepBackward}
             aria-disabled={!canStepBackward}
             aria-label="Coup precedent"
             title="Coup precedent"
@@ -2091,6 +2092,7 @@ export default function HomePage() {
             onClick={() => runTimelineClick(redo)}
             onTouchEnd={(event) => runTimelineTouch(event, redo)}
             className="control-button icon-control"
+            disabled={!canStepForward}
             aria-disabled={!canStepForward}
             aria-label="Coup suivant"
             title="Coup suivant"
