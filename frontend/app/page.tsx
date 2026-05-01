@@ -1298,18 +1298,23 @@ export default function HomePage() {
     const currentPly = historyUci.length;
     if (lastEloAdjustmentPly.current === currentPly) return;
     lastEloAdjustmentPly.current = currentPly;
+    const lastMoveIndex = currentPly - 1;
+    const lastMoveColor = lastMoveIndex >= 0 ? (lastMoveIndex % 2 === 0 ? "white" : "black") : null;
+    const lastMoveSource = lastMoveIndex >= 0 ? moveSources[lastMoveIndex] : null;
+    const lastMoveWasPlayer = userSide !== "both" && lastMoveColor === userSide && lastMoveSource !== "bot";
 
     const result = applyAdaptiveSignal({
       currentBoost: adaptiveBoost,
       pressure: planRecommendations.adaptiveSignal.pressure,
       suggestedBoostDelta: planRecommendations.adaptiveSignal.suggestedBoostDelta ?? 0,
-      trend: eloTrend.current
+      trend: eloTrend.current,
+      lastMoveWasPlayer
     });
     eloTrend.current = result.trend;
     if (result.boost !== adaptiveBoost) {
       setAdaptiveBoost(result.boost);
     }
-  }, [adaptiveBoost, appStage, historyUci.length, planRecommendations?.adaptiveSignal]);
+  }, [adaptiveBoost, appStage, historyUci.length, moveSources, planRecommendations?.adaptiveSignal, userSide]);
 
   useEffect(() => {
     if (appStage !== "coach") {

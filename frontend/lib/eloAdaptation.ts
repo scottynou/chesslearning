@@ -52,6 +52,7 @@ export type AdaptiveSignalApplication = {
   pressure: AdaptivePressure;
   suggestedBoostDelta: number;
   trend: EloTrendState;
+  lastMoveWasPlayer?: boolean;
 };
 
 export type EloAdaptationContext = {
@@ -152,11 +153,16 @@ export function applyAdaptiveSignal({
   currentBoost,
   pressure,
   suggestedBoostDelta,
-  trend
+  trend,
+  lastMoveWasPlayer = false
 }: AdaptiveSignalApplication) {
   const current = normalizeAdaptiveBoost(currentBoost);
-  const baseDelta = normalizeAdaptiveDelta(suggestedBoostDelta);
+  let baseDelta = normalizeAdaptiveDelta(suggestedBoostDelta);
   const cleanTrend = normalizeTrendState(trend);
+
+  if (lastMoveWasPlayer && baseDelta > 0 && !(pressure === "critical" && baseDelta >= 200)) {
+    baseDelta = 0;
+  }
 
   if (baseDelta > 0) {
     const samePressure = pressure !== "stable" && cleanTrend.lastPressure === pressure;

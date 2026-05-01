@@ -87,6 +87,28 @@ describe("eloAdaptation", () => {
     expect(critical.appliedDelta).toBe(200);
   });
 
+  it("does not boost after the player's own move unless the position is critical", () => {
+    const ownGoodMove = applyAdaptiveSignal({
+      currentBoost: 0,
+      pressure: "worse",
+      suggestedBoostDelta: 200,
+      trend: freshEloTrendState(),
+      lastMoveWasPlayer: true
+    });
+    expect(ownGoodMove.boost).toBe(0);
+    expect(ownGoodMove.appliedDelta).toBe(0);
+
+    const ownCriticalPosition = applyAdaptiveSignal({
+      currentBoost: 0,
+      pressure: "critical",
+      suggestedBoostDelta: 200,
+      trend: freshEloTrendState(),
+      lastMoveWasPlayer: true
+    });
+    expect(ownCriticalPosition.boost).toBe(200);
+    expect(ownCriticalPosition.appliedDelta).toBe(200);
+  });
+
   it("drops only after comfort is confirmed", () => {
     const first = applyAdaptiveSignal({
       currentBoost: 300,

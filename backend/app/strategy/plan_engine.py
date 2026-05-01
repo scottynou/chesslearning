@@ -1103,9 +1103,7 @@ def adaptive_signal_for(
             "reason": "Aucun coup joueur actif a ajuster.",
         }
 
-    engine_score = int(primary_move.get("engineScore") or 100)
-    tactical_risk = int(primary_move.get("tacticalRisk") or 0)
-    warning = bool(primary_move.get("warning") or blocked_expected_move)
+    warning = bool(blocked_expected_move)
     adapted = phase_status in {"adapted", "fallback"} or opening_state in {"recoverable", "abandoned"}
     position_score = score_from_side_to_move(engine_candidates)
     mating_danger = mate_danger_from_side_to_move(engine_candidates)
@@ -1113,7 +1111,7 @@ def adaptive_signal_for(
     opponent_delta = int((opponent_strength or {}).get("suggestedBoostDelta") or 0)
     opponent_level = str((opponent_strength or {}).get("level", "none"))
 
-    if mating_danger == "critical" or position_score <= -420 or engine_score <= 32 or tactical_risk >= 62:
+    if mating_danger == "critical" or position_score <= -420:
         return {
             "pressure": "critical",
             "suggestedBoostDelta": 200,
@@ -1131,7 +1129,7 @@ def adaptive_signal_for(
             "suggestedBoostDelta": 200,
             "reason": "L'adversaire vient de jouer un coup quasi Stockfish : le niveau cache monte pour ne pas subir.",
         }
-    if warning or position_score <= -260 or engine_score <= 45 or tactical_risk >= 45:
+    if warning or position_score <= -260:
         return {
             "pressure": "critical",
             "suggestedBoostDelta": 150,
@@ -1155,7 +1153,7 @@ def adaptive_signal_for(
             "suggestedBoostDelta": 100,
             "reason": "L'adversaire garde une bonne qualite moteur : on augmente le niveau cache.",
         }
-    if opening_state == "abandoned" or mating_danger == "warning" or position_score <= -180 or engine_score <= 55 or tactical_risk >= 36:
+    if mating_danger == "warning" or position_score <= -180:
         return {
             "pressure": "worse",
             "suggestedBoostDelta": 150,
@@ -1167,19 +1165,25 @@ def adaptive_signal_for(
             "suggestedBoostDelta": 50,
             "reason": "L'adversaire joue assez proprement : petit boost pour rester ambitieux.",
         }
-    if adapted or position_score <= -90 or engine_score <= 65 or tactical_risk >= 28:
+    if adapted and opponent_delta >= 50:
         return {
             "pressure": "worse",
             "suggestedBoostDelta": 100,
-            "reason": "L'adversaire met assez de pression pour augmenter legerement le niveau cache.",
+            "reason": "Le plan doit s'adapter apres un coup adverse propre : le niveau cache monte legerement.",
         }
-    if position_score <= 40 and engine_score <= 82:
+    if position_score <= -90:
+        return {
+            "pressure": "worse",
+            "suggestedBoostDelta": 100,
+            "reason": "La position se degrade : le niveau cache monte pour ne pas subir.",
+        }
+    if position_score <= 40 and opponent_delta >= 50:
         return {
             "pressure": "drawish",
             "suggestedBoostDelta": 50,
-            "reason": "La position n'est pas assez favorable : le coach ajoute un peu de precision pour jouer la gagne.",
+            "reason": "L'adversaire garde une position trop solide : petit boost pour jouer la gagne.",
         }
-    if position_score >= 520 and engine_score >= 88 and tactical_risk <= 8 and not warning:
+    if position_score >= 520 and not warning:
         return {
             "pressure": "stable",
             "suggestedBoostDelta": -50,

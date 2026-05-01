@@ -216,6 +216,24 @@ def test_adaptive_signal_progressively_tracks_position_pressure() -> None:
     assert comfortable["suggestedBoostDelta"] == -50
 
 
+def test_adaptive_signal_ignores_candidate_quality_without_opponent_pressure() -> None:
+    from app.strategy.plan_engine import adaptive_signal_for
+
+    signal = adaptive_signal_for(
+        primary_move={"engineScore": 24, "tacticalRisk": 80, "warning": "Coup difficile"},
+        phase_status="opening_in_progress",
+        blocked_expected_move=None,
+        opening_state="on_track",
+        player_turn=True,
+        engine_candidates=[SimpleNamespace(eval_cp=120, mate_in=None)],
+        draw_pressure={"level": "none"},
+        opponent_strength={"level": "none", "suggestedBoostDelta": 0},
+    )
+
+    assert signal["pressure"] == "stable"
+    assert signal["suggestedBoostDelta"] == 0
+
+
 def test_human_accuracy_shaping_prefers_strong_human_band() -> None:
     from app.strategy.plan_engine import shape_recommendations_for_accuracy
 
