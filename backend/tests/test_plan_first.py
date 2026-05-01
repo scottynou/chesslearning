@@ -754,7 +754,7 @@ def test_opening_success_after_main_line(monkeypatch) -> None:
     assert data["planProgress"]["percent"] == 100
 
 
-def test_completed_opening_switches_to_middlegame_ranked_choices(monkeypatch) -> None:
+def test_completed_opening_keeps_single_visible_choice(monkeypatch) -> None:
     import app.strategy.plan_engine as plan_engine
 
     monkeypatch.setattr(plan_engine, "StockfishEngine", lambda: FakePlanStockfish())
@@ -777,9 +777,11 @@ def test_completed_opening_switches_to_middlegame_ranked_choices(monkeypatch) ->
     )
     data = response.json()
     assert data["phaseDisplay"]["key"] == "middlegame"
-    assert data["phaseDisplay"]["recommendationStyle"] == "ranked"
-    assert 1 <= len(data["mergedRecommendations"]) <= 3
-    assert data["mergedRecommendations"][0]["displayRole"] == "Meilleur"
+    assert data["phaseDisplay"]["recommendationStyle"] == "single"
+    assert data["phaseDisplay"]["maxVisibleMoves"] == 1
+    assert len(data["mergedRecommendations"]) == 1
+    assert data["mergedRecommendations"][0]["displayRole"] == "Coup recommande"
+    assert data["mergedRecommendations"][0]["arrowColor"] == "rgba(224,185,118,0.78)"
 
 
 def test_simple_endgame_uses_conversion_display(monkeypatch) -> None:
@@ -802,8 +804,9 @@ def test_simple_endgame_uses_conversion_display(monkeypatch) -> None:
     )
     data = response.json()
     assert data["phaseDisplay"]["key"] == "endgame"
-    assert data["phaseDisplay"]["recommendationStyle"] == "conversion"
-    assert len(data["mergedRecommendations"]) <= 2
+    assert data["phaseDisplay"]["recommendationStyle"] == "single"
+    assert data["phaseDisplay"]["maxVisibleMoves"] == 1
+    assert len(data["mergedRecommendations"]) <= 1
 
 
 def test_opening_data_main_menu_is_pedagogical() -> None:

@@ -14,7 +14,7 @@ export function PlanFirstPanel({ selectedPlan, recommendations, loading, error }
   const progress = recommendations?.planProgress;
   const isOpening = phaseDisplay?.key === "opening";
   const planName = recommendations?.selectedPlan?.nameFr ?? selectedPlan?.nameFr ?? "Plan";
-  const moves = recommendations?.mergedRecommendations ?? [];
+  const moves = recommendations?.primaryMove ? [recommendations.primaryMove] : [];
   const expectedOpponentMove = recommendations?.expectedOpponentMove ?? null;
   const hasStaleRecommendations = Boolean(loading && recommendations);
 
@@ -53,7 +53,7 @@ export function PlanFirstPanel({ selectedPlan, recommendations, loading, error }
       {recommendations ? (
         moves.length > 0 ? (
           <div className="live-move-section">
-            <h3>{phaseDisplay?.recommendationStyle === "ranked" ? "Coups proposes" : "Coup recommande"}</h3>
+            <h3>Coup recommande</h3>
             {moves.map((item, index) => (
               <RecommendationCard key={`${item.moveUci}-${index}`} item={item} primary={index === 0} />
             ))}
@@ -87,7 +87,7 @@ function RecommendationCard({ item, primary }: { item: PlanRecommendation; prima
         <div className="live-move-badges">
           <span className="live-priority-badge">
             <i style={{ backgroundColor: item.arrowColor ?? "rgba(224,185,118,0.78)" }} aria-hidden="true" />
-            {item.displayRole ?? (primary ? "Meilleur" : "Option")}
+            {item.displayRole ?? "Coup recommande"}
           </span>
         </div>
         <strong>{item.beginnerLabel}</strong>

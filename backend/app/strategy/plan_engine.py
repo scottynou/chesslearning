@@ -440,17 +440,17 @@ def phase_display_for(phase: str, phase_status: str) -> dict[str, Any]:
         return {
             "key": "endgame",
             "label": "Finale",
-            "subtitle": "Convertis sans donner de contre-jeu.",
-            "recommendationStyle": "conversion",
-            "maxVisibleMoves": 2,
+            "subtitle": "Un seul coup utile, clair et fort.",
+            "recommendationStyle": "single",
+            "maxVisibleMoves": 1,
         }
     if display_phase == "middlegame":
         return {
             "key": "middlegame",
             "label": "Milieu de partie",
-            "subtitle": "Choisis un plan humain : securite, activite, cible.",
-            "recommendationStyle": "ranked",
-            "maxVisibleMoves": 3,
+            "subtitle": "Un seul coup utile, clair et fort.",
+            "recommendationStyle": "single",
+            "maxVisibleMoves": 1,
         }
     return {
         "key": "opening",
@@ -468,21 +468,16 @@ def visible_recommendations_for(
 ) -> list[dict[str, Any]]:
     if not primary_move:
         return []
-    pool = [primary_move]
-    for item in merged:
-        if item["moveUci"] != primary_move["moveUci"] and not _is_severe_warning(item):
-            pool.append(item)
-    limit = int(phase_display["maxVisibleMoves"])
-    return decorate_recommendations(pool[:limit], str(phase_display["recommendationStyle"]))
+    return decorate_recommendations([primary_move], str(phase_display["recommendationStyle"]))
 
 
 def decorate_recommendations(items: list[dict[str, Any]], style: str) -> list[dict[str, Any]]:
     labels = {
-        "single": ["Coup du plan"],
-        "ranked": ["Meilleur", "Alternative saine", "Option pratique"],
-        "conversion": ["Conversion", "Securite"],
-    }.get(style, ["Meilleur", "Alternative saine", "Option pratique"])
-    colors = ["rgba(224,185,118,0.78)", "rgba(125,183,154,0.76)", "rgba(126,166,224,0.74)"]
+        "single": ["Coup recommande"],
+        "ranked": ["Coup recommande"],
+        "conversion": ["Coup recommande"],
+    }.get(style, ["Coup recommande"])
+    colors = ["rgba(224,185,118,0.78)"]
     decorated = []
     for index, item in enumerate(items):
         copy = dict(item)

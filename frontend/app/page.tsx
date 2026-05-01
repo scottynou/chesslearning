@@ -102,7 +102,7 @@ const INTERNAL_MAX_MOVES = 4;
 const INTERNAL_ENGINE_DEPTH = 6;
 const BOT_ENGINE_DEPTH = 14;
 const NAVIGATION_KEY = "chess-learning-navigation";
-const PLAYER_ARROW_FALLBACKS = ["rgba(224,185,118,0.82)", "rgba(125,183,154,0.78)", "rgba(126,166,224,0.76)"];
+const PLAYER_RECOMMENDATION_ARROW = "rgba(224,185,118,0.82)";
 const OPPONENT_EXPECTED_ARROW = "rgba(239,118,118,0.78)";
 const IMAGE_IMPORT_MAX_SOURCE_BYTES = 24 * 1024 * 1024;
 const IMAGE_IMPORT_TARGET_BYTES = 1.4 * 1024 * 1024;
@@ -1048,29 +1048,28 @@ export default function HomePage() {
   const canStepBackward = canStepBack(historyUci.length);
   const canStepForward = !boardLocked && redoStack.length > 0;
   const firstMoveLabel = firstOpponentMove ? history[0]?.san ?? firstOpponentMove : null;
-  const visibleRecommendations = useMemo(
-    () => planRecommendations?.mergedRecommendations ?? [],
-    [planRecommendations?.mergedRecommendations]
-  );
+  const primaryRecommendation = planRecommendations?.primaryMove ?? null;
+  const expectedOpponentRecommendation = planRecommendations?.expectedOpponentMove ?? null;
   const recommendationArrows = useMemo(
     () => {
-      const arrows = visibleRecommendations.map((move, index) => ({
-        from: move.moveUci.slice(0, 2),
-        to: move.moveUci.slice(2, 4),
-        color: move.arrowColor ?? PLAYER_ARROW_FALLBACKS[Math.min(index, PLAYER_ARROW_FALLBACKS.length - 1)]
-      }));
-      const expectedOpponent = planRecommendations?.expectedOpponentMove;
+      const arrows = primaryRecommendation
+        ? [{
+            from: primaryRecommendation.moveUci.slice(0, 2),
+            to: primaryRecommendation.moveUci.slice(2, 4),
+            color: primaryRecommendation.arrowColor ?? PLAYER_RECOMMENDATION_ARROW
+          }]
+        : [];
       if (planRecommendationsFen !== fen) return [];
-      if (expectedOpponent) {
+      if (expectedOpponentRecommendation) {
         arrows.push({
-          from: expectedOpponent.moveUci.slice(0, 2),
-          to: expectedOpponent.moveUci.slice(2, 4),
-          color: expectedOpponent.arrowColor ?? OPPONENT_EXPECTED_ARROW
+          from: expectedOpponentRecommendation.moveUci.slice(0, 2),
+          to: expectedOpponentRecommendation.moveUci.slice(2, 4),
+          color: expectedOpponentRecommendation.arrowColor ?? OPPONENT_EXPECTED_ARROW
         });
       }
       return arrows;
     },
-    [fen, planRecommendations?.expectedOpponentMove, planRecommendationsFen, visibleRecommendations]
+    [expectedOpponentRecommendation, fen, planRecommendationsFen, primaryRecommendation]
   );
   const makeNavigationSnapshot = useCallback(
     (overrides: Partial<NavigationSnapshot> = {}) =>

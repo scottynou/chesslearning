@@ -111,7 +111,7 @@ describe("PlanFirstPanel", () => {
     expect(screen.getByText("Coups")).toBeTruthy();
     expect(screen.getAllByText("Ouverture").length).toBeGreaterThan(0);
     expect(screen.getAllByText("25%").length).toBeGreaterThan(0);
-    expect(screen.getByText("Coup recommande")).toBeTruthy();
+    expect(screen.getAllByText("Coup recommande").length).toBeGreaterThan(0);
     expect(screen.getByText("Cavalier g8 -> f6")).toBeTruthy();
     expect(screen.queryByText("Plan actuel")).toBeNull();
     expect(screen.queryByText("Details avances")).toBeNull();
@@ -141,9 +141,9 @@ describe("PlanFirstPanel", () => {
     expect(screen.queryByText("Aucun coup legal disponible.")).toBeNull();
   });
 
-  it("shows ranked choices after the opening", () => {
+  it("shows only the primary move after the opening", () => {
     const alternative = { ...recommendation, moveUci: "b8c6", beginnerLabel: "Cavalier b8 -> c6", displayRole: "Alternative saine" };
-    const primary = { ...recommendation, displayRole: "Meilleur" };
+    const primary = { ...recommendation, displayRole: "Coup recommande" };
     render(
       <PlanFirstPanel
         recommendations={{
@@ -152,9 +152,9 @@ describe("PlanFirstPanel", () => {
           phaseDisplay: {
             key: "middlegame",
             label: "Milieu de partie",
-            subtitle: "Choisis un plan humain.",
-            recommendationStyle: "ranked",
-            maxVisibleMoves: 3
+            subtitle: "Un seul coup utile.",
+            recommendationStyle: "single",
+            maxVisibleMoves: 1
           },
           openingState: "completed",
           primaryMove: primary,
@@ -163,9 +163,10 @@ describe("PlanFirstPanel", () => {
         }}
       />
     );
-    expect(screen.getByText("Coups proposes")).toBeTruthy();
-    expect(screen.getByText("Meilleur")).toBeTruthy();
-    expect(screen.getByText("Alternative saine")).toBeTruthy();
+    expect(screen.getAllByText("Coup recommande").length).toBeGreaterThan(0);
+    expect(screen.getByText("Cavalier g8 -> f6")).toBeTruthy();
+    expect(screen.queryByText("Cavalier b8 -> c6")).toBeNull();
+    expect(screen.queryByText("Alternative saine")).toBeNull();
     expect(screen.queryByText("Ouverture terminee")).toBeNull();
   });
 });
