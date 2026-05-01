@@ -66,8 +66,8 @@ describe("eloAdaptation", () => {
       suggestedBoostDelta: 100,
       trend: first.trend
     });
-    expect(repeated.boost).toBe(250);
-    expect(repeated.appliedDelta).toBe(150);
+    expect(repeated.boost).toBe(300);
+    expect(repeated.appliedDelta).toBe(200);
 
     const critical = applyAdaptiveSignal({
       currentBoost: repeated.boost,
@@ -78,14 +78,15 @@ describe("eloAdaptation", () => {
     expect(critical.appliedDelta).toBe(200);
   });
 
-  it("drops faster only after comfort is confirmed", () => {
+  it("drops only after comfort is confirmed", () => {
     const first = applyAdaptiveSignal({
       currentBoost: 300,
       pressure: "stable",
       suggestedBoostDelta: -50,
       trend: freshEloTrendState()
     });
-    expect(first.boost).toBe(250);
+    expect(first.boost).toBe(300);
+    expect(first.appliedDelta).toBe(0);
 
     const repeated = applyAdaptiveSignal({
       currentBoost: first.boost,
@@ -93,8 +94,8 @@ describe("eloAdaptation", () => {
       suggestedBoostDelta: -50,
       trend: first.trend
     });
-    expect(repeated.boost).toBe(150);
-    expect(repeated.appliedDelta).toBe(-100);
+    expect(repeated.boost).toBe(250);
+    expect(repeated.appliedDelta).toBe(-50);
   });
 
   it("keeps the hidden boost inside the configured bounds", () => {

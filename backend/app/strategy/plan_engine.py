@@ -537,19 +537,19 @@ def accuracy_profile_for(
     if draw_pressure["level"] == "critical":
         return {
             "mode": "draw_break",
-            "target": 94,
-            "min": 88,
-            "max": 99,
+            "target": 96,
+            "min": 90,
+            "max": 100,
             "reason": "La position devient trop nulle : on cherche des coups plus precis qui gardent des chances de gain.",
             "drawPressure": draw_pressure,
         }
     if draw_pressure["level"] == "warning":
         return {
             "mode": "draw_break",
-            "target": 91,
-            "min": 84,
-            "max": 97,
-            "reason": "Risque de simplification vers nulle : on augmente legerement la precision.",
+            "target": 94,
+            "min": 88,
+            "max": 99,
+            "reason": "Risque de simplification vers nulle : on augmente la precision pour garder du jeu.",
             "drawPressure": draw_pressure,
         }
     if phase_key == "endgame":
@@ -595,28 +595,45 @@ def draw_pressure_for(
     pawns = sum(1 for piece in piece_map.values() if piece.piece_type == chess.PAWN)
     queens = sum(1 for piece in piece_map.values() if piece.piece_type == chess.QUEEN)
     major_pieces = sum(1 for piece in piece_map.values() if piece.piece_type in {chess.QUEEN, chess.ROOK})
-    low_spread = candidate_score_spread(engine_candidates[:5]) <= 24
+    candidate_spread = candidate_score_spread(engine_candidates[:5])
+    low_spread = candidate_spread <= 40
+    very_low_spread = candidate_spread <= 24
+    ply_count = len(move_history)
+    minor_pieces = sum(1 for piece in piece_map.values() if piece.piece_type in {chess.BISHOP, chess.KNIGHT})
 
     base = {
         "level": "none",
         "reason": "Pas de signal de nulle.",
         "scoreCp": score,
+        "spreadCp": candidate_spread,
         "pieceCount": piece_count,
         "pawns": pawns,
         "queens": queens,
+        "majorPieces": major_pieces,
+        "minorPieces": minor_pieces,
     }
 
     if board.is_insufficient_material():
         return {**base, "level": "critical", "reason": "Materiel insuffisant : la partie tend deja vers nulle."}
     if board.halfmove_clock >= 86:
         return {**base, "level": "critical", "reason": "Regle des 50 coups proche : il faut creer une rupture utile."}
+    if board.halfmove_clock >= 64:
+        return {**base, "level": "warning", "reason": "La position stagne depuis longtemps : il faut creer une rupture."}
     if phase_key == "endgame" and abs_score <= 60 and (queens == 0 or pawns <= 6):
         return {**base, "level": "critical", "reason": "Finale tres egale avec peu de materiel."}
     if phase_key == "endgame" and abs_score <= 105:
         return {**base, "level": "warning", "reason": "Finale encore jouable mais trop proche de l'egalite."}
-    if len(move_history) >= 22 and queens == 0 and major_pieces <= 4 and abs_score <= 70:
-        return {**base, "level": "warning", "reason": "Les dames sont sorties et l'evaluation reste plate."}
-    if len(move_history) >= 26 and abs_score <= 45 and low_spread:
+    if ply_count >= 18 and queens == 0 and major_pieces <= 4 and abs_score <= 75:
+        return {**base, "level": "critical", "reason": "Les dames sont sorties et l'evaluation reste trop plate."}
+    if ply_count >= 12 and queens == 0 and abs_score <= 120:
+        return {**base, "level": "warning", "reason": "Echange des dames avec peu d'avantage : risque de nulle rapide."}
+    if ply_count >= 20 and piece_count <= 18 and abs_score <= 110:
+        return {**base, "level": "warning", "reason": "Le materiel baisse sans avantage clair : il faut jouer plus ambitieux."}
+    if ply_count >= 16 and abs_score <= 35 and low_spread:
+        return {**base, "level": "critical", "reason": "Position trop egale et peu de differences entre les coups moteur."}
+    if ply_count >= 10 and abs_score <= 55 and very_low_spread:
+        return {**base, "level": "warning", "reason": "La partie devient deja trop plate : il faut augmenter la precision."}
+    if ply_count >= 26 and abs_score <= 65 and low_spread:
         return {**base, "level": "warning", "reason": "Les meilleurs coups se valent trop : risque de partie plate."}
     return base
 
@@ -887,47 +904,47 @@ def adaptive_signal_for(
             "suggestedBoostDelta": 200,
             "reason": "La position est critique : le coach monte fortement pour chercher un coup de survie ou de gain.",
         }
+    if draw_level == "critical":
+        return {
+            "pressure": "drawish",
+            "suggestedBoostDelta": 200,
+            "reason": "La partie risque vraiment de finir nulle : le coach monte fort pour garder des chances de gain.",
+        }
     if warning or position_score <= -260 or engine_score <= 45 or tactical_risk >= 45:
         return {
             "pressure": "critical",
             "suggestedBoostDelta": 150,
             "reason": "La position est sous forte pression : le coach monte nettement en precision.",
         }
-    if draw_level == "critical":
+    if draw_level == "warning":
         return {
             "pressure": "drawish",
-            "suggestedBoostDelta": 100,
-            "reason": "La partie risque de s'aplatir vers nulle : le coach monte en precision pour garder des chances de gain.",
+            "suggestedBoostDelta": 150,
+            "reason": "La position devient trop egale : le coach monte pour eviter une nulle passive.",
         }
     if opening_state == "abandoned" or mating_danger == "warning" or position_score <= -180 or engine_score <= 55 or tactical_risk >= 36:
         return {
             "pressure": "worse",
-            "suggestedBoostDelta": 100,
+            "suggestedBoostDelta": 150,
             "reason": "L'adversaire met une vraie pression : le niveau cache augmente pour rester dans la partie.",
         }
     if adapted or position_score <= -90 or engine_score <= 65 or tactical_risk >= 28:
         return {
             "pressure": "worse",
-            "suggestedBoostDelta": 50,
+            "suggestedBoostDelta": 100,
             "reason": "L'adversaire met assez de pression pour augmenter legerement le niveau cache.",
         }
-    if draw_level == "warning":
+    if position_score <= 40 and engine_score <= 82:
         return {
             "pressure": "drawish",
             "suggestedBoostDelta": 50,
-            "reason": "La position devient trop egale : le coach augmente legerement le niveau cache.",
+            "reason": "La position n'est pas assez favorable : le coach ajoute un peu de precision pour jouer la gagne.",
         }
-    if position_score >= 320 and engine_score >= 82 and tactical_risk <= 10 and not warning:
-        return {
-            "pressure": "stable",
-            "suggestedBoostDelta": -100,
-            "reason": "La position est tres confortable : le coach redescend plus vite vers un style humain.",
-        }
-    if position_score >= 160 and engine_score >= 74 and tactical_risk <= 18 and not warning:
+    if position_score >= 520 and engine_score >= 88 and tactical_risk <= 8 and not warning:
         return {
             "pressure": "stable",
             "suggestedBoostDelta": -50,
-            "reason": "La position redevient confortable : le coach redescend progressivement.",
+            "reason": "La position est franchement confortable : le coach peut redescendre doucement.",
         }
     return {
         "pressure": "stable",

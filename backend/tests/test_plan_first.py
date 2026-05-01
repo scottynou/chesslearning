@@ -206,14 +206,14 @@ def test_adaptive_signal_progressively_tracks_position_pressure() -> None:
         blocked_expected_move=None,
         opening_state="on_track",
         player_turn=True,
-        engine_candidates=[SimpleNamespace(eval_cp=360, mate_in=None)],
+        engine_candidates=[SimpleNamespace(eval_cp=620, mate_in=None)],
     )
 
-    assert worse["suggestedBoostDelta"] == 50
+    assert worse["suggestedBoostDelta"] == 100
     assert critical["suggestedBoostDelta"] == 150
     assert survival["suggestedBoostDelta"] == 200
-    assert stable["suggestedBoostDelta"] == -50
-    assert comfortable["suggestedBoostDelta"] == -100
+    assert stable["suggestedBoostDelta"] == 0
+    assert comfortable["suggestedBoostDelta"] == -50
 
 
 def test_human_accuracy_shaping_prefers_strong_human_band() -> None:
@@ -316,6 +316,29 @@ def test_drawish_positions_raise_hidden_accuracy_profile() -> None:
     assert profile["drawPressure"]["level"] == "critical"
 
 
+def test_flat_middlegame_raises_draw_pressure_early() -> None:
+    from app.strategy.plan_engine import draw_pressure_for
+
+    board = chess.Board()
+    moves = ["e2e4", "e7e5", "g1f3", "g8f6", "f1e2", "f8e7", "e1g1", "e8g8", "d2d3", "d7d6"]
+    for move in moves:
+        board.push_uci(move)
+
+    pressure = draw_pressure_for(
+        board=board,
+        phase_display={"key": "middlegame"},
+        move_history=moves,
+        engine_candidates=[
+            SimpleNamespace(eval_cp=18, mate_in=None),
+            SimpleNamespace(eval_cp=28, mate_in=None),
+            SimpleNamespace(eval_cp=37, mate_in=None),
+        ],
+    )
+
+    assert pressure["level"] == "warning"
+    assert "plate" in pressure["reason"].lower() or "nulle" in pressure["reason"].lower()
+
+
 def test_drawish_adaptive_signal_boosts_precision() -> None:
     from app.strategy.plan_engine import adaptive_signal_for
 
@@ -330,7 +353,7 @@ def test_drawish_adaptive_signal_boosts_precision() -> None:
     )
 
     assert signal["pressure"] == "drawish"
-    assert signal["suggestedBoostDelta"] == 100
+    assert signal["suggestedBoostDelta"] == 200
 
 
 def test_draw_break_shaping_prefers_winning_chances_over_flat_move() -> None:

@@ -144,7 +144,7 @@ export function applyAdaptiveSignal({
       pressureStreak: 0,
       stableStreak
     };
-    const calmerDelta = stableStreak >= 2 ? baseDelta - 50 : baseDelta;
+    const calmerDelta = stableStreak >= 4 ? baseDelta - 50 : stableStreak >= 2 ? baseDelta : 0;
     const nextDelta = Math.max(-100, calmerDelta);
     const nextBoost = normalizeAdaptiveBoost(current + nextDelta);
 
@@ -169,7 +169,7 @@ export function applyAdaptiveSignal({
 
 function normalizeAdaptiveDelta(value: number) {
   const stepped = Math.round(value / ELO_STEP) * ELO_STEP;
-  return clamp(stepped, -100, 200);
+  return clamp(stepped, -100, 300);
 }
 
 function normalizeTrendState(trend: EloTrendState | null | undefined): EloTrendState {
@@ -182,14 +182,16 @@ function normalizeTrendState(trend: EloTrendState | null | undefined): EloTrendS
 }
 
 function pressureStreakBonus(pressure: AdaptivePressure) {
-  if (pressure === "stable") return 0;
-  return 50;
+  if (pressure === "critical") return 100;
+  if (pressure === "drawish") return 100;
+  if (pressure === "worse") return 75;
+  return 0;
 }
 
 function maxPositiveDeltaForPressure(pressure: AdaptivePressure) {
-  if (pressure === "critical") return 200;
-  if (pressure === "drawish") return 150;
-  if (pressure === "worse") return 100;
+  if (pressure === "critical") return 300;
+  if (pressure === "drawish") return 250;
+  if (pressure === "worse") return 200;
   return 0;
 }
 
