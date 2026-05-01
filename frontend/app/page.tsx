@@ -1,6 +1,6 @@
 "use client";
 
-import type { ChangeEvent, ReactNode } from "react";
+import type { ChangeEvent, ReactNode, TouchEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chess, Move, Square } from "chess.js";
 import { ChevronLeft, ChevronRight, ImageUp, Menu, X } from "lucide-react";
@@ -950,7 +950,9 @@ export default function HomePage() {
   const previousEffectiveElo = useRef<number | null>(null);
   const eloChangeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const botRequestInFlight = useRef(false);
+  const botRequestSerial = useRef(0);
   const botPausedByTimelineNavigation = useRef(false);
+  const lastTimelineTouchAt = useRef(0);
   const timelineRef = useRef<{ historyUci: string[]; moveSources: MoveSource[]; redoStack: TimelineMove[] }>({
     historyUci: [],
     moveSources: [],
@@ -1064,6 +1066,7 @@ export default function HomePage() {
     setEloChange(null);
     previousEffectiveElo.current = DEFAULT_BASE_ELO;
     lastEloAdjustmentPly.current = null;
+    botRequestSerial.current += 1;
     botRequestInFlight.current = false;
     botPausedByTimelineNavigation.current = false;
     setSelectedSquare(null);
@@ -1363,6 +1366,7 @@ export default function HomePage() {
     let cancelled = false;
     const controller = new AbortController();
     const fenBefore = game.fen();
+    const requestId = ++botRequestSerial.current;
     botRequestInFlight.current = true;
     setBotThinking(true);
     setBotError(null);
@@ -1380,7 +1384,7 @@ export default function HomePage() {
       signal: controller.signal
     })
       .then((response) => {
-        if (cancelled) return;
+        if (cancelled || requestId !== botRequestSerial.current) return;
         const from = response.move.moveUci.slice(0, 2);
         const to = response.move.moveUci.slice(2, 4);
         const promotion = response.move.moveUci.slice(4) || undefined;
@@ -1401,11 +1405,11 @@ export default function HomePage() {
         setHighlightedMove(null);
       })
       .catch((error: Error) => {
-        if (cancelled || isAbortError(error)) return;
+        if (cancelled || requestId !== botRequestSerial.current || isAbortError(error)) return;
         setBotError(error.message || "Le bot n'a pas pu jouer.");
       })
       .finally(() => {
-        if (!cancelled) {
+        if (!cancelled && requestId === botRequestSerial.current) {
           botRequestInFlight.current = false;
           setBotThinking(false);
         }
@@ -1414,8 +1418,10 @@ export default function HomePage() {
     return () => {
       cancelled = true;
       controller.abort();
-      botRequestInFlight.current = false;
-      setBotThinking(false);
+      if (requestId === botRequestSerial.current) {
+        botRequestInFlight.current = false;
+        setBotThinking(false);
+      }
     };
   }, [appStage, botError, botStrategyState, game, historyUci, mode, pendingPromotion, selectedPlanId]);
 
@@ -1502,6 +1508,7 @@ export default function HomePage() {
   }, []);
 
   function clearPositionDerivedState() {
+    botRequestSerial.current += 1;
     setSelectedSquare(null);
     setPendingPromotion(null);
     setHighlightedMove(null);
@@ -1574,6 +1581,18 @@ export default function HomePage() {
     setMoveSources(nextMoveSources);
     setRedoStack(timeline.redoStack);
     clearPositionDerivedState();
+  }
+
+  function runTimelineTouch(event: TouchEvent<HTMLButtonElement>, action: () => void) {
+    lastTimelineTouchAt.current = Date.now();
+    event.preventDefault();
+    event.stopPropagation();
+    action();
+  }
+
+  function runTimelineClick(action: () => void) {
+    if (Date.now() - lastTimelineTouchAt.current < 500) return;
+    action();
   }
 
   function reset() {
@@ -2016,9 +2035,10 @@ export default function HomePage() {
           </button>
           <button
             type="button"
-            onClick={undo}
+            onClick={() => runTimelineClick(undo)}
+            onTouchEnd={(event) => runTimelineTouch(event, undo)}
             className="control-button icon-control"
-            disabled={!canStepBackward || botThinking}
+            disabled={!canStepBackward}
             aria-label="Coup precedent"
             title="Coup precedent"
           >
@@ -2026,9 +2046,10 @@ export default function HomePage() {
           </button>
           <button
             type="button"
-            onClick={redo}
+            onClick={() => runTimelineClick(redo)}
+            onTouchEnd={(event) => runTimelineTouch(event, redo)}
             className="control-button icon-control"
-            disabled={!canStepForward || botThinking}
+            disabled={!canStepForward}
             aria-label="Coup suivant"
             title="Coup suivant"
           >
