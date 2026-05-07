@@ -402,9 +402,100 @@ def test_accuracy_profile_follows_selected_hidden_elo() -> None:
         "opponent_strength": {"level": "none", "suggestedBoostDelta": 0},
     }
 
-    assert accuracy_profile_for(**common, elo=1200)["target"] == 74
-    assert accuracy_profile_for(**common, elo=1600)["target"] == 76
-    assert accuracy_profile_for(**common, elo=1800)["target"] == 82
+    assert accuracy_profile_for(**common, elo=1500)["target"] == 80
+    assert accuracy_profile_for(**common, elo=2000)["target"] == 86
+    assert accuracy_profile_for(**common, elo=3000)["target"] == 96
+
+
+def test_accuracy_bands_are_distinct_for_three_player_profiles() -> None:
+    from app.strategy.plan_engine import accuracy_bands_for_elo
+
+    assert accuracy_bands_for_elo(1500)["normal"] == {"target": 80, "min": 72, "max": 88, "planTolerance": 4}
+    assert accuracy_bands_for_elo(2000)["normal"] == {"target": 86, "min": 80, "max": 93, "planTolerance": 3}
+    assert accuracy_bands_for_elo(3000)["normal"] == {"target": 96, "min": 94, "max": 99, "planTolerance": 0}
+
+
+def test_elite_profile_can_prefer_grandmaster_practical_move_over_perfect_engine_move() -> None:
+    from app.strategy.plan_engine import accuracy_bands_for_elo, shape_recommendations_for_accuracy
+
+    perfect_engine_move = {
+        "moveUci": "d1a4",
+        "source": "engine",
+        "engineRank": 1,
+        "planFitScore": 35,
+        "engineScore": 100,
+        "beginnerSimplicityScore": 55,
+        "tacticalRisk": 8,
+        "finalCoachScore": 90,
+        "warning": None,
+        "candidate": {"evalCp": 180},
+    }
+    grandmaster_practical_move = {
+        "moveUci": "g1f3",
+        "source": "engine",
+        "engineRank": 3,
+        "planFitScore": 35,
+        "engineScore": 96,
+        "beginnerSimplicityScore": 86,
+        "tacticalRisk": 8,
+        "finalCoachScore": 88,
+        "warning": None,
+        "candidate": {"evalCp": 152},
+    }
+
+    shaped = shape_recommendations_for_accuracy(
+        [perfect_engine_move, grandmaster_practical_move],
+        {"mode": "normal", **accuracy_bands_for_elo(3000)["normal"]},
+    )
+
+    assert shaped[0]["moveUci"] == "g1f3"
+    assert shaped[0]["humanAccuracyEstimate"] >= 96
+
+
+def test_solid_1500_profile_rejects_unnecessary_tactical_risk() -> None:
+    from app.strategy.plan_engine import accuracy_bands_for_elo, shape_recommendations_for_accuracy
+
+    tactical_move = {
+        "moveUci": "d1h5",
+        "source": "engine",
+        "engineRank": 1,
+        "planFitScore": 35,
+        "engineScore": 88,
+        "beginnerSimplicityScore": 50,
+        "tacticalRisk": 50,
+        "finalCoachScore": 82,
+        "warning": None,
+        "candidate": {"evalCp": 120},
+    }
+    healthy_move = {
+        "moveUci": "g1f3",
+        "source": "engine",
+        "engineRank": 3,
+        "planFitScore": 35,
+        "engineScore": 84,
+        "beginnerSimplicityScore": 82,
+        "tacticalRisk": 10,
+        "finalCoachScore": 80,
+        "warning": None,
+        "candidate": {"evalCp": 92},
+    }
+
+    shaped = shape_recommendations_for_accuracy(
+        [tactical_move, healthy_move],
+        {"mode": "normal", **accuracy_bands_for_elo(1500)["normal"]},
+    )
+
+    assert shaped[0]["moveUci"] == "g1f3"
+
+
+def test_elite_engine_search_profile_uses_large_free_local_multipv() -> None:
+    from app.strategy.plan_engine import engine_search_profile_for_elo
+
+    profile = engine_search_profile_for_elo(3000, {"technical_limit": 5})
+
+    assert profile["selectionMode"] == "elite_human"
+    assert profile["multipv"] == 30
+    assert profile["minDepth"] >= 14
 
 
 def test_ai_rerank_prompt_uses_strong_human_profile_without_1200() -> None:

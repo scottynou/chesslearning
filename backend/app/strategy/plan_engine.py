@@ -54,24 +54,26 @@ def get_plan_recommendations(
     opponent_turn = not game_over and plan_color is not None and board.turn != plan_color
     player_turn = not game_over and not opponent_turn
     level_settings = skill_level_settings(skill_level, elo, max_moves)
+    engine_profile = engine_search_profile_for_elo(elo, level_settings)
 
     plan_can_drive_opening = phase == "opening" and status == "on_plan" and bool(plan_moves)
     if game_over or plan_can_drive_opening:
         engine_lines = []
         engine_candidates = []
     else:
-        safety_window = min(10, max(4, int(level_settings["technical_limit"]) * 2))
-        multipv = min(24, safety_window * 2)
-        recommend_ms = _int_env("STOCKFISH_RECOMMEND_MS", 700)
-        critical_ms = _int_env("STOCKFISH_CRITICAL_MS", 1200)
-        engine_lines = StockfishEngine().analyze(fen, multipv=multipv, depth=engine_depth, movetime_ms=recommend_ms)
+        safety_window = int(engine_profile["safetyWindow"])
+        multipv = int(engine_profile["multipv"])
+        recommend_ms = int(engine_profile["movetimeMs"])
+        critical_ms = int(engine_profile["criticalMovetimeMs"])
+        effective_engine_depth = max(engine_depth, int(engine_profile["minDepth"]))
+        engine_lines = StockfishEngine().analyze(fen, multipv=multipv, depth=effective_engine_depth, movetime_ms=recommend_ms)
         engine_candidates = rank_candidates(fen, engine_lines, elo=elo, max_moves=safety_window)
         if (
             critical_ms > recommend_ms
             and engine_candidates
             and (mate_danger_from_side_to_move(engine_candidates) == "critical" or score_from_side_to_move(engine_candidates) <= -260)
         ):
-            engine_lines = StockfishEngine().analyze(fen, multipv=multipv, depth=engine_depth, movetime_ms=critical_ms)
+            engine_lines = StockfishEngine().analyze(fen, multipv=multipv, depth=effective_engine_depth, movetime_ms=critical_ms)
             engine_candidates = rank_candidates(fen, engine_lines, elo=elo, max_moves=safety_window)
     merged = merge_plan_and_engine_moves(
         fen=fen,
@@ -206,7 +208,7 @@ def get_plan_recommendations(
     current_objective = current_objective_for(active_plan, phase, primary_move)
     progress = plan_progress_for(board, active_plan, move_history, phase_status)
     opening_brief = opening_brief_for(active_plan)
-    technical_moves = [candidate.model_dump(by_alias=True) for candidate in engine_candidates[: int(level_settings["technical_limit"])]]
+    technical_moves = [candidate.model_dump(by_alias=True) for candidate in engine_candidates[: int(engine_profile["technicalLimit"])]]
     coach_message = coach_message_for(active_plan, status, phase_status, locked_plan)
     last_event = last_event_for(move_history)
     what_changed = what_changed_for(active_plan, status, phase_status, deviation, primary_move)
@@ -292,8 +294,13 @@ def get_plan_recommendations(
         "aiRerankStatus": ai_rerank_status,
         "adaptiveSignal": adaptive_signal,
         "technicalDetails": {
-            "engineDepth": engine_depth,
+            "engineDepth": max(engine_depth, int(engine_profile["minDepth"])),
             "maxMoves": max_moves,
+            "targetElo": elo,
+            "accuracyBand": accuracy_profile.get("mode"),
+            "selectionMode": engine_profile["selectionMode"],
+            "multipv": engine_profile["multipv"],
+            "movetimeMs": engine_profile["movetimeMs"],
             "detectedOpeningId": detected_plan.get("id") if detected_plan else None,
             "transpositionId": transposed_plan.get("id") if transposed_plan else None,
         },
@@ -364,6 +371,42 @@ def skill_level_settings(skill_level: str | None, elo: int, max_moves: int) -> d
     if level == "intermediate":
         return {"id": "intermediate", "label": "Intermédiaire", "alternative_limit": 3, "technical_limit": min(8, max(max_moves, 4))}
     return {"id": "beginner", "label": "Débutant", "alternative_limit": 2, "technical_limit": min(5, max(max_moves, 3))}
+
+
+def engine_search_profile_for_elo(elo: int, level_settings: dict[str, Any]) -> dict[str, Any]:
+    base_limit = int(level_settings["technical_limit"])
+    if elo >= 2800:
+        technical_limit = min(10, max(base_limit, 8))
+        return {
+            "selectionMode": "elite_human",
+            "technicalLimit": technical_limit,
+            "safetyWindow": min(10, max(technical_limit, 10)),
+            "multipv": 30,
+            "movetimeMs": _int_env("STOCKFISH_ELITE_RECOMMEND_MS", 1200),
+            "criticalMovetimeMs": _int_env("STOCKFISH_ELITE_CRITICAL_MS", 1800),
+            "minDepth": 14,
+        }
+    if elo >= 1800:
+        technical_limit = min(9, max(base_limit, 6))
+        return {
+            "selectionMode": "strong_human",
+            "technicalLimit": technical_limit,
+            "safetyWindow": min(10, max(technical_limit, 8)),
+            "multipv": 24,
+            "movetimeMs": _int_env("STOCKFISH_STRONG_RECOMMEND_MS", 850),
+            "criticalMovetimeMs": _int_env("STOCKFISH_STRONG_CRITICAL_MS", 1300),
+            "minDepth": 10,
+        }
+    technical_limit = min(6, max(base_limit, 4))
+    return {
+        "selectionMode": "solid_human",
+        "technicalLimit": technical_limit,
+        "safetyWindow": min(8, max(technical_limit, 6)),
+        "multipv": 16,
+        "movetimeMs": _int_env("STOCKFISH_SOLID_RECOMMEND_MS", 650),
+        "criticalMovetimeMs": _int_env("STOCKFISH_SOLID_CRITICAL_MS", 1100),
+        "minDepth": 8,
+    }
 
 
 def choose_primary_move(plan_items: list[dict[str, Any]], merged: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -602,40 +645,40 @@ def accuracy_profile_for(
 
 
 def accuracy_bands_for_elo(elo: int) -> dict[str, dict[str, int]]:
-    if elo < 1450:
+    if elo < 1800:
         return {
-            "normal": {"target": 74, "min": 68, "max": 82},
-            "favorable": {"target": 73, "min": 68, "max": 82},
-            "pressure": {"target": 84, "min": 78, "max": 92},
-            "strong_pressure": {"target": 87, "min": 81, "max": 95},
-            "elite_pressure": {"target": 90, "min": 84, "max": 97},
-            "draw_warning": {"target": 86, "min": 80, "max": 94},
-            "draw_critical": {"target": 91, "min": 86, "max": 98},
-            "conversion": {"target": 80, "min": 74, "max": 90},
-            "survival": {"target": 97, "min": 92, "max": 100},
+            "normal": {"target": 80, "min": 72, "max": 88, "planTolerance": 4},
+            "favorable": {"target": 78, "min": 72, "max": 88, "planTolerance": 4},
+            "pressure": {"target": 88, "min": 82, "max": 94, "planTolerance": 3},
+            "strong_pressure": {"target": 90, "min": 84, "max": 96, "planTolerance": 3},
+            "elite_pressure": {"target": 92, "min": 86, "max": 98, "planTolerance": 2},
+            "draw_warning": {"target": 89, "min": 83, "max": 95, "planTolerance": 3},
+            "draw_critical": {"target": 93, "min": 88, "max": 99, "planTolerance": 2},
+            "conversion": {"target": 84, "min": 78, "max": 92, "planTolerance": 3},
+            "survival": {"target": 97, "min": 92, "max": 100, "planTolerance": 0},
         }
-    if elo < 1750:
+    if elo < 2600:
         return {
-            "normal": {"target": 76, "min": 70, "max": 84},
-            "favorable": {"target": 75, "min": 70, "max": 84},
-            "pressure": {"target": 88, "min": 82, "max": 95},
-            "strong_pressure": {"target": 91, "min": 85, "max": 97},
-            "elite_pressure": {"target": 94, "min": 89, "max": 99},
-            "draw_warning": {"target": 90, "min": 84, "max": 97},
-            "draw_critical": {"target": 94, "min": 89, "max": 100},
-            "conversion": {"target": 84, "min": 78, "max": 94},
-            "survival": {"target": 98, "min": 94, "max": 100},
+            "normal": {"target": 86, "min": 80, "max": 93, "planTolerance": 3},
+            "favorable": {"target": 84, "min": 78, "max": 92, "planTolerance": 3},
+            "pressure": {"target": 92, "min": 87, "max": 97, "planTolerance": 2},
+            "strong_pressure": {"target": 94, "min": 89, "max": 98, "planTolerance": 2},
+            "elite_pressure": {"target": 96, "min": 92, "max": 99, "planTolerance": 1},
+            "draw_warning": {"target": 93, "min": 88, "max": 98, "planTolerance": 2},
+            "draw_critical": {"target": 96, "min": 91, "max": 100, "planTolerance": 1},
+            "conversion": {"target": 90, "min": 84, "max": 96, "planTolerance": 2},
+            "survival": {"target": 98, "min": 94, "max": 100, "planTolerance": 0},
         }
     return {
-        "normal": {"target": 82, "min": 76, "max": 88},
-        "favorable": {"target": 80, "min": 74, "max": 88},
-        "pressure": {"target": 91, "min": 85, "max": 97},
-        "strong_pressure": {"target": 93, "min": 88, "max": 98},
-        "elite_pressure": {"target": 96, "min": 92, "max": 99},
-        "draw_warning": {"target": 93, "min": 87, "max": 98},
-        "draw_critical": {"target": 96, "min": 91, "max": 100},
-        "conversion": {"target": 88, "min": 82, "max": 96},
-        "survival": {"target": 98, "min": 94, "max": 100},
+        "normal": {"target": 96, "min": 94, "max": 99, "planTolerance": 0},
+        "favorable": {"target": 95, "min": 92, "max": 99, "planTolerance": 0},
+        "pressure": {"target": 98, "min": 95, "max": 100, "planTolerance": 0},
+        "strong_pressure": {"target": 98, "min": 96, "max": 100, "planTolerance": 0},
+        "elite_pressure": {"target": 99, "min": 97, "max": 100, "planTolerance": 0},
+        "draw_warning": {"target": 97, "min": 94, "max": 100, "planTolerance": 0},
+        "draw_critical": {"target": 98, "min": 95, "max": 100, "planTolerance": 0},
+        "conversion": {"target": 96, "min": 93, "max": 100, "planTolerance": 0},
+        "survival": {"target": 99, "min": 96, "max": 100, "planTolerance": 0},
     }
 
 
@@ -740,13 +783,15 @@ def shape_recommendations_for_accuracy(items: list[dict[str, Any]], profile: dic
         candidates = list(items)
 
     minimum = int(profile.get("min", 78))
+    plan_tolerance = int(profile.get("planTolerance", 4))
     viable = [
         item
         for item in candidates
         if int(item.get("engineScore") or 0) >= minimum
         or (
-            int(item.get("planFitScore") or 0) >= 90
-            and int(item.get("engineScore") or 0) >= minimum - 4
+            plan_tolerance > 0
+            and int(item.get("planFitScore") or 0) >= 90
+            and int(item.get("engineScore") or 0) >= minimum - plan_tolerance
             and int(item.get("tacticalRisk") or 0) <= 22
         )
     ]
@@ -780,6 +825,7 @@ def human_accuracy_sort_score(item: dict[str, Any], profile: dict[str, Any]) -> 
     minimum = int(profile.get("min", 90))
     maximum = int(profile.get("max", 94))
     mode = str(profile.get("mode", "normal"))
+    plan_tolerance = int(profile.get("planTolerance", 4))
 
     if mode == "draw_break":
         over_penalty = 0.10
@@ -808,17 +854,33 @@ def human_accuracy_sort_score(item: dict[str, Any], profile: dict[str, Any]) -> 
         weights = (0.31, 0.20, 0.08, 0.18)
 
     in_band_bonus = 26 if minimum <= engine_score <= maximum else 0
-    top_engine_bonus = 8 if int(item.get("engineRank") or 99) == 1 and engine_score >= minimum else 0
+    engine_rank = int(item.get("engineRank") or 99)
+    if mode in {"pressure", "draw_break"}:
+        top_engine_bonus = 8 if engine_rank == 1 and engine_score >= minimum else 0
+    elif mode == "conversion":
+        top_engine_bonus = 5 if engine_rank == 1 and minimum <= engine_score <= maximum else 0
+    else:
+        top_engine_bonus = 4 if engine_rank == 1 and minimum <= engine_score <= maximum else 0
+    elite_practical_bonus = (
+        7
+        if minimum >= 94
+        and 2 <= engine_rank <= 4
+        and minimum <= engine_score <= maximum
+        and risk <= 18
+        else 0
+    )
     plan_bonus = (
         10
         if item.get("source") in {"plan", "plan_and_engine"}
-        and engine_score >= minimum - 4
+        and plan_tolerance > 0
+        and engine_score >= minimum - plan_tolerance
         and risk <= 22
         else 0
     )
     return (
         in_band_bonus
         + top_engine_bonus
+        + elite_practical_bonus
         + plan_bonus
         + final_score * weights[3]
         + plan_fit * weights[1]

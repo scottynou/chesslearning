@@ -132,6 +132,37 @@ def test_bot_ignores_selected_opening_plan_and_plays_top_engine_move(monkeypatch
     assert response.json()["move"]["moveUci"] == next(iter(board.legal_moves)).uci()
 
 
+def test_bot_keeps_single_pv_stockfish_selection(monkeypatch) -> None:
+    import app.bot_service as bot_service
+
+    calls = []
+
+    class RecordingStockfishEngine:
+        def analyze(self, fen: str, multipv: int, depth: int, movetime_ms: int | None = None):
+            calls.append({"multipv": multipv, "depth": depth, "movetimeMs": movetime_ms})
+            return [EngineLine(1, "e2e4", 50, None, ["e2e4", "e7e5"])]
+
+    monkeypatch.setattr(bot_service, "StockfishEngine", lambda: RecordingStockfishEngine())
+    client = TestClient(app)
+
+    response = client.post(
+        "/bot-move",
+        json={
+            "fen": chess.STARTING_FEN,
+            "elo": 1500,
+            "skillLevel": "beginner",
+            "maxMoves": 10,
+            "engineDepth": 1,
+            "botStyle": "educational",
+        },
+    )
+
+    assert response.status_code == 200
+    assert calls[0]["multipv"] == 1
+    assert calls[0]["depth"] >= 14
+    assert response.json()["move"]["moveUci"] == "e2e4"
+
+
 def test_cors_allows_render_frontend_for_expensive_routes() -> None:
     client = TestClient(app)
     origin = "https://chess-elo-coach-web-bh95.onrender.com"

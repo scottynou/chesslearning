@@ -13,20 +13,20 @@ import {
 
 describe("eloAdaptation", () => {
   it("clamps and steps base Elo values", () => {
-    expect(normalizeBaseElo(421)).toBe(600);
-    expect(normalizeBaseElo(1237)).toBe(1250);
-    expect(normalizeBaseElo(3900)).toBe(3200);
-    expect(effectiveElo(3150, 400)).toBe(3200);
-    expect(effectiveElo(1200, -200)).toBe(1200);
-    expect(effectiveElo(1200, 1800)).toBe(2600);
+    expect(normalizeBaseElo(421)).toBe(1500);
+    expect(normalizeBaseElo(1987)).toBe(2000);
+    expect(normalizeBaseElo(3900)).toBe(3000);
+    expect(effectiveElo(2950, 400)).toBe(3000);
+    expect(effectiveElo(1500, -200)).toBe(1500);
+    expect(effectiveElo(2000, 1800)).toBe(3000);
   });
 
   it("maps Elo to the internal skill level", () => {
-    expect(skillLevelForElo(600)).toBe("beginner");
-    expect(skillLevelForElo(1400)).toBe("beginner");
-    expect(skillLevelForElo(1450)).toBe("intermediate");
-    expect(skillLevelForElo(2350)).toBe("intermediate");
-    expect(skillLevelForElo(2400)).toBe("pro");
+    expect(skillLevelForElo(1500)).toBe("beginner");
+    expect(skillLevelForElo(1750)).toBe("beginner");
+    expect(skillLevelForElo(2000)).toBe("intermediate");
+    expect(skillLevelForElo(2550)).toBe("intermediate");
+    expect(skillLevelForElo(3000)).toBe("pro");
   });
 
   it("raises the adaptive boost after a serious mistake without jumping more than 200 Elo", () => {
@@ -35,9 +35,9 @@ describe("eloAdaptation", () => {
   });
 
   it("maps human profiles to their hidden base Elo", () => {
-    expect(baseEloForProfile("lambda")).toBe(1200);
-    expect(baseEloForProfile("strong")).toBe(1600);
-    expect(baseEloForProfile("veryStrong")).toBe(1800);
+    expect(baseEloForProfile("lambda")).toBe(1500);
+    expect(baseEloForProfile("strong")).toBe(2000);
+    expect(baseEloForProfile("veryStrong")).toBe(3000);
     expect(normalizeHumanProfile("unknown")).toBe("strong");
   });
 
@@ -132,12 +132,12 @@ describe("eloAdaptation", () => {
   it("keeps the hidden boost inside the configured bounds", () => {
     expect(
       applyAdaptiveSignal({
-        currentBoost: 1350,
+        currentBoost: 1450,
         pressure: "critical",
         suggestedBoostDelta: 200,
         trend: freshEloTrendState()
       }).boost
-    ).toBe(1400);
+    ).toBe(1500);
     expect(
       applyAdaptiveSignal({
         currentBoost: 0,

@@ -14,6 +14,8 @@ import { getPlanRecommendations, importPositionImage, listAvailablePlans, reques
 import { canMoveInMode, gameStatus, isPromotionAttempt, tryMove } from "@/lib/chess";
 import {
   DEFAULT_HUMAN_PROFILE,
+  ELO_MAX,
+  ELO_MIN,
   HUMAN_PROFILE_SETTINGS,
   applyAdaptiveSignal,
   baseEloForProfile,
@@ -2214,7 +2216,7 @@ function EloLiveIndicator({
   pressureLabel: string;
 }) {
   const direction = change ? (change.delta > 0 ? "up" : "down") : "stable";
-  const progress = Math.max(0, Math.min(100, ((currentElo - 600) / (3200 - 600)) * 100));
+  const progress = Math.max(0, Math.min(100, ((currentElo - ELO_MIN) / (ELO_MAX - ELO_MIN)) * 100));
 
   return (
     <section className={`elo-live-indicator is-${direction}`} aria-live="polite" aria-label="Elo adaptatif actuel">

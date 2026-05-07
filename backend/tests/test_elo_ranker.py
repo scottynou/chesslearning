@@ -5,11 +5,9 @@ from app.stockfish_engine import EngineLine
 
 
 def test_weights_for_elo_steps() -> None:
-    assert weights_for_elo(600).engine_weight == 0.45
-    assert weights_for_elo(1200).engine_weight == 0.60
-    assert weights_for_elo(1800).engine_weight == 0.75
-    assert weights_for_elo(2400).engine_weight == 0.85
-    assert weights_for_elo(3200).engine_weight == 0.95
+    assert weights_for_elo(1500).engine_weight == 0.68
+    assert weights_for_elo(2000).engine_weight == 0.80
+    assert weights_for_elo(3000).engine_weight == 0.88
 
 
 def test_coach_score_formula() -> None:
@@ -21,7 +19,7 @@ def test_coach_score_formula() -> None:
         risk_penalty=10,
         pedagogy_bonus=3,
     )
-    assert score == 78
+    assert score == 80
 
 
 def test_rank_candidates_sorts_and_limits() -> None:

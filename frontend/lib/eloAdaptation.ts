@@ -1,10 +1,10 @@
 import type { SkillLevel } from "./types";
 
-export const ELO_MIN = 600;
-export const ELO_MAX = 3200;
+export const ELO_MIN = 1500;
+export const ELO_MAX = 3000;
 export const ELO_STEP = 50;
-export const DEFAULT_BASE_ELO = 1600;
-export const MAX_ADAPTIVE_BOOST = 1400;
+export const DEFAULT_BASE_ELO = 2000;
+export const MAX_ADAPTIVE_BOOST = 1500;
 export const MIN_ADAPTIVE_BOOST = 0;
 export const DEFAULT_HUMAN_PROFILE: CoachHumanProfile = "strong";
 
@@ -22,22 +22,22 @@ export const HUMAN_PROFILE_SETTINGS: Record<
   }
 > = {
   lambda: {
-    label: "Humain lambda",
-    shortLabel: "Lambda",
-    baseElo: 1200,
-    description: "Plus simple, plus naturel, moins précis."
+    label: "Humain 1500",
+    shortLabel: "1500",
+    baseElo: 1500,
+    description: "Solide, clair, humain : des coups fiables sans tactique inutile."
   },
   strong: {
-    label: "Humain fort",
-    shortLabel: "Fort",
-    baseElo: 1600,
-    description: "Le bon équilibre : solide, humain, ambitieux."
+    label: "Humain 2000",
+    shortLabel: "2000",
+    baseElo: 2000,
+    description: "Plus ambitieux et precis, tout en gardant des choix naturels."
   },
   veryStrong: {
-    label: "Humain très fort",
-    shortLabel: "Très fort",
-    baseElo: 1800,
-    description: "Plus exigeant, proche du mode actuel."
+    label: "Elite humaine 3000",
+    shortLabel: "3000",
+    baseElo: 3000,
+    description: "Inspire des meilleurs humains : ultra fort, mais pas robotique."
   }
 };
 
@@ -105,8 +105,8 @@ export function effectiveElo(baseElo: number, adaptiveBoost: number) {
 
 export function skillLevelForElo(elo: number): SkillLevel {
   const normalized = clampElo(elo);
-  if (normalized <= 1400) return "beginner";
-  if (normalized <= 2350) return "intermediate";
+  if (normalized < 1800) return "beginner";
+  if (normalized < 2600) return "intermediate";
   return "pro";
 }
 

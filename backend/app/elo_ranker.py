@@ -27,15 +27,11 @@ PIECE_VALUES = {
 
 
 def weights_for_elo(elo: int) -> EloWeights:
-    if elo <= 800:
-        return EloWeights(0.45, 0.20, 0.30, 0.25)
-    if elo <= 1400:
-        return EloWeights(0.60, 0.15, 0.20, 0.20)
-    if elo <= 2000:
-        return EloWeights(0.75, 0.10, 0.12, 0.12)
-    if elo <= 2600:
-        return EloWeights(0.85, 0.07, 0.08, 0.08)
-    return EloWeights(0.95, 0.02, 0.03, 0.03)
+    if elo < 1800:
+        return EloWeights(0.68, 0.12, 0.18, 0.20)
+    if elo < 2600:
+        return EloWeights(0.80, 0.10, 0.10, 0.12)
+    return EloWeights(0.88, 0.08, 0.06, 0.09)
 
 
 def rank_candidates(fen: str, lines: list[EngineLine], elo: int, max_moves: int) -> list[CandidateMove]:
@@ -173,12 +169,12 @@ def compute_risk_penalty(line: EngineLine, simplicity_score: int) -> int:
 
 
 def compute_human_likelihood(elo: int, engine_score: int, simplicity_score: int, risk_penalty: int) -> int:
-    if elo <= 1400:
-        score = 0.30 * engine_score + 0.60 * simplicity_score - 0.35 * risk_penalty + 12
-    elif elo <= 2200:
-        score = 0.55 * engine_score + 0.35 * simplicity_score - 0.20 * risk_penalty + 8
+    if elo < 1800:
+        score = 0.42 * engine_score + 0.48 * simplicity_score - 0.32 * risk_penalty + 10
+    elif elo < 2600:
+        score = 0.64 * engine_score + 0.26 * simplicity_score - 0.18 * risk_penalty + 8
     else:
-        score = 0.82 * engine_score + 0.12 * simplicity_score - 0.08 * risk_penalty + 4
+        score = 0.86 * engine_score + 0.10 * simplicity_score - 0.08 * risk_penalty + 6
     return _clamp(round(score), 0, 100)
 
 
