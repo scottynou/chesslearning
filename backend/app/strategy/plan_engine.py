@@ -167,6 +167,19 @@ def get_plan_recommendations(
         "eliteHumanization": elo >= 2800,
         "humanizationMode": "gm_practical" if elo >= 2800 else "standard",
         "humanSeed": human_seed_for(fen, move_history),
+        "fen": fen,
+        "phaseKey": phase_display["key"],
+        "phaseStatus": phase_status,
+        "openingState": opening_state,
+        "openingSafetyMode": should_apply_opening_safety(
+            phase_display=phase_display,
+            phase_status=phase_status,
+            opening_state=opening_state,
+            move_history=move_history,
+            player_turn=player_turn,
+            position_score=score_from_side_to_move(engine_candidates),
+            mating_danger=mate_danger_from_side_to_move(engine_candidates),
+        ),
     }
     strong_human_profile = strong_human_profile_for(accuracy_profile, opponent_strength)
     if player_turn and visible_merged and should_shape_for_human_accuracy(phase_display, phase_status, opening_state):
@@ -319,6 +332,7 @@ def get_plan_recommendations(
             "humanizationMode": accuracy_profile.get("humanizationMode"),
             "selectedEngineRank": engine_rank_for(primary_move),
             "antiPerfectionApplied": anti_perfection_applied_for(primary_move, visible_merged, accuracy_profile),
+            "openingSafetyMode": accuracy_profile.get("openingSafetyMode"),
             "humanSeed": accuracy_profile.get("humanSeed"),
             "multipv": engine_profile["multipv"],
             "movetimeMs": engine_profile["movetimeMs"],
@@ -558,6 +572,23 @@ def should_shape_for_human_accuracy(phase_display: dict[str, Any], phase_status:
     return phase_status in {"adapted", "fallback"} or opening_state in {"recoverable", "abandoned"}
 
 
+def should_apply_opening_safety(
+    *,
+    phase_display: dict[str, Any],
+    phase_status: str,
+    opening_state: str,
+    move_history: list[str],
+    player_turn: bool,
+    position_score: int,
+    mating_danger: str,
+) -> bool:
+    if not player_turn or phase_display.get("key") != "opening":
+        return False
+    if len(move_history) > 12 or mating_danger == "critical" or position_score <= -90:
+        return False
+    return phase_status in {"fallback", "adapted"} or opening_state in {"recoverable", "abandoned"}
+
+
 def accuracy_profile_for(
     *,
     board: chess.Board,
@@ -591,6 +622,7 @@ def accuracy_profile_for(
     phase_key = str(phase_display.get("key", "opening"))
     opponent_delta = int((opponent_strength or {}).get("suggestedBoostDelta") or 0)
     opponent_level = str((opponent_strength or {}).get("level", "none"))
+    planless_opening_fallback = phase_key == "opening" and phase_status == "fallback" and opening_state == "recoverable"
 
     if mating_danger == "critical" or position_score <= -260:
         return {
@@ -624,7 +656,7 @@ def accuracy_profile_for(
             "drawPressure": draw_pressure,
             "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
         }
-    if phase_status in {"adapted", "fallback"} or opening_state in {"recoverable", "abandoned"} or position_score <= -90:
+    if phase_status == "adapted" or opening_state == "abandoned" or (phase_status == "fallback" and not planless_opening_fallback) or position_score <= -90:
         return {
             "mode": "pressure",
             **bands["pressure"],
@@ -933,6 +965,7 @@ def human_accuracy_sort_score(item: dict[str, Any], profile: dict[str, Any]) -> 
         + plan_fit * weights[1]
         + simplicity * weights[2]
         + engine_score * weights[0]
+        + opening_safety_adjustment_for(item, profile)
         + draw_avoidance_bonus(item, profile)
         + deterministic_human_variation(item, profile)
         - risk * 0.50
@@ -945,6 +978,66 @@ def human_accuracy_sort_score(item: dict[str, Any], profile: dict[str, Any]) -> 
 
 def elite_humanization_enabled(profile: dict[str, Any]) -> bool:
     return bool(profile.get("eliteHumanization")) or int(profile.get("targetElo") or 0) >= 2800
+
+
+def opening_safety_adjustment_for(item: dict[str, Any], profile: dict[str, Any]) -> float:
+    if not profile.get("openingSafetyMode"):
+        return 0.0
+    fen = str(profile.get("fen") or "")
+    move_uci = str(item.get("moveUci") or "")
+    try:
+        board = chess.Board(fen)
+        move = chess.Move.from_uci(move_uci)
+    except ValueError:
+        return 0.0
+    if move not in board.legal_moves:
+        return 0.0
+
+    piece = board.piece_at(move.from_square)
+    if piece is None:
+        return 0.0
+
+    target_elo = int(profile.get("targetElo") or 1500)
+    strictness = 1.0 if target_elo < 1800 else 0.72 if target_elo < 2600 else 0.38
+    bonus = 0.0
+    penalty = 0.0
+    to_square = chess.square_name(move.to_square)
+    from_square = chess.square_name(move.from_square)
+    gives_check = board.gives_check(move)
+    is_capture = board.is_capture(move)
+
+    if board.is_castling(move):
+        bonus += 34
+    if piece.piece_type == chess.PAWN and to_square in {"d4", "e4", "d5", "e5"}:
+        bonus += 30
+    elif piece.piece_type == chess.PAWN and to_square in {"c4", "c5"}:
+        bonus += 20
+    if _is_natural_opening_development(board, move, piece):
+        bonus += 26
+    if piece.piece_type in {chess.KNIGHT, chess.BISHOP} and chess.square_file(move.to_square) in {0, 7}:
+        penalty += 46
+    if piece.piece_type == chess.PAWN and from_square[0] in {"a", "h"} and not is_capture and not gives_check:
+        penalty += 42
+    if piece.piece_type == chess.QUEEN and board.fullmove_number <= 8 and not is_capture and not gives_check:
+        penalty += 26
+    if item.get("source") in {"plan", "plan_and_engine"}:
+        bonus += 18
+    if is_capture and int(item.get("tacticalRisk") or 0) <= 18:
+        bonus += 8
+
+    return bonus - penalty * strictness
+
+
+def _is_natural_opening_development(board: chess.Board, move: chess.Move, piece: chess.Piece) -> bool:
+    if piece.piece_type not in {chess.KNIGHT, chess.BISHOP}:
+        return False
+    home_rank = 0 if piece.color == chess.WHITE else 7
+    if chess.square_rank(move.from_square) != home_rank or board.fullmove_number > 12:
+        return False
+    to_file = chess.square_file(move.to_square)
+    if to_file in {0, 7}:
+        return False
+    return True
 
 
 def elite_viable_candidates(candidates: list[dict[str, Any]], profile: dict[str, Any]) -> list[dict[str, Any]]:

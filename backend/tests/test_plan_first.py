@@ -407,6 +407,25 @@ def test_accuracy_profile_follows_selected_hidden_elo() -> None:
     assert accuracy_profile_for(**common, elo=3000)["target"] == 92
 
 
+def test_planless_opening_fallback_stays_normal_until_real_pressure() -> None:
+    from app.strategy.plan_engine import accuracy_profile_for
+
+    profile = accuracy_profile_for(
+        board=chess.Board(),
+        phase_display={"key": "opening"},
+        phase_status="fallback",
+        opening_state="recoverable",
+        engine_candidates=[SimpleNamespace(eval_cp=35, mate_in=None)],
+        move_history=[],
+        player_turn=True,
+        opponent_strength={"level": "none", "suggestedBoostDelta": 0},
+        elo=1500,
+    )
+
+    assert profile["mode"] == "normal"
+    assert profile["target"] == 80
+
+
 def test_accuracy_bands_are_distinct_for_three_player_profiles() -> None:
     from app.strategy.plan_engine import accuracy_bands_for_elo
 
@@ -623,6 +642,136 @@ def test_solid_1500_profile_rejects_unnecessary_tactical_risk() -> None:
     )
 
     assert shaped[0]["moveUci"] == "g1f3"
+
+
+def test_solid_1500_opening_safety_rejects_early_rook_pawn_push() -> None:
+    from app.strategy.plan_engine import accuracy_bands_for_elo, shape_recommendations_for_accuracy
+
+    early_flank_push = {
+        "moveUci": "h2h4",
+        "source": "engine",
+        "engineRank": 15,
+        "planFitScore": 35,
+        "engineScore": 92,
+        "beginnerSimplicityScore": 58,
+        "tacticalRisk": 13,
+        "finalCoachScore": 84,
+        "warning": None,
+        "candidate": {"evalCp": 40},
+    }
+    central_move = {
+        "moveUci": "e2e4",
+        "source": "engine",
+        "engineRank": 1,
+        "planFitScore": 35,
+        "engineScore": 86,
+        "beginnerSimplicityScore": 76,
+        "tacticalRisk": 12,
+        "finalCoachScore": 78,
+        "warning": None,
+        "candidate": {"evalCp": 30},
+    }
+
+    shaped = shape_recommendations_for_accuracy(
+        [early_flank_push, central_move],
+        {
+            "mode": "normal",
+            "targetElo": 1500,
+            "fen": chess.STARTING_FEN,
+            "openingSafetyMode": True,
+            **accuracy_bands_for_elo(1500)["normal"],
+        },
+    )
+
+    assert shaped[0]["moveUci"] == "e2e4"
+
+
+def test_strong_2000_opening_safety_rejects_knight_to_rim() -> None:
+    from app.strategy.plan_engine import accuracy_bands_for_elo, shape_recommendations_for_accuracy
+
+    board = chess.Board()
+    for move in ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "f8c5"]:
+        board.push_uci(move)
+    rim_knight = {
+        "moveUci": "b1a3",
+        "source": "engine",
+        "engineRank": 15,
+        "planFitScore": 35,
+        "engineScore": 92,
+        "beginnerSimplicityScore": 66,
+        "tacticalRisk": 13,
+        "finalCoachScore": 84,
+        "warning": None,
+        "candidate": {"evalCp": 42},
+    }
+    natural_development = {
+        "moveUci": "b1c3",
+        "source": "engine",
+        "engineRank": 4,
+        "planFitScore": 35,
+        "engineScore": 90,
+        "beginnerSimplicityScore": 76,
+        "tacticalRisk": 14,
+        "finalCoachScore": 82,
+        "warning": None,
+        "candidate": {"evalCp": 34},
+    }
+
+    shaped = shape_recommendations_for_accuracy(
+        [rim_knight, natural_development],
+        {
+            "mode": "normal",
+            "targetElo": 2000,
+            "fen": board.fen(),
+            "openingSafetyMode": True,
+            **accuracy_bands_for_elo(2000)["normal"],
+        },
+    )
+
+    assert shaped[0]["moveUci"] == "b1c3"
+
+
+def test_elite_3000_opening_safety_prefers_human_central_play_over_flank_noise() -> None:
+    from app.strategy.plan_engine import accuracy_bands_for_elo, shape_recommendations_for_accuracy
+
+    early_flank_push = {
+        "moveUci": "h2h4",
+        "source": "engine",
+        "engineRank": 8,
+        "planFitScore": 35,
+        "engineScore": 92,
+        "beginnerSimplicityScore": 58,
+        "tacticalRisk": 13,
+        "finalCoachScore": 86,
+        "warning": None,
+        "candidate": {"evalCp": 60},
+    }
+    central_gm_move = {
+        "moveUci": "d2d4",
+        "source": "engine",
+        "engineRank": 2,
+        "planFitScore": 35,
+        "engineScore": 98,
+        "beginnerSimplicityScore": 64,
+        "tacticalRisk": 23,
+        "finalCoachScore": 88,
+        "warning": None,
+        "candidate": {"evalCp": 90},
+    }
+
+    shaped = shape_recommendations_for_accuracy(
+        [early_flank_push, central_gm_move],
+        {
+            "mode": "normal",
+            "targetElo": 3000,
+            "humanSeed": 123,
+            "fen": chess.STARTING_FEN,
+            "openingSafetyMode": True,
+            **accuracy_bands_for_elo(3000)["normal"],
+        },
+    )
+
+    assert shaped[0]["moveUci"] == "d2d4"
 
 
 def test_elite_engine_search_profile_uses_large_free_local_multipv() -> None:
