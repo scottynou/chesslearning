@@ -1018,6 +1018,8 @@ def opening_safety_adjustment_for(item: dict[str, Any], profile: dict[str, Any])
         penalty += 46
     if piece.piece_type == chess.PAWN and from_square[0] in {"a", "h"} and not is_capture and not gives_check:
         penalty += 42
+    if piece.piece_type == chess.PAWN and from_square[0] == "f" and not is_capture and not gives_check:
+        penalty += 32
     if piece.piece_type == chess.QUEEN and board.fullmove_number <= 8 and not is_capture and not gives_check:
         penalty += 26
     if item.get("source") in {"plan", "plan_and_engine"}:

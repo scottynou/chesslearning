@@ -731,6 +731,48 @@ def test_strong_2000_opening_safety_rejects_knight_to_rim() -> None:
     assert shaped[0]["moveUci"] == "b1c3"
 
 
+def test_strong_2000_opening_safety_rejects_early_f_pawn_push() -> None:
+    from app.strategy.plan_engine import accuracy_bands_for_elo, shape_recommendations_for_accuracy
+
+    early_f_pawn = {
+        "moveUci": "f2f4",
+        "source": "engine",
+        "engineRank": 10,
+        "planFitScore": 35,
+        "engineScore": 93,
+        "beginnerSimplicityScore": 58,
+        "tacticalRisk": 13,
+        "finalCoachScore": 86,
+        "warning": None,
+        "candidate": {"evalCp": 42},
+    }
+    central_move = {
+        "moveUci": "d2d4",
+        "source": "engine",
+        "engineRank": 2,
+        "planFitScore": 35,
+        "engineScore": 92,
+        "beginnerSimplicityScore": 72,
+        "tacticalRisk": 14,
+        "finalCoachScore": 82,
+        "warning": None,
+        "candidate": {"evalCp": 34},
+    }
+
+    shaped = shape_recommendations_for_accuracy(
+        [early_f_pawn, central_move],
+        {
+            "mode": "normal",
+            "targetElo": 2000,
+            "fen": chess.STARTING_FEN,
+            "openingSafetyMode": True,
+            **accuracy_bands_for_elo(2000)["normal"],
+        },
+    )
+
+    assert shaped[0]["moveUci"] == "d2d4"
+
+
 def test_elite_3000_opening_safety_prefers_human_central_play_over_flank_noise() -> None:
     from app.strategy.plan_engine import accuracy_bands_for_elo, shape_recommendations_for_accuracy
 
