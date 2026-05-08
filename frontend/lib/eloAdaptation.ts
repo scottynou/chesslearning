@@ -37,7 +37,7 @@ export const HUMAN_PROFILE_SETTINGS: Record<
     label: "Elite humaine 3000",
     shortLabel: "3000",
     baseElo: 3000,
-    description: "Inspire des meilleurs humains : ultra fort, mais pas robotique."
+    description: "GM pratique : tres fort, moins machine dans les positions calmes."
   }
 };
 

@@ -31,7 +31,9 @@ def weights_for_elo(elo: int) -> EloWeights:
         return EloWeights(0.68, 0.12, 0.18, 0.20)
     if elo < 2600:
         return EloWeights(0.80, 0.10, 0.10, 0.12)
-    return EloWeights(0.88, 0.08, 0.06, 0.09)
+    if elo < 3200:
+        return EloWeights(0.72, 0.14, 0.10, 0.10)
+    return EloWeights(0.96, 0.02, 0.01, 0.02)
 
 
 def rank_candidates(fen: str, lines: list[EngineLine], elo: int, max_moves: int) -> list[CandidateMove]:
@@ -79,14 +81,23 @@ def rank_candidates(fen: str, lines: list[EngineLine], elo: int, max_moves: int)
             )
         )
 
-    sorted_candidates = sorted(
-        weighted,
-        key=lambda candidate: (
-            -candidate.coach_score,
-            candidate.stockfish_rank,
-            -candidate.engine_score,
-        ),
-    )[: max(1, min(10, max_moves))]
+    if elo >= 3200:
+        sorted_candidates = sorted(
+            weighted,
+            key=lambda candidate: (
+                candidate.stockfish_rank,
+                -candidate.engine_score,
+            ),
+        )[: max(1, min(10, max_moves))]
+    else:
+        sorted_candidates = sorted(
+            weighted,
+            key=lambda candidate: (
+                -candidate.coach_score,
+                candidate.stockfish_rank,
+                -candidate.engine_score,
+            ),
+        )[: max(1, min(10, max_moves))]
 
     return [
         candidate.model_copy(update={"rank": index + 1})
@@ -173,8 +184,10 @@ def compute_human_likelihood(elo: int, engine_score: int, simplicity_score: int,
         score = 0.42 * engine_score + 0.48 * simplicity_score - 0.32 * risk_penalty + 10
     elif elo < 2600:
         score = 0.64 * engine_score + 0.26 * simplicity_score - 0.18 * risk_penalty + 8
+    elif elo < 3200:
+        score = 0.70 * engine_score + 0.22 * simplicity_score - 0.12 * risk_penalty + 8
     else:
-        score = 0.86 * engine_score + 0.10 * simplicity_score - 0.08 * risk_penalty + 6
+        score = 0.96 * engine_score + 0.03 * simplicity_score - 0.04 * risk_penalty + 3
     return _clamp(round(score), 0, 100)
 
 

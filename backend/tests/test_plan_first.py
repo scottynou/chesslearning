@@ -404,7 +404,7 @@ def test_accuracy_profile_follows_selected_hidden_elo() -> None:
 
     assert accuracy_profile_for(**common, elo=1500)["target"] == 80
     assert accuracy_profile_for(**common, elo=2000)["target"] == 86
-    assert accuracy_profile_for(**common, elo=3000)["target"] == 96
+    assert accuracy_profile_for(**common, elo=3000)["target"] == 92
 
 
 def test_accuracy_bands_are_distinct_for_three_player_profiles() -> None:
@@ -412,7 +412,9 @@ def test_accuracy_bands_are_distinct_for_three_player_profiles() -> None:
 
     assert accuracy_bands_for_elo(1500)["normal"] == {"target": 80, "min": 72, "max": 88, "planTolerance": 4}
     assert accuracy_bands_for_elo(2000)["normal"] == {"target": 86, "min": 80, "max": 93, "planTolerance": 3}
-    assert accuracy_bands_for_elo(3000)["normal"] == {"target": 96, "min": 94, "max": 99, "planTolerance": 0}
+    assert accuracy_bands_for_elo(3000)["normal"] == {"target": 92, "min": 86, "max": 96, "planTolerance": 4}
+    assert accuracy_bands_for_elo(3000)["elite_pressure"] == {"target": 97, "min": 94, "max": 100, "planTolerance": 0}
+    assert accuracy_bands_for_elo(3000)["survival"] == {"target": 99, "min": 96, "max": 100, "planTolerance": 0}
 
 
 def test_elite_profile_can_prefer_grandmaster_practical_move_over_perfect_engine_move() -> None:
@@ -433,23 +435,158 @@ def test_elite_profile_can_prefer_grandmaster_practical_move_over_perfect_engine
     grandmaster_practical_move = {
         "moveUci": "g1f3",
         "source": "engine",
-        "engineRank": 3,
-        "planFitScore": 35,
-        "engineScore": 96,
+        "engineRank": 5,
+        "planFitScore": 78,
+        "engineScore": 89,
         "beginnerSimplicityScore": 86,
         "tacticalRisk": 8,
-        "finalCoachScore": 88,
+        "finalCoachScore": 84,
         "warning": None,
-        "candidate": {"evalCp": 152},
+        "candidate": {"evalCp": 92},
     }
 
     shaped = shape_recommendations_for_accuracy(
         [perfect_engine_move, grandmaster_practical_move],
-        {"mode": "normal", **accuracy_bands_for_elo(3000)["normal"]},
+        {"mode": "normal", "targetElo": 3000, "humanSeed": 123, **accuracy_bands_for_elo(3000)["normal"]},
     )
 
     assert shaped[0]["moveUci"] == "g1f3"
-    assert shaped[0]["humanAccuracyEstimate"] >= 96
+    assert shaped[0]["humanAccuracyEstimate"] < 94
+
+
+def test_elite_profile_keeps_best_move_when_survival_is_required() -> None:
+    from app.strategy.plan_engine import accuracy_bands_for_elo, shape_recommendations_for_accuracy
+
+    best_engine_move = {
+        "moveUci": "d1h5",
+        "source": "engine",
+        "engineRank": 1,
+        "planFitScore": 35,
+        "engineScore": 100,
+        "beginnerSimplicityScore": 48,
+        "tacticalRisk": 38,
+        "finalCoachScore": 96,
+        "warning": None,
+        "candidate": {"evalCp": -320},
+    }
+    human_looking_move = {
+        "moveUci": "g1f3",
+        "source": "engine",
+        "engineRank": 3,
+        "planFitScore": 82,
+        "engineScore": 96,
+        "beginnerSimplicityScore": 88,
+        "tacticalRisk": 8,
+        "finalCoachScore": 89,
+        "warning": None,
+        "candidate": {"evalCp": -480},
+    }
+
+    shaped = shape_recommendations_for_accuracy(
+        [human_looking_move, best_engine_move],
+        {"mode": "survival", "targetElo": 3000, "humanSeed": 123, **accuracy_bands_for_elo(3000)["survival"]},
+    )
+
+    assert shaped[0]["moveUci"] == "d1h5"
+
+
+def test_elite_profile_rejects_unsafe_or_below_threshold_practical_move() -> None:
+    from app.strategy.plan_engine import accuracy_bands_for_elo, shape_recommendations_for_accuracy
+
+    perfect_engine_move = {
+        "moveUci": "d1a4",
+        "source": "engine",
+        "engineRank": 1,
+        "planFitScore": 35,
+        "engineScore": 100,
+        "beginnerSimplicityScore": 55,
+        "tacticalRisk": 8,
+        "finalCoachScore": 90,
+        "warning": None,
+        "candidate": {"evalCp": 180},
+    }
+    risky_human_move = {
+        "moveUci": "f3g5",
+        "source": "engine",
+        "engineRank": 3,
+        "planFitScore": 82,
+        "engineScore": 92,
+        "beginnerSimplicityScore": 84,
+        "tacticalRisk": 46,
+        "finalCoachScore": 88,
+        "warning": None,
+        "candidate": {"evalCp": 118},
+    }
+    safe_practical_move = {
+        "moveUci": "g1f3",
+        "source": "engine",
+        "engineRank": 4,
+        "planFitScore": 78,
+        "engineScore": 88,
+        "beginnerSimplicityScore": 82,
+        "tacticalRisk": 10,
+        "finalCoachScore": 84,
+        "warning": None,
+        "candidate": {"evalCp": 86},
+    }
+    below_threshold_move = {
+        "moveUci": "b1c3",
+        "source": "plan_and_engine",
+        "engineRank": 5,
+        "planFitScore": 94,
+        "engineScore": 84,
+        "beginnerSimplicityScore": 90,
+        "tacticalRisk": 6,
+        "finalCoachScore": 86,
+        "warning": None,
+        "candidate": {"evalCp": 54},
+    }
+
+    shaped = shape_recommendations_for_accuracy(
+        [perfect_engine_move, risky_human_move, safe_practical_move, below_threshold_move],
+        {"mode": "normal", "targetElo": 3000, "humanSeed": 123, **accuracy_bands_for_elo(3000)["normal"]},
+    )
+
+    assert shaped[0]["moveUci"] == "g1f3"
+    assert shaped[1]["moveUci"] != "f3g5"
+    assert shaped[0]["moveUci"] != "b1c3"
+
+
+def test_elite_humanization_is_deterministic_for_same_seed() -> None:
+    from app.strategy.plan_engine import accuracy_bands_for_elo, shape_recommendations_for_accuracy
+
+    items = [
+        {
+            "moveUci": "d1a4",
+            "source": "engine",
+            "engineRank": 1,
+            "planFitScore": 35,
+            "engineScore": 100,
+            "beginnerSimplicityScore": 55,
+            "tacticalRisk": 8,
+            "finalCoachScore": 90,
+            "warning": None,
+            "candidate": {"evalCp": 180},
+        },
+        {
+            "moveUci": "g1f3",
+            "source": "engine",
+            "engineRank": 3,
+            "planFitScore": 80,
+            "engineScore": 91,
+            "beginnerSimplicityScore": 84,
+            "tacticalRisk": 10,
+            "finalCoachScore": 86,
+            "warning": None,
+            "candidate": {"evalCp": 108},
+        },
+    ]
+    profile = {"mode": "normal", "targetElo": 3000, "humanSeed": 98765, **accuracy_bands_for_elo(3000)["normal"]}
+
+    first = shape_recommendations_for_accuracy(items, profile)
+    second = shape_recommendations_for_accuracy(items, profile)
+
+    assert [item["moveUci"] for item in first] == [item["moveUci"] for item in second]
 
 
 def test_solid_1500_profile_rejects_unnecessary_tactical_risk() -> None:
@@ -493,9 +630,52 @@ def test_elite_engine_search_profile_uses_large_free_local_multipv() -> None:
 
     profile = engine_search_profile_for_elo(3000, {"technical_limit": 5})
 
-    assert profile["selectionMode"] == "elite_human"
+    assert profile["selectionMode"] == "elite_human_practical"
     assert profile["multipv"] == 30
     assert profile["minDepth"] >= 14
+
+
+def test_rank_candidates_keeps_3200_as_pure_stockfish_order() -> None:
+    from app.elo_ranker import rank_candidates
+
+    candidates = rank_candidates(
+        chess.STARTING_FEN,
+        [
+            EngineLine(2, "d2d4", 80, None, ["d2d4", "d7d5"]),
+            EngineLine(1, "g1f3", 60, None, ["g1f3", "g8f6"]),
+        ],
+        elo=3200,
+        max_moves=2,
+    )
+
+    assert candidates[0].move_uci == "g1f3"
+    assert candidates[0].stockfish_rank == 1
+
+
+def test_elite_plan_recommendations_expose_local_humanization_details(monkeypatch) -> None:
+    import app.strategy.plan_engine as plan_engine
+
+    monkeypatch.setattr(plan_engine, "StockfishEngine", lambda: FakePlanStockfish())
+    client = TestClient(app)
+    response = client.post(
+        "/plan-recommendations",
+        json={
+            "fen": chess.STARTING_FEN,
+            "selectedPlanId": None,
+            "userSide": "white",
+            "elo": 3000,
+            "moveHistoryUci": [],
+            "maxMoves": 5,
+            "engineDepth": 1,
+        },
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["technicalDetails"]["selectionMode"] == "elite_human_practical"
+    assert data["technicalDetails"]["humanizationMode"] == "gm_practical"
+    assert isinstance(data["technicalDetails"]["humanSeed"], int)
+    assert data["aiRerankStatus"]["fallbackReason"] == "elite_humanization_local_only"
 
 
 def test_ai_rerank_prompt_uses_strong_human_profile_without_1200() -> None:

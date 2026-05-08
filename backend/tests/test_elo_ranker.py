@@ -7,7 +7,8 @@ from app.stockfish_engine import EngineLine
 def test_weights_for_elo_steps() -> None:
     assert weights_for_elo(1500).engine_weight == 0.68
     assert weights_for_elo(2000).engine_weight == 0.80
-    assert weights_for_elo(3000).engine_weight == 0.88
+    assert weights_for_elo(3000).engine_weight == 0.72
+    assert weights_for_elo(3200).engine_weight == 0.96
 
 
 def test_coach_score_formula() -> None:

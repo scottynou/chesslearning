@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 from typing import Any
 
@@ -160,6 +161,13 @@ def get_plan_recommendations(
         opponent_strength=opponent_strength,
         elo=elo,
     )
+    accuracy_profile = {
+        **accuracy_profile,
+        "targetElo": elo,
+        "eliteHumanization": elo >= 2800,
+        "humanizationMode": "gm_practical" if elo >= 2800 else "standard",
+        "humanSeed": human_seed_for(fen, move_history),
+    }
     strong_human_profile = strong_human_profile_for(accuracy_profile, opponent_strength)
     if player_turn and visible_merged and should_shape_for_human_accuracy(phase_display, phase_status, opening_state):
         visible_merged = shape_recommendations_for_accuracy(visible_merged, accuracy_profile)
@@ -177,15 +185,24 @@ def get_plan_recommendations(
         "fallbackReason": "opponent_turn_or_no_visible_choices" if opponent_turn else "not_enough_choices",
     }
     if player_turn and visible_recommendations and not game_over:
-        visible_recommendations, ai_rerank_status = rerank_recommendations(
-            fen=fen,
-            selected_plan=active_plan,
-            phase=phase,
-            opening_state=opening_state,
-            move_history=move_history,
-            recommendations=visible_recommendations,
-            strong_human_profile=strong_human_profile,
-        )
+        if accuracy_profile.get("eliteHumanization"):
+            ai_rerank_status = {
+                "provider": "local",
+                "model": None,
+                "status": "disabled",
+                "latencyMs": 0,
+                "fallbackReason": "elite_humanization_local_only",
+            }
+        else:
+            visible_recommendations, ai_rerank_status = rerank_recommendations(
+                fen=fen,
+                selected_plan=active_plan,
+                phase=phase,
+                opening_state=opening_state,
+                move_history=move_history,
+                recommendations=visible_recommendations,
+                strong_human_profile=strong_human_profile,
+            )
         if should_shape_for_human_accuracy(phase_display, phase_status, opening_state):
             visible_recommendations = shape_recommendations_for_accuracy(visible_recommendations, accuracy_profile)
         visible_recommendations = decorate_recommendations(
@@ -299,6 +316,10 @@ def get_plan_recommendations(
             "targetElo": elo,
             "accuracyBand": accuracy_profile.get("mode"),
             "selectionMode": engine_profile["selectionMode"],
+            "humanizationMode": accuracy_profile.get("humanizationMode"),
+            "selectedEngineRank": engine_rank_for(primary_move),
+            "antiPerfectionApplied": anti_perfection_applied_for(primary_move, visible_merged, accuracy_profile),
+            "humanSeed": accuracy_profile.get("humanSeed"),
             "multipv": engine_profile["multipv"],
             "movetimeMs": engine_profile["movetimeMs"],
             "detectedOpeningId": detected_plan.get("id") if detected_plan else None,
@@ -378,7 +399,7 @@ def engine_search_profile_for_elo(elo: int, level_settings: dict[str, Any]) -> d
     if elo >= 2800:
         technical_limit = min(10, max(base_limit, 8))
         return {
-            "selectionMode": "elite_human",
+            "selectionMode": "elite_human_practical",
             "technicalLimit": technical_limit,
             "safetyWindow": min(10, max(technical_limit, 10)),
             "multipv": 30,
@@ -670,14 +691,14 @@ def accuracy_bands_for_elo(elo: int) -> dict[str, dict[str, int]]:
             "survival": {"target": 98, "min": 94, "max": 100, "planTolerance": 0},
         }
     return {
-        "normal": {"target": 96, "min": 94, "max": 99, "planTolerance": 0},
-        "favorable": {"target": 95, "min": 92, "max": 99, "planTolerance": 0},
-        "pressure": {"target": 98, "min": 95, "max": 100, "planTolerance": 0},
-        "strong_pressure": {"target": 98, "min": 96, "max": 100, "planTolerance": 0},
-        "elite_pressure": {"target": 99, "min": 97, "max": 100, "planTolerance": 0},
-        "draw_warning": {"target": 97, "min": 94, "max": 100, "planTolerance": 0},
-        "draw_critical": {"target": 98, "min": 95, "max": 100, "planTolerance": 0},
-        "conversion": {"target": 96, "min": 93, "max": 100, "planTolerance": 0},
+        "normal": {"target": 92, "min": 86, "max": 96, "planTolerance": 4},
+        "favorable": {"target": 90, "min": 85, "max": 95, "planTolerance": 4},
+        "pressure": {"target": 95, "min": 91, "max": 99, "planTolerance": 1},
+        "strong_pressure": {"target": 96, "min": 92, "max": 100, "planTolerance": 1},
+        "elite_pressure": {"target": 97, "min": 94, "max": 100, "planTolerance": 0},
+        "draw_warning": {"target": 95, "min": 90, "max": 99, "planTolerance": 1},
+        "draw_critical": {"target": 97, "min": 94, "max": 100, "planTolerance": 0},
+        "conversion": {"target": 93, "min": 88, "max": 97, "planTolerance": 2},
         "survival": {"target": 99, "min": 96, "max": 100, "planTolerance": 0},
     }
 
@@ -784,21 +805,28 @@ def shape_recommendations_for_accuracy(items: list[dict[str, Any]], profile: dic
 
     minimum = int(profile.get("min", 78))
     plan_tolerance = int(profile.get("planTolerance", 4))
-    viable = [
-        item
-        for item in candidates
-        if int(item.get("engineScore") or 0) >= minimum
-        or (
-            plan_tolerance > 0
-            and int(item.get("planFitScore") or 0) >= 90
-            and int(item.get("engineScore") or 0) >= minimum - plan_tolerance
-            and int(item.get("tacticalRisk") or 0) <= 22
-        )
-    ]
+    if elite_humanization_enabled(profile):
+        viable = elite_viable_candidates(candidates, profile)
+    else:
+        viable = [
+            item
+            for item in candidates
+            if int(item.get("engineScore") or 0) >= minimum
+            or (
+                plan_tolerance > 0
+                and int(item.get("planFitScore") or 0) >= 90
+                and int(item.get("engineScore") or 0) >= minimum - plan_tolerance
+                and int(item.get("tacticalRisk") or 0) <= 22
+            )
+        ]
     if not viable:
         viable = sorted(candidates, key=lambda item: -int(item.get("engineScore") or 0))[: max(1, min(3, len(candidates)))]
 
-    ordered = sorted(viable, key=lambda item: human_accuracy_sort_score(item, profile), reverse=True)
+    selection_profile = {
+        **profile,
+        "antiPerfectionAvailable": elite_practical_alternative_exists(viable, profile),
+    }
+    ordered = sorted(viable, key=lambda item: human_accuracy_sort_score(item, selection_profile), reverse=True)
     remaining = [
         item
         for item in candidates
@@ -826,8 +854,19 @@ def human_accuracy_sort_score(item: dict[str, Any], profile: dict[str, Any]) -> 
     maximum = int(profile.get("max", 94))
     mode = str(profile.get("mode", "normal"))
     plan_tolerance = int(profile.get("planTolerance", 4))
+    elite_humanization = elite_humanization_enabled(profile)
 
-    if mode == "draw_break":
+    if elite_humanization and mode == "normal":
+        over_penalty = 1.85
+        under_penalty = 5.4
+        distance_penalty = 1.12
+        weights = (0.24, 0.26, 0.14, 0.24)
+    elif elite_humanization and mode == "conversion":
+        over_penalty = 1.20
+        under_penalty = 5.0
+        distance_penalty = 0.95
+        weights = (0.30, 0.20, 0.10, 0.24)
+    elif mode == "draw_break":
         over_penalty = 0.10
         under_penalty = 4.8
         distance_penalty = 0.55
@@ -854,20 +893,23 @@ def human_accuracy_sort_score(item: dict[str, Any], profile: dict[str, Any]) -> 
         weights = (0.31, 0.20, 0.08, 0.18)
 
     in_band_bonus = 26 if minimum <= engine_score <= maximum else 0
-    engine_rank = int(item.get("engineRank") or 99)
-    if mode in {"pressure", "draw_break"}:
+    engine_rank = engine_rank_for(item) or 99
+    anti_perfection_available = bool(profile.get("antiPerfectionAvailable"))
+    if elite_humanization and anti_perfection_available and mode in {"normal", "conversion"}:
+        top_engine_bonus = 0
+    elif mode in {"pressure", "draw_break"}:
         top_engine_bonus = 8 if engine_rank == 1 and engine_score >= minimum else 0
     elif mode == "conversion":
         top_engine_bonus = 5 if engine_rank == 1 and minimum <= engine_score <= maximum else 0
     else:
         top_engine_bonus = 4 if engine_rank == 1 and minimum <= engine_score <= maximum else 0
-    elite_practical_bonus = (
-        7
-        if minimum >= 94
-        and 2 <= engine_rank <= 4
-        and minimum <= engine_score <= maximum
-        and risk <= 18
-        else 0
+    elite_practical_bonus = elite_practical_bonus_for(
+        engine_rank=engine_rank,
+        engine_score=engine_score,
+        plan_fit=plan_fit,
+        simplicity=simplicity,
+        risk=risk,
+        profile=profile,
     )
     plan_bonus = (
         10
@@ -876,6 +918,11 @@ def human_accuracy_sort_score(item: dict[str, Any], profile: dict[str, Any]) -> 
         and engine_score >= minimum - plan_tolerance
         and risk <= 22
         else 0
+    )
+    anti_perfection_penalty = anti_perfection_penalty_for(
+        engine_rank=engine_rank,
+        engine_score=engine_score,
+        profile=profile,
     )
     return (
         in_band_bonus
@@ -887,11 +934,147 @@ def human_accuracy_sort_score(item: dict[str, Any], profile: dict[str, Any]) -> 
         + simplicity * weights[2]
         + engine_score * weights[0]
         + draw_avoidance_bonus(item, profile)
+        + deterministic_human_variation(item, profile)
         - risk * 0.50
         - abs(engine_score - target) * distance_penalty
         - max(0, minimum - engine_score) * under_penalty
         - max(0, engine_score - maximum) * over_penalty
+        - anti_perfection_penalty
     )
+
+
+def elite_humanization_enabled(profile: dict[str, Any]) -> bool:
+    return bool(profile.get("eliteHumanization")) or int(profile.get("targetElo") or 0) >= 2800
+
+
+def elite_viable_candidates(candidates: list[dict[str, Any]], profile: dict[str, Any]) -> list[dict[str, Any]]:
+    minimum = int(profile.get("min", 86))
+    mode = str(profile.get("mode", "normal"))
+    hard_floor = [item for item in candidates if int(item.get("engineScore") or 0) >= minimum]
+    if not hard_floor:
+        return []
+
+    risk_ceiling = 45 if mode in {"pressure", "draw_break"} else 30 if mode == "conversion" else 34
+    safe = [
+        item
+        for item in hard_floor
+        if int(item.get("tacticalRisk") or 0) <= risk_ceiling
+        or (mode in {"pressure", "draw_break"} and engine_rank_for(item) == 1)
+    ]
+    if safe:
+        return safe
+
+    return sorted(
+        hard_floor,
+        key=lambda item: (
+            -int(item.get("engineScore") or 0),
+            engine_rank_for(item) or 99,
+            int(item.get("tacticalRisk") or 0),
+        ),
+    )[:1]
+
+
+def elite_practical_alternative_exists(items: list[dict[str, Any]], profile: dict[str, Any]) -> bool:
+    if not elite_humanization_enabled(profile) or str(profile.get("mode", "normal")) not in {"normal", "conversion"}:
+        return False
+
+    top = next((item for item in items if engine_rank_for(item) == 1), None)
+    if top is None:
+        return False
+
+    minimum = int(profile.get("min", 86))
+    top_score = int(top.get("engineScore") or 0)
+    mode = str(profile.get("mode", "normal"))
+    acceptable_drop = 14 if mode == "normal" else 10
+    for item in items:
+        rank = engine_rank_for(item) or 99
+        engine_score = int(item.get("engineScore") or 0)
+        if (
+            2 <= rank <= 6
+            and engine_score >= minimum
+            and engine_score >= top_score - acceptable_drop
+            and int(item.get("tacticalRisk") or 0) <= 22
+        ):
+            return True
+    return False
+
+
+def elite_practical_bonus_for(
+    *,
+    engine_rank: int,
+    engine_score: int,
+    plan_fit: int,
+    simplicity: int,
+    risk: int,
+    profile: dict[str, Any],
+) -> float:
+    minimum = int(profile.get("min", 90))
+    maximum = int(profile.get("max", 94))
+    mode = str(profile.get("mode", "normal"))
+    if elite_humanization_enabled(profile) and mode in {"normal", "conversion"}:
+        if not (2 <= engine_rank <= 6 and minimum <= engine_score <= maximum and risk <= 22):
+            return 0.0
+        rank_bonus = {2: 15, 3: 18, 4: 16, 5: 12, 6: 8}.get(engine_rank, 0)
+        plan_bonus = 4 if plan_fit >= 70 else 0
+        simplicity_bonus = 4 if simplicity >= 70 else 0
+        return float(rank_bonus + plan_bonus + simplicity_bonus)
+    if minimum >= 94 and 2 <= engine_rank <= 4 and minimum <= engine_score <= maximum and risk <= 18:
+        return 7.0
+    return 0.0
+
+
+def anti_perfection_penalty_for(*, engine_rank: int, engine_score: int, profile: dict[str, Any]) -> float:
+    mode = str(profile.get("mode", "normal"))
+    if (
+        not elite_humanization_enabled(profile)
+        or not profile.get("antiPerfectionAvailable")
+        or mode not in {"normal", "conversion"}
+        or engine_rank != 1
+    ):
+        return 0.0
+    maximum = int(profile.get("max", 96))
+    base = 18 if mode == "normal" else 10
+    return float(base + max(0, engine_score - maximum) * 0.9)
+
+
+def deterministic_human_variation(item: dict[str, Any], profile: dict[str, Any]) -> float:
+    if not elite_humanization_enabled(profile) or str(profile.get("mode", "normal")) not in {"normal", "conversion"}:
+        return 0.0
+    seed = int(profile.get("humanSeed") or 0)
+    move = str(item.get("moveUci") or "")
+    digest = hashlib.sha256(f"{seed}:{move}".encode("utf-8")).hexdigest()
+    bucket = int(digest[:8], 16) % 2001
+    return (bucket - 1000) / 1000.0 * 1.2
+
+
+def human_seed_for(fen: str, move_history: list[str]) -> int:
+    payload = f"{fen}|{' '.join(move_history)}"
+    return int(hashlib.sha256(payload.encode("utf-8")).hexdigest()[:8], 16)
+
+
+def engine_rank_for(item: dict[str, Any] | None) -> int | None:
+    if not item:
+        return None
+    value = item.get("engineRank")
+    if value is None and isinstance(item.get("candidate"), dict):
+        value = item["candidate"].get("stockfishRank")
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def anti_perfection_applied_for(
+    primary_move: dict[str, Any] | None,
+    candidates: list[dict[str, Any]],
+    profile: dict[str, Any],
+) -> bool:
+    if not elite_humanization_enabled(profile) or str(profile.get("mode", "normal")) not in {"normal", "conversion"}:
+        return False
+    selected_rank = engine_rank_for(primary_move)
+    if selected_rank is None or selected_rank == 1:
+        return False
+    return any(engine_rank_for(item) == 1 and int(item.get("engineScore") or 0) >= int(profile.get("min", 86)) for item in candidates)
 
 
 def draw_avoidance_bonus(item: dict[str, Any], profile: dict[str, Any]) -> float:

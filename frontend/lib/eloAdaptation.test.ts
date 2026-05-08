@@ -4,6 +4,7 @@ import {
   baseEloForProfile,
   effectiveElo,
   freshEloTrendState,
+  HUMAN_PROFILE_SETTINGS,
   nextAdaptiveBoost,
   nextStablePlyCount,
   normalizeBaseElo,
@@ -38,6 +39,8 @@ describe("eloAdaptation", () => {
     expect(baseEloForProfile("lambda")).toBe(1500);
     expect(baseEloForProfile("strong")).toBe(2000);
     expect(baseEloForProfile("veryStrong")).toBe(3000);
+    expect(HUMAN_PROFILE_SETTINGS.veryStrong.description).toContain("GM pratique");
+    expect(HUMAN_PROFILE_SETTINGS.veryStrong.description).toContain("moins machine");
     expect(normalizeHumanProfile("unknown")).toBe("strong");
   });
 
