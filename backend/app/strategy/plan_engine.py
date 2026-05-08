@@ -1008,6 +1008,8 @@ def opening_safety_adjustment_for(item: dict[str, Any], profile: dict[str, Any])
 
     if board.is_castling(move):
         bonus += 34
+    if _is_canonical_first_opening_move(board, move):
+        bonus += 40
     if piece.piece_type == chess.PAWN and to_square in {"d4", "e4", "d5", "e5"}:
         bonus += 30
     elif piece.piece_type == chess.PAWN and to_square in {"c4", "c5"}:
@@ -1040,6 +1042,14 @@ def _is_natural_opening_development(board: chess.Board, move: chess.Move, piece:
     if to_file in {0, 7}:
         return False
     return True
+
+
+def _is_canonical_first_opening_move(board: chess.Board, move: chess.Move) -> bool:
+    if board.fullmove_number != 1:
+        return False
+    if board.turn == chess.WHITE:
+        return move.uci() in {"e2e4", "d2d4", "c2c4", "g1f3"}
+    return move.uci() in {"e7e5", "d7d5", "c7c5", "g8f6"}
 
 
 def elite_viable_candidates(candidates: list[dict[str, Any]], profile: dict[str, Any]) -> list[dict[str, Any]]:

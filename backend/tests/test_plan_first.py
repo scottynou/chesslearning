@@ -816,6 +816,49 @@ def test_elite_3000_opening_safety_prefers_human_central_play_over_flank_noise()
     assert shaped[0]["moveUci"] == "d2d4"
 
 
+def test_elite_3000_opening_safety_prefers_canonical_first_move_over_offbeat_development() -> None:
+    from app.strategy.plan_engine import accuracy_bands_for_elo, shape_recommendations_for_accuracy
+
+    offbeat_development = {
+        "moveUci": "b1c3",
+        "source": "engine",
+        "engineRank": 7,
+        "planFitScore": 35,
+        "engineScore": 96,
+        "beginnerSimplicityScore": 72,
+        "tacticalRisk": 31,
+        "finalCoachScore": 88,
+        "warning": None,
+        "candidate": {"evalCp": 70},
+    }
+    canonical_move = {
+        "moveUci": "d2d4",
+        "source": "engine",
+        "engineRank": 2,
+        "planFitScore": 35,
+        "engineScore": 98,
+        "beginnerSimplicityScore": 64,
+        "tacticalRisk": 23,
+        "finalCoachScore": 88,
+        "warning": None,
+        "candidate": {"evalCp": 90},
+    }
+
+    shaped = shape_recommendations_for_accuracy(
+        [offbeat_development, canonical_move],
+        {
+            "mode": "normal",
+            "targetElo": 3000,
+            "humanSeed": 123,
+            "fen": chess.STARTING_FEN,
+            "openingSafetyMode": True,
+            **accuracy_bands_for_elo(3000)["normal"],
+        },
+    )
+
+    assert shaped[0]["moveUci"] == "d2d4"
+
+
 def test_elite_engine_search_profile_uses_large_free_local_multipv() -> None:
     from app.strategy.plan_engine import engine_search_profile_for_elo
 
