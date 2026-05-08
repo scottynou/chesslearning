@@ -150,6 +150,8 @@ def get_plan_recommendations(
         player_turn=player_turn,
         engine_depth=engine_depth,
     )
+    position_score = score_from_side_to_move(engine_candidates)
+    mating_danger = mate_danger_from_side_to_move(engine_candidates)
     accuracy_profile = accuracy_profile_for(
         board=board,
         phase_display=phase_display,
@@ -161,11 +163,23 @@ def get_plan_recommendations(
         opponent_strength=opponent_strength,
         elo=elo,
     )
+    elite_selection_boost = elite_selection_boost_for(
+        elo=elo,
+        mode=str(accuracy_profile.get("mode", "normal")),
+        position_score=position_score,
+        mating_danger=mating_danger,
+        opponent_strength=opponent_strength,
+        draw_pressure=accuracy_profile.get("drawPressure"),
+    )
     accuracy_profile = {
         **accuracy_profile,
         "targetElo": elo,
         "eliteHumanization": elo >= 2800,
-        "humanizationMode": "gm_practical" if elo >= 2800 else "standard",
+        "humanizationMode": elite_selection_mode_for(elite_selection_boost) if elo >= 2800 else "standard",
+        "eliteSelectionBoost": elite_selection_boost,
+        "eliteSelectionMode": elite_selection_mode_for(elite_selection_boost),
+        "positionScore": position_score,
+        "matingDanger": mating_danger,
         "humanSeed": human_seed_for(fen, move_history),
         "fen": fen,
         "phaseKey": phase_display["key"],
@@ -177,8 +191,8 @@ def get_plan_recommendations(
             opening_state=opening_state,
             move_history=move_history,
             player_turn=player_turn,
-            position_score=score_from_side_to_move(engine_candidates),
-            mating_danger=mate_danger_from_side_to_move(engine_candidates),
+            position_score=position_score,
+            mating_danger=mating_danger,
         ),
     }
     strong_human_profile = strong_human_profile_for(accuracy_profile, opponent_strength)
@@ -330,6 +344,8 @@ def get_plan_recommendations(
             "accuracyBand": accuracy_profile.get("mode"),
             "selectionMode": engine_profile["selectionMode"],
             "humanizationMode": accuracy_profile.get("humanizationMode"),
+            "eliteSelectionBoost": accuracy_profile.get("eliteSelectionBoost"),
+            "eliteSelectionMode": accuracy_profile.get("eliteSelectionMode"),
             "selectedEngineRank": engine_rank_for(primary_move),
             "antiPerfectionApplied": anti_perfection_applied_for(primary_move, visible_merged, accuracy_profile),
             "openingSafetyMode": accuracy_profile.get("openingSafetyMode"),
@@ -735,6 +751,40 @@ def accuracy_bands_for_elo(elo: int) -> dict[str, dict[str, int]]:
     }
 
 
+def elite_selection_boost_for(
+    *,
+    elo: int,
+    mode: str,
+    position_score: int,
+    mating_danger: str,
+    opponent_strength: dict[str, Any] | None,
+    draw_pressure: dict[str, Any] | None,
+) -> int:
+    if elo < 2800:
+        return 0
+
+    opponent_delta = int((opponent_strength or {}).get("suggestedBoostDelta") or 0)
+    opponent_level = str((opponent_strength or {}).get("level", "none"))
+    draw_level = str((draw_pressure or {}).get("level", "none"))
+    if mating_danger == "critical" or mode == "survival" or position_score <= -260:
+        return 3
+    if draw_level == "critical" or opponent_level == "elite" or opponent_delta >= 200 or position_score <= -160:
+        return 2
+    if mode in {"pressure", "draw_break"} or opponent_level == "strong" or opponent_delta >= 150 or position_score <= -90:
+        return 1
+    return 0
+
+
+def elite_selection_mode_for(boost: int) -> str:
+    if boost >= 3:
+        return "gm_survival"
+    if boost == 2:
+        return "gm_precision"
+    if boost == 1:
+        return "gm_guard"
+    return "gm_practical"
+
+
 def strong_human_profile_for(profile: dict[str, Any], opponent_strength: dict[str, Any] | None) -> dict[str, Any]:
     mode = str(profile.get("mode", "normal"))
     if mode not in {"normal", "pressure", "draw_break", "survival"}:
@@ -887,8 +937,24 @@ def human_accuracy_sort_score(item: dict[str, Any], profile: dict[str, Any]) -> 
     mode = str(profile.get("mode", "normal"))
     plan_tolerance = int(profile.get("planTolerance", 4))
     elite_humanization = elite_humanization_enabled(profile)
+    elite_selection_boost = int(profile.get("eliteSelectionBoost") or 0)
 
-    if elite_humanization and mode == "normal":
+    if elite_humanization and elite_selection_boost >= 3:
+        over_penalty = 0.02
+        under_penalty = 9.0
+        distance_penalty = 0.22
+        weights = (0.68, 0.06, 0.02, 0.24)
+    elif elite_humanization and elite_selection_boost == 2:
+        over_penalty = 0.05
+        under_penalty = 7.2
+        distance_penalty = 0.35
+        weights = (0.58, 0.10, 0.03, 0.24)
+    elif elite_humanization and elite_selection_boost == 1:
+        over_penalty = 0.08
+        under_penalty = 5.8
+        distance_penalty = 0.50
+        weights = (0.48, 0.14, 0.05, 0.22)
+    elif elite_humanization and mode == "normal":
         over_penalty = 1.85
         under_penalty = 5.4
         distance_penalty = 1.12
@@ -927,7 +993,13 @@ def human_accuracy_sort_score(item: dict[str, Any], profile: dict[str, Any]) -> 
     in_band_bonus = 26 if minimum <= engine_score <= maximum else 0
     engine_rank = engine_rank_for(item) or 99
     anti_perfection_available = bool(profile.get("antiPerfectionAvailable"))
-    if elite_humanization and anti_perfection_available and mode in {"normal", "conversion"}:
+    if elite_humanization and elite_selection_boost >= 3:
+        top_engine_bonus = {1: 38, 2: 16}.get(engine_rank, 0)
+    elif elite_humanization and elite_selection_boost == 2:
+        top_engine_bonus = {1: 26, 2: 16, 3: 8}.get(engine_rank, 0)
+    elif elite_humanization and elite_selection_boost == 1:
+        top_engine_bonus = {1: 16, 2: 11, 3: 6, 4: 2}.get(engine_rank, 0)
+    elif elite_humanization and anti_perfection_available and mode in {"normal", "conversion"}:
         top_engine_bonus = 0
     elif mode in {"pressure", "draw_break"}:
         top_engine_bonus = 8 if engine_rank == 1 and engine_score >= minimum else 0
@@ -967,7 +1039,8 @@ def human_accuracy_sort_score(item: dict[str, Any], profile: dict[str, Any]) -> 
         + engine_score * weights[0]
         + opening_safety_adjustment_for(item, profile)
         + draw_avoidance_bonus(item, profile)
-        + deterministic_human_variation(item, profile)
+        + elite_crisis_adjustment_for(item, profile)
+        + (0.0 if elite_selection_boost > 0 else deterministic_human_variation(item, profile))
         - risk * 0.50
         - abs(engine_score - target) * distance_penalty
         - max(0, minimum - engine_score) * under_penalty
@@ -1059,6 +1132,29 @@ def elite_viable_candidates(candidates: list[dict[str, Any]], profile: dict[str,
     if not hard_floor:
         return []
 
+    boost = int(profile.get("eliteSelectionBoost") or 0)
+    if boost > 0:
+        rank_limit = 2 if boost >= 3 else 3 if boost == 2 else 4
+        score_floor = max(minimum, 96 if boost >= 3 else 94 if boost == 2 else minimum)
+        risk_ceiling = 26 if boost >= 3 else 30 if boost == 2 else 34
+        strict = [
+            item
+            for item in hard_floor
+            if (engine_rank_for(item) or 99) <= rank_limit
+            and int(item.get("engineScore") or 0) >= score_floor
+            and (int(item.get("tacticalRisk") or 0) <= risk_ceiling or engine_rank_for(item) == 1)
+        ]
+        if strict:
+            return strict
+        return sorted(
+            hard_floor,
+            key=lambda item: (
+                engine_rank_for(item) or 99,
+                -int(item.get("engineScore") or 0),
+                int(item.get("tacticalRisk") or 0),
+            ),
+        )[: max(1, min(rank_limit, len(hard_floor)))]
+
     risk_ceiling = 45 if mode in {"pressure", "draw_break"} else 30 if mode == "conversion" else 34
     safe = [
         item
@@ -1081,6 +1177,8 @@ def elite_viable_candidates(candidates: list[dict[str, Any]], profile: dict[str,
 
 def elite_practical_alternative_exists(items: list[dict[str, Any]], profile: dict[str, Any]) -> bool:
     if not elite_humanization_enabled(profile) or str(profile.get("mode", "normal")) not in {"normal", "conversion"}:
+        return False
+    if int(profile.get("eliteSelectionBoost") or 0) > 0:
         return False
 
     top = next((item for item in items if engine_rank_for(item) == 1), None)
@@ -1113,6 +1211,8 @@ def elite_practical_bonus_for(
     risk: int,
     profile: dict[str, Any],
 ) -> float:
+    if int(profile.get("eliteSelectionBoost") or 0) > 0:
+        return 0.0
     minimum = int(profile.get("min", 90))
     maximum = int(profile.get("max", 94))
     mode = str(profile.get("mode", "normal"))
@@ -1128,10 +1228,32 @@ def elite_practical_bonus_for(
     return 0.0
 
 
+def elite_crisis_adjustment_for(item: dict[str, Any], profile: dict[str, Any]) -> float:
+    if not elite_humanization_enabled(profile):
+        return 0.0
+    boost = int(profile.get("eliteSelectionBoost") or 0)
+    if boost <= 0:
+        return 0.0
+
+    engine_rank = engine_rank_for(item) or 99
+    engine_score = int(item.get("engineScore") or 0)
+    risk = int(item.get("tacticalRisk") or 0)
+    if boost >= 3:
+        rank_bonus = {1: 54, 2: 22}.get(engine_rank, -70 if engine_rank > 2 else 0)
+        return float(rank_bonus + engine_score * 0.22 - risk * 1.15 - max(0, risk - 18) * 1.6)
+    if boost == 2:
+        rank_bonus = {1: 32, 2: 20, 3: 10}.get(engine_rank, -36 if engine_rank > 3 else 0)
+        return float(rank_bonus + engine_score * 0.13 - risk * 0.82 - max(0, risk - 22) * 1.1)
+
+    rank_bonus = {1: 18, 2: 14, 3: 8, 4: 3}.get(engine_rank, -18 if engine_rank > 4 else 0)
+    return float(rank_bonus + engine_score * 0.07 - risk * 0.62 - max(0, risk - 26) * 0.85)
+
+
 def anti_perfection_penalty_for(*, engine_rank: int, engine_score: int, profile: dict[str, Any]) -> float:
     mode = str(profile.get("mode", "normal"))
     if (
         not elite_humanization_enabled(profile)
+        or int(profile.get("eliteSelectionBoost") or 0) > 0
         or not profile.get("antiPerfectionAvailable")
         or mode not in {"normal", "conversion"}
         or engine_rank != 1
@@ -1144,6 +1266,8 @@ def anti_perfection_penalty_for(*, engine_rank: int, engine_score: int, profile:
 
 def deterministic_human_variation(item: dict[str, Any], profile: dict[str, Any]) -> float:
     if not elite_humanization_enabled(profile) or str(profile.get("mode", "normal")) not in {"normal", "conversion"}:
+        return 0.0
+    if int(profile.get("eliteSelectionBoost") or 0) > 0:
         return 0.0
     seed = int(profile.get("humanSeed") or 0)
     move = str(item.get("moveUci") or "")
@@ -1175,6 +1299,8 @@ def anti_perfection_applied_for(
     profile: dict[str, Any],
 ) -> bool:
     if not elite_humanization_enabled(profile) or str(profile.get("mode", "normal")) not in {"normal", "conversion"}:
+        return False
+    if int(profile.get("eliteSelectionBoost") or 0) > 0:
         return False
     selected_rank = engine_rank_for(primary_move)
     if selected_rank is None or selected_rank == 1:
@@ -1544,8 +1670,10 @@ def adaptive_signal_for(
 def score_from_side_to_move(engine_candidates: list[Any]) -> int:
     if not engine_candidates:
         return 0
-    candidate = engine_candidates[0]
+    candidate = top_stockfish_candidate(engine_candidates)
     eval_cp = getattr(candidate, "eval_cp", None)
+    if eval_cp is None and isinstance(candidate, dict):
+        eval_cp = candidate.get("evalCp")
     if eval_cp is None:
         return 0
     return int(eval_cp)
@@ -1554,12 +1682,39 @@ def score_from_side_to_move(engine_candidates: list[Any]) -> int:
 def mate_danger_from_side_to_move(engine_candidates: list[Any]) -> str:
     if not engine_candidates:
         return "none"
-    mate_in = getattr(engine_candidates[0], "mate_in", None)
+    candidate = top_stockfish_candidate(engine_candidates)
+    mate_in = getattr(candidate, "mate_in", None)
+    if mate_in is None and isinstance(candidate, dict):
+        mate_in = candidate.get("mateIn")
     if mate_in is None:
         return "none"
     if mate_in < 0:
         return "critical"
     return "winning"
+
+
+def top_stockfish_candidate(engine_candidates: list[Any]) -> Any:
+    return min(engine_candidates, key=stockfish_rank_value)
+
+
+def stockfish_rank_value(candidate: Any) -> int:
+    if isinstance(candidate, dict):
+        for key in ("stockfishRank", "stockfish_rank", "engineRank", "rank"):
+            value = candidate.get(key)
+            if value is not None:
+                try:
+                    return int(value)
+                except (TypeError, ValueError):
+                    return 99
+        return 99
+    for attr in ("stockfish_rank", "stockfishRank", "engine_rank", "rank"):
+        value = getattr(candidate, attr, None)
+        if value is not None:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return 99
+    return 99
 
 
 def fallback_move_score(board: chess.Board, move: chess.Move) -> int:

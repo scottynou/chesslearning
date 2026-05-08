@@ -234,6 +234,16 @@ def test_adaptive_signal_ignores_candidate_quality_without_opponent_pressure() -
     assert signal["suggestedBoostDelta"] == 0
 
 
+def test_position_pressure_uses_stockfish_rank_one_even_after_human_sort() -> None:
+    from app.strategy.plan_engine import mate_danger_from_side_to_move, score_from_side_to_move
+
+    human_sorted_first = SimpleNamespace(stockfish_rank=6, eval_cp=70, mate_in=None)
+    stockfish_best = SimpleNamespace(stockfish_rank=1, eval_cp=-180, mate_in=-4)
+
+    assert score_from_side_to_move([human_sorted_first, stockfish_best]) == -180
+    assert mate_danger_from_side_to_move([human_sorted_first, stockfish_best]) == "critical"
+
+
 def test_human_accuracy_shaping_prefers_strong_human_band() -> None:
     from app.strategy.plan_engine import shape_recommendations_for_accuracy
 
@@ -471,6 +481,138 @@ def test_elite_profile_can_prefer_grandmaster_practical_move_over_perfect_engine
 
     assert shaped[0]["moveUci"] == "g1f3"
     assert shaped[0]["humanAccuracyEstimate"] < 94
+
+
+def test_elite_selection_boosts_when_3000_cannot_raise_elo() -> None:
+    from app.strategy.plan_engine import elite_selection_boost_for, elite_selection_mode_for
+
+    stable_boost = elite_selection_boost_for(
+        elo=3000,
+        mode="normal",
+        position_score=40,
+        mating_danger="none",
+        opponent_strength={"level": "none", "suggestedBoostDelta": 0},
+        draw_pressure={"level": "none"},
+    )
+    guard_boost = elite_selection_boost_for(
+        elo=3000,
+        mode="pressure",
+        position_score=-110,
+        mating_danger="none",
+        opponent_strength={"level": "none", "suggestedBoostDelta": 0},
+        draw_pressure={"level": "none"},
+    )
+    precision_boost = elite_selection_boost_for(
+        elo=3000,
+        mode="pressure",
+        position_score=-170,
+        mating_danger="none",
+        opponent_strength={"level": "elite", "suggestedBoostDelta": 200},
+        draw_pressure={"level": "none"},
+    )
+    survival_boost = elite_selection_boost_for(
+        elo=3000,
+        mode="survival",
+        position_score=-320,
+        mating_danger="critical",
+        opponent_strength={"level": "none", "suggestedBoostDelta": 0},
+        draw_pressure={"level": "none"},
+    )
+
+    assert stable_boost == 0
+    assert elite_selection_mode_for(stable_boost) == "gm_practical"
+    assert guard_boost == 1
+    assert elite_selection_mode_for(guard_boost) == "gm_guard"
+    assert precision_boost == 2
+    assert elite_selection_mode_for(precision_boost) == "gm_precision"
+    assert survival_boost == 3
+    assert elite_selection_mode_for(survival_boost) == "gm_survival"
+
+
+def test_elite_precision_boost_rejects_rank_six_practical_move_under_pressure() -> None:
+    from app.strategy.plan_engine import accuracy_bands_for_elo, shape_recommendations_for_accuracy
+
+    best_engine_move = {
+        "moveUci": "d1h5",
+        "source": "engine",
+        "engineRank": 1,
+        "planFitScore": 35,
+        "engineScore": 100,
+        "beginnerSimplicityScore": 48,
+        "tacticalRisk": 18,
+        "finalCoachScore": 92,
+        "warning": None,
+        "candidate": {"evalCp": -170},
+    }
+    too_loose_practical_move = {
+        "moveUci": "g1f3",
+        "source": "plan_and_engine",
+        "engineRank": 6,
+        "planFitScore": 96,
+        "engineScore": 96,
+        "beginnerSimplicityScore": 92,
+        "tacticalRisk": 6,
+        "finalCoachScore": 99,
+        "warning": None,
+        "candidate": {"evalCp": -205},
+    }
+
+    shaped = shape_recommendations_for_accuracy(
+        [too_loose_practical_move, best_engine_move],
+        {
+            "mode": "pressure",
+            "targetElo": 3000,
+            "humanSeed": 123,
+            "eliteSelectionBoost": 2,
+            **accuracy_bands_for_elo(3000)["elite_pressure"],
+        },
+    )
+
+    assert shaped[0]["moveUci"] == "d1h5"
+    assert shaped[0]["engineRank"] == 1
+
+
+def test_elite_guard_boost_prefers_top_four_over_rank_six_when_position_slips() -> None:
+    from app.strategy.plan_engine import accuracy_bands_for_elo, shape_recommendations_for_accuracy
+
+    precise_move = {
+        "moveUci": "f1e2",
+        "source": "engine",
+        "engineRank": 2,
+        "planFitScore": 45,
+        "engineScore": 93,
+        "beginnerSimplicityScore": 64,
+        "tacticalRisk": 16,
+        "finalCoachScore": 88,
+        "warning": None,
+        "candidate": {"evalCp": -105},
+    }
+    loose_human_move = {
+        "moveUci": "b1c3",
+        "source": "plan_and_engine",
+        "engineRank": 6,
+        "planFitScore": 96,
+        "engineScore": 96,
+        "beginnerSimplicityScore": 90,
+        "tacticalRisk": 8,
+        "finalCoachScore": 99,
+        "warning": None,
+        "candidate": {"evalCp": -128},
+    }
+
+    shaped = shape_recommendations_for_accuracy(
+        [loose_human_move, precise_move],
+        {
+            "mode": "pressure",
+            "targetElo": 3000,
+            "humanSeed": 123,
+            "eliteSelectionBoost": 1,
+            **accuracy_bands_for_elo(3000)["pressure"],
+        },
+    )
+
+    assert shaped[0]["moveUci"] == "f1e2"
+    assert shaped[0]["engineRank"] == 2
 
 
 def test_elite_profile_keeps_best_move_when_survival_is_required() -> None:
@@ -908,6 +1050,8 @@ def test_elite_plan_recommendations_expose_local_humanization_details(monkeypatc
     assert response.status_code == 200
     assert data["technicalDetails"]["selectionMode"] == "elite_human_practical"
     assert data["technicalDetails"]["humanizationMode"] == "gm_practical"
+    assert data["technicalDetails"]["eliteSelectionBoost"] == 0
+    assert data["technicalDetails"]["eliteSelectionMode"] == "gm_practical"
     assert isinstance(data["technicalDetails"]["humanSeed"], int)
     assert data["aiRerankStatus"]["fallbackReason"] == "elite_humanization_local_only"
 
