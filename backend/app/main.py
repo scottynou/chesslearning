@@ -158,7 +158,10 @@ image_import_cache: MemoryCache[ImportPositionImageResponse] = MemoryCache(ttl_s
 
 @app.get("/health")
 def health() -> dict[str, bool | str]:
+    from .maia_engine import get_engine as get_maia_engine, is_enabled as maia_is_enabled
     stockfish_configured = bool(os.getenv("STOCKFISH_PATH") or shutil.which("stockfish") or os.path.exists("/usr/games/stockfish") or os.path.exists("/usr/bin/stockfish"))
+    lc0_path = os.getenv("LC0_PATH", "/opt/lc0/lc0")
+    weights_dir = os.getenv("MAIA_WEIGHTS_DIR", "/opt/maia-weights")
     return {
         "ok": True,
         "stockfishConfigured": stockfish_configured,
@@ -169,6 +172,10 @@ def health() -> dict[str, bool | str]:
         "imageImportModel": os.getenv("IMAGE_IMPORT_MODEL") or os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite"),
         "openaiConfigured": bool(os.getenv("OPENAI_API_KEY")),
         "geminiConfigured": bool(os.getenv("GEMINI_API_KEY")),
+        "maiaEnabled": maia_is_enabled(),
+        "maiaLc0Present": os.path.isfile(lc0_path) and os.access(lc0_path, os.X_OK),
+        "maiaWeights1500": os.path.isfile(f"{weights_dir}/maia-1500.pb.gz"),
+        "maiaWeights1900": os.path.isfile(f"{weights_dir}/maia-1900.pb.gz"),
     }
 
 
