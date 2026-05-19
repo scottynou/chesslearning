@@ -13,6 +13,7 @@ from ..ai_reranker import rerank_recommendations
 from ..beginner_notation import beginner_notation_for_uci
 from ..elo_ranker import rank_candidates
 from ..evaluation_label import evaluation_label
+from ..maia_engine import get_engine as get_maia_engine, is_enabled as maia_is_enabled
 from ..stockfish_engine import StockfishEngine
 from .endgame_coach import analyze_endgame
 from .middlegame_coach import analyze_middlegame
@@ -177,6 +178,13 @@ def get_plan_recommendations(
         opponent_strength=opponent_strength,
         draw_pressure=accuracy_profile.get("drawPressure"),
     )
+    maia_probabilities = _query_maia_probabilities(
+        fen=fen,
+        elo=elo,
+        human_profile=human_profile,
+        crisis_factor=float(accuracy_profile.get("crisisFactor") or 0.0),
+        engine_candidates=engine_candidates,
+    )
     accuracy_profile = {
         **accuracy_profile,
         "targetElo": elo,
@@ -193,6 +201,7 @@ def get_plan_recommendations(
         "openingState": opening_state,
         "coachStyle": coach_style,
         "styleModifiers": coach_style_modifiers(coach_style),
+        "maiaProbabilities": maia_probabilities,
         "openingSafetyMode": should_apply_opening_safety(
             phase_display=phase_display,
             phase_status=phase_status,
@@ -760,6 +769,49 @@ def accuracy_bands_for_profile(human_profile: str | None, elo: int) -> dict[str,
     }
 
 
+def _maia_level_for_profile(human_profile: str | None, elo: int) -> int:
+    """Mappe le profil humain vers le poids Maia le plus proche."""
+    if human_profile == "lambda":
+        return 1500
+    if human_profile == "veryStrong":
+        return 1900
+    if human_profile == "strong":
+        return 1900
+    if elo < 1700:
+        return 1500
+    if elo < 2200:
+        return 1900
+    return 1900
+
+
+def _query_maia_probabilities(
+    *,
+    fen: str,
+    elo: int,
+    human_profile: str | None,
+    crisis_factor: float,
+    engine_candidates: list[Any],
+) -> dict[str, float]:
+    """
+    Retourne {move_uci: probability} estime par Maia pour la position.
+    Vide quand Maia est desactive, indisponible, ou que la crise est trop
+    haute (en crise on veut le meilleur coup moteur, pas un coup humain).
+    """
+    if crisis_factor > 0.35:
+        return {}
+    if not maia_is_enabled():
+        return {}
+    if not engine_candidates:
+        return {}
+    level = _maia_level_for_profile(human_profile, elo)
+    try:
+        engine = get_maia_engine(level)
+        suggestions = engine.suggest(fen, top_n=18)
+    except Exception:  # noqa: BLE001
+        return {}
+    return {move.move_uci: move.probability for move in suggestions}
+
+
 def coach_style_modifiers(coach_style: str) -> dict[str, float]:
     """
     Modulateurs appliques au score final selon le style du coach.
@@ -1139,12 +1191,28 @@ def human_accuracy_sort_score(item: dict[str, Any], profile: dict[str, Any]) -> 
     )
     effective_distance_penalty = max(0.0, distance_penalty * (1.0 - distance_relax))
 
+    # Bonus Maia : si Maia connait ce coup avec une forte probabilite, on le
+    # favorise. C'est l'apport "vraiment humain" : Maia a vu des humains
+    # jouer ce coup dans des positions similaires. Attenue en crise pour ne
+    # pas contrarier la survie.
+    maia_probs = profile.get("maiaProbabilities") or {}
+    move_uci = str(item.get("moveUci") or "")
+    maia_prob = float(maia_probs.get(move_uci, 0.0))
+    # Bonus proportionnel a la proba (40 max), tempere par la crise, gele
+    # si le coup serait en dessous du minimum d'accuracy (pas de gaffe humaine).
+    maia_bonus = (
+        maia_prob * 40.0 * style_strength
+        if maia_prob > 0 and engine_score >= minimum - 4
+        else 0.0
+    )
+
     return (
         in_band_bonus
         + top_engine_bonus
         + elite_practical_bonus
         + plan_bonus
         + creative_rank_bonus
+        + maia_bonus
         + final_score * weights[3]
         + plan_fit * weights[1]
         + simplicity * (weights[2] + simplicity_style_bonus)
