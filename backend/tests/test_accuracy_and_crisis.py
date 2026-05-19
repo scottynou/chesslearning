@@ -1,5 +1,5 @@
 from app.accuracy_math import cp_to_win_percent, move_accuracy_percent
-from app.strategy.plan_engine import (
+from app.strategy.scoring_profile import (
     accuracy_bands_for_profile,
     coach_style_modifiers,
     compute_crisis_factor,

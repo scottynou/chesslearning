@@ -394,8 +394,9 @@ def test_elite_opponent_move_raises_accuracy_profile_immediately() -> None:
     )
 
     assert profile["mode"] == "pressure"
-    assert profile["target"] >= 96
-    assert profile["min"] >= 92
+    # Bandes recalibrees : elite_pressure pour strong (1800) cible 93
+    assert profile["target"] >= 90
+    assert profile["min"] >= 85
 
 
 def test_accuracy_profile_follows_selected_hidden_elo() -> None:
@@ -412,9 +413,10 @@ def test_accuracy_profile_follows_selected_hidden_elo() -> None:
         "opponent_strength": {"level": "none", "suggestedBoostDelta": 0},
     }
 
-    assert accuracy_profile_for(**common, elo=1500)["target"] == 80
-    assert accuracy_profile_for(**common, elo=2000)["target"] == 86
-    assert accuracy_profile_for(**common, elo=3000)["target"] == 92
+    # Cibles recalibrees vers 70/75/85% chess.com accuracy
+    assert accuracy_profile_for(**common, elo=1500)["target"] == 72
+    assert accuracy_profile_for(**common, elo=2000)["target"] == 79
+    assert accuracy_profile_for(**common, elo=3000)["target"] == 88
 
 
 def test_planless_opening_fallback_stays_normal_until_real_pressure() -> None:
@@ -433,16 +435,19 @@ def test_planless_opening_fallback_stays_normal_until_real_pressure() -> None:
     )
 
     assert profile["mode"] == "normal"
-    assert profile["target"] == 80
+    # Cible recalibree pour lambda (1500) : ~70% chess.com accuracy
+    assert profile["target"] == 72
 
 
 def test_accuracy_bands_are_distinct_for_three_player_profiles() -> None:
     from app.strategy.plan_engine import accuracy_bands_for_elo
 
-    assert accuracy_bands_for_elo(1500)["normal"] == {"target": 80, "min": 72, "max": 88, "planTolerance": 4}
-    assert accuracy_bands_for_elo(2000)["normal"] == {"target": 86, "min": 80, "max": 93, "planTolerance": 3}
-    assert accuracy_bands_for_elo(3000)["normal"] == {"target": 92, "min": 86, "max": 96, "planTolerance": 4}
-    assert accuracy_bands_for_elo(3000)["elite_pressure"] == {"target": 97, "min": 94, "max": 100, "planTolerance": 0}
+    # Bandes recalibrees (~70/75/85% chess.com accuracy targets) - cf
+    # scoring_profile.accuracy_bands_for_profile.
+    assert accuracy_bands_for_elo(1500)["normal"] == {"target": 72, "min": 64, "max": 80, "planTolerance": 5}
+    assert accuracy_bands_for_elo(2000)["normal"] == {"target": 79, "min": 71, "max": 86, "planTolerance": 4}
+    assert accuracy_bands_for_elo(3000)["normal"] == {"target": 88, "min": 82, "max": 93, "planTolerance": 4}
+    assert accuracy_bands_for_elo(3000)["elite_pressure"] == {"target": 96, "min": 92, "max": 99, "planTolerance": 1}
     assert accuracy_bands_for_elo(3000)["survival"] == {"target": 99, "min": 96, "max": 100, "planTolerance": 0}
 
 
@@ -695,7 +700,9 @@ def test_elite_profile_rejects_unsafe_or_below_threshold_practical_move() -> Non
         "source": "plan_and_engine",
         "engineRank": 5,
         "planFitScore": 94,
-        "engineScore": 84,
+        # Bandes recalibrees : min=82 pour veryStrong normal. On descend
+        # ce coup en dessous (78) pour qu'il reste vraiment sous le seuil.
+        "engineScore": 78,
         "beginnerSimplicityScore": 90,
         "tacticalRisk": 6,
         "finalCoachScore": 86,
