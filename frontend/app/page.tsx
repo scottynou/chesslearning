@@ -15,8 +15,10 @@ import { PlanFirstPanel } from "@/components/PlanFirstPanel";
 import { PlanSwitchModal } from "@/components/PlanSwitchModal";
 import { PostGameReview } from "@/components/PostGameReview";
 import { SavedGamesPanel } from "@/components/SavedGamesPanel";
+import { TacticalTrainingPanel } from "@/components/TacticalTrainingPanel";
 import { SideSelectionPanel } from "@/components/SideSelectionPanel";
 import { saveGame } from "@/lib/gameHistory";
+import { useI18n } from "@/lib/i18n";
 import { useAccuracySession } from "@/lib/useAccuracySession";
 import { getPlanRecommendations, importPositionImage, listAvailablePlans, requestBotMove } from "@/lib/api";
 import { canMoveInMode, gameStatus, isPromotionAttempt, tryMove } from "@/lib/chess";
@@ -1051,6 +1053,8 @@ export default function HomePage() {
   const [planSwitchOpen, setPlanSwitchOpen] = useState(false);
   const [mistakesOpen, setMistakesOpen] = useState(false);
   const [pgnImportOpen, setPgnImportOpen] = useState(false);
+  const [tacticalOpen, setTacticalOpen] = useState(false);
+  const { t, locale, setLocale } = useI18n();
   const lastSeenPlyForReview = useRef(0);
   const savedGameRef = useRef<string | null>(null);
   const gameOver = game.isGameOver();
@@ -2066,7 +2070,7 @@ export default function HomePage() {
               setSavedGamesOpen(true);
             }}
           >
-            Mes parties
+            {t("menu.myGames")}
           </button>
           <button
             type="button"
@@ -2076,7 +2080,7 @@ export default function HomePage() {
               setMistakesOpen(true);
             }}
           >
-            Mes erreurs récurrentes
+            {t("menu.recurringMistakes")}
           </button>
           <button
             type="button"
@@ -2086,7 +2090,17 @@ export default function HomePage() {
               setPgnImportOpen(true);
             }}
           >
-            Importer un PGN
+            {t("menu.importPgn")}
+          </button>
+          <button
+            type="button"
+            className="site-menu-link"
+            onClick={() => {
+              setMenuOpen(false);
+              setTacticalOpen(true);
+            }}
+          >
+            {t("menu.tacticalTraining")}
           </button>
           {appStage === "coach" && plans.length > 0 ? (
             <button
@@ -2097,9 +2111,26 @@ export default function HomePage() {
                 setPlanSwitchOpen(true);
               }}
             >
-              Changer de plan
+              {t("menu.changePlan")}
             </button>
           ) : null}
+          <div className="site-menu-locale">
+            <span>{t("menu.language")} :</span>
+            <button
+              type="button"
+              className={`site-menu-locale-btn ${locale === "fr" ? "is-active" : ""}`}
+              onClick={() => setLocale("fr")}
+            >
+              FR
+            </button>
+            <button
+              type="button"
+              className={`site-menu-locale-btn ${locale === "en" ? "is-active" : ""}`}
+              onClick={() => setLocale("en")}
+            >
+              EN
+            </button>
+          </div>
           {appStage === "side-selection" ? null : (
             <CoachUtilityMenu
               orientation={orientation}
@@ -2139,6 +2170,11 @@ export default function HomePage() {
       ) : null}
       {pgnImportOpen ? (
         <PgnImportModal onImport={importGameFromPgn} onClose={() => setPgnImportOpen(false)} />
+      ) : null}
+      {tacticalOpen ? (
+        <div className="post-game-review-overlay" role="dialog" aria-modal="true">
+          <TacticalTrainingPanel onClose={() => setTacticalOpen(false)} />
+        </div>
       ) : null}
       {imageImportError ? (
         <div className="image-import-toast" role="alert">

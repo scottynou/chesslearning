@@ -1048,6 +1048,26 @@ button:disabled { cursor: not-allowed; }
   margin-bottom: 0.45rem;
 }
 .site-menu-link:hover { background: #e2e8f0; }
+.site-menu-locale {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+  color: #475569;
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid #e2e8f0;
+}
+.site-menu-locale-btn {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.4rem;
+  padding: 0.2rem 0.55rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.78rem;
+}
+.site-menu-locale-btn.is-active { background: #2563eb; color: white; border-color: #1d4ed8; }
 .saved-games-panel {
   background: #ffffff;
   border-radius: 1.1rem;
@@ -1208,4 +1228,83 @@ button:disabled { cursor: not-allowed; }
   cursor: pointer;
 }
 .pgn-import-button:hover { background: #1d4ed8; }
+
+/* ---------- Tactical training ---------- */
+.tactical-panel {
+  background: #ffffff;
+  border-radius: 1.1rem;
+  padding: 1.2rem;
+  max-width: 30rem;
+  width: 100%;
+  max-height: 92vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.tactical-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.tactical-header h3 { font-size: 1.1rem; font-weight: 700; margin: 0; }
+.tactical-subtitle { font-size: 0.78rem; color: #64748b; margin: 0.15rem 0 0; }
+.tactical-stats {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  color: #475569;
+  background: #f1f5f9;
+  padding: 0.4rem 0.65rem;
+  border-radius: 0.5rem;
+}
+.tactical-todo { font-size: 0.85rem; font-weight: 600; color: #0f172a; margin: 0; }
+.tactical-board-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 0.4rem 0;
+}
+.tactical-hint {
+  background: #fef9c3;
+  border: 1px solid #fde68a;
+  padding: 0.55rem 0.75rem;
+  border-radius: 0.55rem;
+  font-size: 0.85rem;
+  color: #713f12;
+}
+.tactical-feedback {
+  padding: 0.6rem 0.8rem;
+  border-radius: 0.65rem;
+  font-size: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.tactical-feedback--ok { background: #dcfce7; border: 1px solid #86efac; color: #14532d; }
+.tactical-feedback--ko { background: #fee2e2; border: 1px solid #fca5a5; color: #7f1d1d; }
+.tactical-feedback code { background: rgba(0, 0, 0, 0.1); padding: 0.05rem 0.3rem; border-radius: 0.3rem; }
+.tactical-actions {
+  display: flex;
+  gap: 0.55rem;
+  justify-content: flex-end;
+}
+.tactical-primary {
+  background: #2563eb;
+  color: white;
+  border: none;
+  padding: 0.55rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tactical-primary:hover { background: #1d4ed8; }
+.tactical-secondary {
+  background: #f1f5f9;
+  color: #1e293b;
+  border: 1px solid #cbd5e1;
+  padding: 0.55rem 1rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+.tactical-secondary:hover { background: #e2e8f0; }
 

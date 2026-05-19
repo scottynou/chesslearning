@@ -1,4 +1,5 @@
 import { bandStatus, type AccuracySessionSummary } from "@/lib/accuracySession";
+import { useI18n } from "@/lib/i18n";
 
 type Props = {
   summary: AccuracySessionSummary;
@@ -6,6 +7,7 @@ type Props = {
 };
 
 export function AccuracyMeter({ summary, compact = false }: Props) {
+  const { t } = useI18n();
   if (summary.count === 0) return null;
   const value = summary.weightedAccuracy;
   // Si les samples sont invalides (toutes accuracies a 0 -> harmonic = 1),
@@ -25,7 +27,7 @@ export function AccuracyMeter({ summary, compact = false }: Props) {
         <span className="accuracy-meter__value">{value.toFixed(0)}%</span>
         <span className="accuracy-meter__divider" aria-hidden="true">|</span>
         <span className="accuracy-meter__target">
-          cible {summary.targetBand.min}–{summary.targetBand.max}%
+          {t("accuracy.target")} {summary.targetBand.min}–{summary.targetBand.max}%
         </span>
       </div>
       <div className="accuracy-meter__track" aria-hidden="true">
@@ -40,21 +42,9 @@ export function AccuracyMeter({ summary, compact = false }: Props) {
       </div>
       {!compact && lastSample ? (
         <div className="accuracy-meter__last">
-          Dernier coup : {Math.round(lastSample.accuracy)}% · {qualityLabel(lastSample.quality)}
+          {t("accuracy.lastMove")} : {Math.round(lastSample.accuracy)}% · {t(`quality.${lastSample.quality}`)}
         </div>
       ) : null}
     </div>
   );
-}
-
-function qualityLabel(quality: string): string {
-  const map: Record<string, string> = {
-    excellent: "Excellent",
-    good: "Bon",
-    playable: "Jouable",
-    inaccurate: "Imprécis",
-    mistake: "Erreur",
-    blunder: "Gaffe"
-  };
-  return map[quality] ?? quality;
 }
