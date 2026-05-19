@@ -12,6 +12,7 @@ SideToMove = Literal["white", "black"]
 Quality = Literal["excellent", "good", "playable", "inaccurate", "mistake", "blunder"]
 BotStyle = Literal["balanced", "safe", "aggressive", "solid", "educational"]
 SkillLevel = Literal["beginner", "intermediate", "pro"]
+HumanProfile = Literal["lambda", "strong", "veryStrong"]
 PlanPhase = Literal["opening", "transition", "middlegame", "endgame"]
 OpeningState = Literal["on_track", "recoverable", "completed", "abandoned"]
 PlanStatus = Literal["on_plan", "transposed", "opponent_deviated", "out_of_book", "plan_completed"]
@@ -378,6 +379,7 @@ class PlanRecommendationsRequest(BaseModel):
     user_side: SideToMove | None = Field(default=None, alias="userSide")
     elo: int = Field(default=1200, ge=600, le=3200)
     skill_level: SkillLevel | None = Field(default=None, alias="skillLevel")
+    human_profile: HumanProfile | None = Field(default=None, alias="humanProfile")
     move_history_uci: list[str] = Field(default_factory=list, alias="moveHistoryUci")
     max_moves: int = Field(default=10, alias="maxMoves", ge=1)
     engine_depth: int = Field(default=10, alias="engineDepth", ge=1, le=24)

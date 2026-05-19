@@ -1267,6 +1267,7 @@ export default function HomePage() {
       userSide: userSide === "both" ? null : userSide,
       elo: effectiveCoachElo,
       skillLevel: activeSkillLevel,
+      humanProfile,
       moveHistoryUci: historyUci,
       maxMoves: INTERNAL_MAX_MOVES,
       engineDepth: INTERNAL_ENGINE_DEPTH,

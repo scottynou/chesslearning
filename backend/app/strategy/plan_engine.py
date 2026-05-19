@@ -32,6 +32,7 @@ def get_plan_recommendations(
     elo: int,
     move_history: list[str],
     skill_level: str | None = None,
+    human_profile: str | None = None,
     max_moves: int = 10,
     engine_depth: int = 10,
     user_side: str | None = None,
@@ -162,6 +163,7 @@ def get_plan_recommendations(
         player_turn=player_turn,
         opponent_strength=opponent_strength,
         elo=elo,
+        human_profile=human_profile,
     )
     elite_selection_boost = elite_selection_boost_for(
         elo=elo,
@@ -616,6 +618,7 @@ def accuracy_profile_for(
     player_turn: bool,
     opponent_strength: dict[str, Any] | None = None,
     elo: int = 1600,
+    human_profile: str | None = None,
 ) -> dict[str, Any]:
     draw_pressure = draw_pressure_for(
         board=board,
@@ -623,7 +626,9 @@ def accuracy_profile_for(
         move_history=move_history,
         engine_candidates=engine_candidates,
     )
-    bands = accuracy_bands_for_elo(elo)
+    bands = accuracy_bands_for_profile(human_profile, elo)
+    resolved_profile = human_profile or ("lambda" if elo < 1700 else "strong" if elo < 2600 else "veryStrong")
+    base_opponent = opponent_strength or {"level": "none", "suggestedBoostDelta": 0}
 
     if not player_turn:
         return {
@@ -631,6 +636,8 @@ def accuracy_profile_for(
             **bands["normal"],
             "reason": "Hors tour joueur.",
             "drawPressure": draw_pressure,
+            "humanProfile": resolved_profile,
+            "crisisFactor": 0.0,
         }
 
     position_score = score_from_side_to_move(engine_candidates)
@@ -640,115 +647,131 @@ def accuracy_profile_for(
     opponent_level = str((opponent_strength or {}).get("level", "none"))
     planless_opening_fallback = phase_key == "opening" and phase_status == "fallback" and opening_state == "recoverable"
 
+    crisis_factor = compute_crisis_factor(position_score, mating_danger, draw_pressure)
+
+    def _build(mode: str, band_key: str, reason: str) -> dict[str, Any]:
+        selected = bands[band_key]
+        if crisis_factor > 0.0 and band_key != "survival":
+            survival = bands["survival"]
+            f = crisis_factor
+            selected = {
+                "target": round(selected["target"] * (1.0 - f) + survival["target"] * f),
+                "min": round(selected["min"] * (1.0 - f) + survival["min"] * f),
+                "max": round(selected["max"] * (1.0 - f) + survival["max"] * f),
+                "planTolerance": round(selected["planTolerance"] * (1.0 - f) + survival.get("planTolerance", 0) * f),
+            }
+        return {
+            "mode": mode,
+            **selected,
+            "reason": reason,
+            "drawPressure": draw_pressure,
+            "opponentStrength": base_opponent,
+            "humanProfile": resolved_profile,
+            "crisisFactor": crisis_factor,
+        }
+
     if mating_danger == "critical" or position_score <= -260:
-        return {
-            "mode": "survival",
-            **bands["survival"],
-            "reason": "Position critique : le meilleur coup moteur est autorise sans penalite.",
-            "drawPressure": draw_pressure,
-            "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
-        }
+        return _build("survival", "survival", "Position critique : le meilleur coup moteur est autorise sans penalite.")
     if draw_pressure["level"] == "critical":
-        return {
-            "mode": "draw_break",
-            **bands["draw_critical"],
-            "reason": "La position devient trop nulle : on cherche des coups precis qui gardent des chances de gain.",
-            "drawPressure": draw_pressure,
-            "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
-        }
+        return _build("draw_break", "draw_critical", "La position devient trop nulle : on cherche des coups precis qui gardent des chances de gain.")
     if opponent_delta >= 200 or opponent_level == "elite":
-        return {
-            "mode": "pressure",
-            **bands["elite_pressure"],
-            "reason": "L'adversaire joue proche de Stockfish : les conseils montent vers un humain tres fort.",
-            "drawPressure": draw_pressure,
-            "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
-        }
+        return _build("pressure", "elite_pressure", "L'adversaire joue proche de Stockfish : les conseils montent vers un humain tres fort.")
     if opponent_delta >= 150 or opponent_level == "strong":
-        return {
-            "mode": "pressure",
-            **bands["strong_pressure"],
-            "reason": "L'adversaire joue tres precis : le ranking devient plus exigeant tout de suite.",
-            "drawPressure": draw_pressure,
-            "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
-        }
+        return _build("pressure", "strong_pressure", "L'adversaire joue tres precis : le ranking devient plus exigeant tout de suite.")
     if phase_status == "adapted" or opening_state == "abandoned" or (phase_status == "fallback" and not planless_opening_fallback) or position_score <= -90:
-        return {
-            "mode": "pressure",
-            **bands["pressure"],
-            "reason": "Sous pression : on choisit un coup humain fort, pas un compromis mou.",
-            "drawPressure": draw_pressure,
-            "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
-        }
+        return _build("pressure", "pressure", "Sous pression : on choisit un coup humain fort, pas un compromis mou.")
     if draw_pressure["level"] == "warning":
-        return {
-            "mode": "draw_break",
-            **bands["draw_warning"],
-            "reason": "Risque de simplification vers nulle : on augmente la precision pour garder du jeu.",
-            "drawPressure": draw_pressure,
-            "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
-        }
+        return _build("draw_break", "draw_warning", "Risque de simplification vers nulle : on augmente la precision pour garder du jeu.")
     if phase_key == "endgame":
-        return {
-            "mode": "conversion",
-            **bands["conversion"],
-            "reason": "Finale : les coups doivent convertir proprement sans laisser filer la victoire.",
-            "drawPressure": draw_pressure,
-            "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
-        }
+        return _build("conversion", "conversion", "Finale : les coups doivent convertir proprement sans laisser filer la victoire.")
     if position_score >= 220:
+        return _build("normal", "favorable", "Position favorable : on convertit activement au lieu de relacher vers la nulle.")
+    return _build("normal", "normal", "Humain fort : viser la victoire avec un coup sain, pas forcement le top moteur automatique.")
+
+
+def accuracy_bands_for_profile(human_profile: str | None, elo: int) -> dict[str, dict[str, int]]:
+    """
+    Bandes d'accuracy cibles par profil humain.
+    lambda  → accuracy chess.com cible ~70% (max 75%)
+    strong  → accuracy chess.com cible ~75% (max 78%)
+    veryStrong → accuracy chess.com cible ~82-85% (max 85%)
+    En cas de crise (position perdante/nulle), le debridage progressif via
+    compute_crisis_factor interpolera ces bandes vers "survival" automatiquement.
+    """
+    profile = human_profile or ("lambda" if elo < 1700 else "strong" if elo < 2600 else "veryStrong")
+
+    if profile == "lambda":
         return {
-            "mode": "normal",
-            **bands["favorable"],
-            "reason": "Position favorable : on convertit activement au lieu de relacher vers la nulle.",
-            "drawPressure": draw_pressure,
-            "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
+            "normal":          {"target": 72, "min": 64, "max": 80, "planTolerance": 5},
+            "favorable":       {"target": 70, "min": 62, "max": 78, "planTolerance": 5},
+            "pressure":        {"target": 80, "min": 72, "max": 88, "planTolerance": 4},
+            "strong_pressure": {"target": 84, "min": 76, "max": 91, "planTolerance": 3},
+            "elite_pressure":  {"target": 88, "min": 80, "max": 94, "planTolerance": 2},
+            "draw_warning":    {"target": 82, "min": 74, "max": 90, "planTolerance": 3},
+            "draw_critical":   {"target": 90, "min": 83, "max": 96, "planTolerance": 2},
+            "conversion":      {"target": 76, "min": 68, "max": 84, "planTolerance": 4},
+            "survival":        {"target": 97, "min": 92, "max": 100, "planTolerance": 0},
         }
+
+    if profile == "strong":
+        return {
+            "normal":          {"target": 79, "min": 71, "max": 86, "planTolerance": 4},
+            "favorable":       {"target": 77, "min": 69, "max": 84, "planTolerance": 4},
+            "pressure":        {"target": 87, "min": 79, "max": 93, "planTolerance": 3},
+            "strong_pressure": {"target": 90, "min": 83, "max": 96, "planTolerance": 2},
+            "elite_pressure":  {"target": 93, "min": 87, "max": 98, "planTolerance": 1},
+            "draw_warning":    {"target": 89, "min": 82, "max": 95, "planTolerance": 2},
+            "draw_critical":   {"target": 93, "min": 87, "max": 98, "planTolerance": 1},
+            "conversion":      {"target": 83, "min": 75, "max": 90, "planTolerance": 3},
+            "survival":        {"target": 98, "min": 94, "max": 100, "planTolerance": 0},
+        }
+
+    # veryStrong (baseElo=3000 → elite humanization active ≥2800)
     return {
-        "mode": "normal",
-        **bands["normal"],
-        "reason": "Humain fort : viser la victoire avec un coup sain, pas forcement le top moteur automatique.",
-        "drawPressure": draw_pressure,
-        "opponentStrength": opponent_strength or {"level": "none", "suggestedBoostDelta": 0},
+        "normal":          {"target": 88, "min": 82, "max": 93, "planTolerance": 4},
+        "favorable":       {"target": 86, "min": 80, "max": 91, "planTolerance": 4},
+        "pressure":        {"target": 93, "min": 88, "max": 97, "planTolerance": 2},
+        "strong_pressure": {"target": 95, "min": 90, "max": 98, "planTolerance": 1},
+        "elite_pressure":  {"target": 96, "min": 92, "max": 99, "planTolerance": 1},
+        "draw_warning":    {"target": 93, "min": 88, "max": 97, "planTolerance": 2},
+        "draw_critical":   {"target": 96, "min": 91, "max": 99, "planTolerance": 1},
+        "conversion":      {"target": 91, "min": 85, "max": 95, "planTolerance": 2},
+        "survival":        {"target": 99, "min": 96, "max": 100, "planTolerance": 0},
     }
 
 
-def accuracy_bands_for_elo(elo: int) -> dict[str, dict[str, int]]:
-    if elo < 1800:
-        return {
-            "normal": {"target": 80, "min": 72, "max": 88, "planTolerance": 4},
-            "favorable": {"target": 78, "min": 72, "max": 88, "planTolerance": 4},
-            "pressure": {"target": 88, "min": 82, "max": 94, "planTolerance": 3},
-            "strong_pressure": {"target": 90, "min": 84, "max": 96, "planTolerance": 3},
-            "elite_pressure": {"target": 92, "min": 86, "max": 98, "planTolerance": 2},
-            "draw_warning": {"target": 89, "min": 83, "max": 95, "planTolerance": 3},
-            "draw_critical": {"target": 93, "min": 88, "max": 99, "planTolerance": 2},
-            "conversion": {"target": 84, "min": 78, "max": 92, "planTolerance": 3},
-            "survival": {"target": 97, "min": 92, "max": 100, "planTolerance": 0},
-        }
-    if elo < 2600:
-        return {
-            "normal": {"target": 86, "min": 80, "max": 93, "planTolerance": 3},
-            "favorable": {"target": 84, "min": 78, "max": 92, "planTolerance": 3},
-            "pressure": {"target": 92, "min": 87, "max": 97, "planTolerance": 2},
-            "strong_pressure": {"target": 94, "min": 89, "max": 98, "planTolerance": 2},
-            "elite_pressure": {"target": 96, "min": 92, "max": 99, "planTolerance": 1},
-            "draw_warning": {"target": 93, "min": 88, "max": 98, "planTolerance": 2},
-            "draw_critical": {"target": 96, "min": 91, "max": 100, "planTolerance": 1},
-            "conversion": {"target": 90, "min": 84, "max": 96, "planTolerance": 2},
-            "survival": {"target": 98, "min": 94, "max": 100, "planTolerance": 0},
-        }
-    return {
-        "normal": {"target": 92, "min": 86, "max": 96, "planTolerance": 4},
-        "favorable": {"target": 90, "min": 85, "max": 95, "planTolerance": 4},
-        "pressure": {"target": 95, "min": 91, "max": 99, "planTolerance": 1},
-        "strong_pressure": {"target": 96, "min": 92, "max": 100, "planTolerance": 1},
-        "elite_pressure": {"target": 97, "min": 94, "max": 100, "planTolerance": 0},
-        "draw_warning": {"target": 95, "min": 90, "max": 99, "planTolerance": 1},
-        "draw_critical": {"target": 97, "min": 94, "max": 100, "planTolerance": 0},
-        "conversion": {"target": 93, "min": 88, "max": 97, "planTolerance": 2},
-        "survival": {"target": 99, "min": 96, "max": 100, "planTolerance": 0},
-    }
+def compute_crisis_factor(
+    position_score: int,
+    mating_danger: str,
+    draw_pressure: dict[str, Any],
+) -> float:
+    """
+    Retourne un facteur 0.0 → 1.0 pour le debridage progressif.
+    0.0 = jeu normal avec caps d'accuracy et humanisation complète.
+    1.0 = situation critique, survie pure, humanisation désactivée.
+    Les bandes sont interpolées vers 'survival' proportionnellement.
+    """
+    if mating_danger == "critical":
+        return 1.0
+
+    if position_score >= -80:
+        base = 0.0
+    elif position_score >= -150:
+        # -80 à -150 : 0.0 → 0.25
+        base = ((-80) - position_score) / 70.0 * 0.25
+    elif position_score >= -260:
+        # -150 à -260 : 0.25 → 0.75
+        base = 0.25 + ((-150) - position_score) / 110.0 * 0.50
+    elif position_score >= -400:
+        # -260 à -400 : 0.75 → 1.0
+        base = 0.75 + ((-260) - position_score) / 140.0 * 0.25
+    else:
+        base = 1.0
+
+    draw_level = str((draw_pressure or {}).get("level", "none"))
+    draw_bonus = {"none": 0.0, "warning": 0.12, "critical": 0.28}.get(draw_level, 0.0)
+
+    return min(1.0, base + draw_bonus)
 
 
 def elite_selection_boost_for(
@@ -938,6 +961,8 @@ def human_accuracy_sort_score(item: dict[str, Any], profile: dict[str, Any]) -> 
     plan_tolerance = int(profile.get("planTolerance", 4))
     elite_humanization = elite_humanization_enabled(profile)
     elite_selection_boost = int(profile.get("eliteSelectionBoost") or 0)
+    human_profile = str(profile.get("humanProfile") or "strong")
+    crisis_factor = float(profile.get("crisisFactor") or 0.0)
 
     if elite_humanization and elite_selection_boost >= 3:
         over_penalty = 0.02
@@ -964,15 +989,46 @@ def human_accuracy_sort_score(item: dict[str, Any], profile: dict[str, Any]) -> 
         under_penalty = 5.0
         distance_penalty = 0.95
         weights = (0.30, 0.20, 0.10, 0.24)
+    elif human_profile == "lambda" and mode in {"normal", "favorable", "comfortable"}:
+        # Niveau lambda : fort biais vers coups sous-optimaux, évite le meilleur coup
+        base_over, base_distance = 1.90, 1.50
+        base_weights = (0.24, 0.22, 0.13, 0.16)
+        # Débridage progressif : vers précision moteur en cas de crise
+        f = crisis_factor
+        over_penalty = base_over * (1.0 - f) + 0.08 * f
+        under_penalty = 4.0
+        distance_penalty = base_distance * (1.0 - f) + 0.30 * f
+        weights = tuple(b * (1.0 - f) + c * f for b, c in zip(base_weights, (0.72, 0.07, 0.02, 0.20)))
+    elif human_profile == "lambda" and mode == "conversion":
+        f = crisis_factor
+        over_penalty = 1.20 * (1.0 - f) + 0.06 * f
+        under_penalty = 4.0
+        distance_penalty = 1.10 * (1.0 - f) + 0.28 * f
+        weights = tuple(b * (1.0 - f) + c * f for b, c in zip((0.28, 0.20, 0.10, 0.18), (0.70, 0.07, 0.02, 0.20)))
+    elif human_profile == "strong" and mode in {"normal", "favorable", "comfortable"}:
+        # Niveau strong : évitement modéré du meilleur coup
+        f = crisis_factor
+        over_penalty = 1.15 * (1.0 - f) + 0.10 * f
+        under_penalty = 4.3
+        distance_penalty = 1.05 * (1.0 - f) + 0.32 * f
+        weights = tuple(b * (1.0 - f) + c * f for b, c in zip((0.31, 0.20, 0.08, 0.18), (0.68, 0.08, 0.03, 0.21)))
+    elif human_profile == "strong" and mode == "conversion":
+        f = crisis_factor
+        over_penalty = 0.55 * (1.0 - f) + 0.08 * f
+        under_penalty = 4.2
+        distance_penalty = 0.78 * (1.0 - f) + 0.30 * f
+        weights = tuple(b * (1.0 - f) + c * f for b, c in zip((0.35, 0.15, 0.07, 0.22), (0.68, 0.08, 0.02, 0.20)))
     elif mode == "draw_break":
-        over_penalty = 0.10
+        f = crisis_factor
+        over_penalty = 0.10 * (1.0 - f) + 0.04 * f
         under_penalty = 4.8
-        distance_penalty = 0.55
+        distance_penalty = 0.55 * (1.0 - f) + 0.20 * f
         weights = (0.34, 0.16, 0.06, 0.24)
     elif mode == "pressure":
-        over_penalty = 0.16
+        f = crisis_factor
+        over_penalty = 0.16 * (1.0 - f) + 0.04 * f
         under_penalty = 4.6
-        distance_penalty = 0.70
+        distance_penalty = 0.70 * (1.0 - f) + 0.22 * f
         weights = (0.36, 0.17, 0.07, 0.21)
     elif mode == "conversion":
         over_penalty = 0.55

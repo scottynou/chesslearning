@@ -136,6 +136,7 @@ export function getPlanRecommendations(params: {
   userSide?: "white" | "black" | null;
   elo: number;
   skillLevel?: SkillLevel;
+  humanProfile?: "lambda" | "strong" | "veryStrong" | null;
   moveHistoryUci: string[];
   maxMoves: number;
   engineDepth?: number;
