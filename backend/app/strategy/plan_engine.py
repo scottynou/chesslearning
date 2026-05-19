@@ -3,11 +3,17 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import chess
 
 logger = logging.getLogger(__name__)
+
+# Pool partage pour lancer Stockfish + Maia en parallele dans la meme
+# requete. Maia + Stockfish n'ont pas de dependance entre eux : on peut
+# economiser la latence de Maia (200-500ms) en les overlappant.
+_parallel_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="plan-parallel")
 
 from ..ai_reranker import rerank_recommendations
 from ..beginner_notation import beginner_notation_for_uci
@@ -64,6 +70,15 @@ def get_plan_recommendations(
     engine_profile = engine_search_profile_for_elo(elo, level_settings)
 
     plan_can_drive_opening = phase == "opening" and status == "on_plan" and bool(plan_moves)
+    # Maia est lance en parallele de Stockfish (s'il est actif et qu'on
+    # est en mode joueur). Pas de dependance entre les deux : on les fait
+    # en concurrent pour gagner ~200-500ms de latence.
+    maia_future = (
+        _parallel_executor.submit(_maia_probabilities_for_fen, fen, elo, human_profile)
+        if player_turn and not game_over and not plan_can_drive_opening and maia_is_enabled()
+        else None
+    )
+
     if game_over or plan_can_drive_opening:
         engine_lines = []
         engine_candidates = []
@@ -178,13 +193,16 @@ def get_plan_recommendations(
         opponent_strength=opponent_strength,
         draw_pressure=accuracy_profile.get("drawPressure"),
     )
-    maia_probabilities = _query_maia_probabilities(
-        fen=fen,
-        elo=elo,
-        human_profile=human_profile,
-        crisis_factor=float(accuracy_profile.get("crisisFactor") or 0.0),
-        engine_candidates=engine_candidates,
-    )
+    crisis_factor_value = float(accuracy_profile.get("crisisFactor") or 0.0)
+    if maia_future is not None and crisis_factor_value <= 0.35 and engine_candidates:
+        try:
+            maia_probabilities = maia_future.result(timeout=4.0)
+        except Exception:  # noqa: BLE001
+            maia_probabilities = {}
+    else:
+        if maia_future is not None:
+            maia_future.cancel()
+        maia_probabilities = {}
     accuracy_profile = {
         **accuracy_profile,
         "targetElo": elo,
@@ -784,25 +802,11 @@ def _maia_level_for_profile(human_profile: str | None, elo: int) -> int:
     return 1900
 
 
-def _query_maia_probabilities(
-    *,
-    fen: str,
-    elo: int,
-    human_profile: str | None,
-    crisis_factor: float,
-    engine_candidates: list[Any],
-) -> dict[str, float]:
+def _maia_probabilities_for_fen(fen: str, elo: int, human_profile: str | None) -> dict[str, float]:
     """
-    Retourne {move_uci: probability} estime par Maia pour la position.
-    Vide quand Maia est desactive, indisponible, ou que la crise est trop
-    haute (en crise on veut le meilleur coup moteur, pas un coup humain).
+    Lance Maia sur une position et retourne {move_uci: probability}.
+    Utilise par le thread parallele dans get_plan_recommendations.
     """
-    if crisis_factor > 0.35:
-        return {}
-    if not maia_is_enabled():
-        return {}
-    if not engine_candidates:
-        return {}
     level = _maia_level_for_profile(human_profile, elo)
     try:
         engine = get_maia_engine(level)
