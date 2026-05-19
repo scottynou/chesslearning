@@ -11,6 +11,52 @@ export const DEFAULT_HUMAN_PROFILE: CoachHumanProfile = "strong";
 export type EloQuality = "excellent" | "good" | "playable" | "inaccurate" | "mistake" | "blunder";
 export type AdaptivePressure = "stable" | "worse" | "critical" | "drawish";
 export type CoachHumanProfile = "lambda" | "strong" | "veryStrong";
+export type CoachStyle = "balanced" | "aggressive" | "solid" | "creative" | "educational";
+export const DEFAULT_COACH_STYLE: CoachStyle = "balanced";
+
+export const COACH_STYLE_SETTINGS: Record<
+  CoachStyle,
+  { label: string; shortLabel: string; description: string }
+> = {
+  balanced: {
+    label: "Equilibre",
+    shortLabel: "Equilibre",
+    description: "Mix entre attaque et securite. Choix par defaut."
+  },
+  aggressive: {
+    label: "Agressif",
+    shortLabel: "Attaque",
+    description: "Cherche les coups tranchants, l'initiative, le roi adverse."
+  },
+  solid: {
+    label: "Solide",
+    shortLabel: "Solide",
+    description: "Reduit le risque, prefere les coups surs et prophylactiques."
+  },
+  creative: {
+    label: "Creatif",
+    shortLabel: "Surprise",
+    description: "Sort des sentiers battus, accepte des coups moins evidents."
+  },
+  educational: {
+    label: "Pedagogique",
+    shortLabel: "Apprendre",
+    description: "Privilegie les motifs classiques : developpement, roque, centre."
+  }
+};
+
+export function normalizeCoachStyle(value: string | null | undefined): CoachStyle {
+  if (
+    value === "balanced" ||
+    value === "aggressive" ||
+    value === "solid" ||
+    value === "creative" ||
+    value === "educational"
+  ) {
+    return value;
+  }
+  return DEFAULT_COACH_STYLE;
+}
 
 export const HUMAN_PROFILE_SETTINGS: Record<
   CoachHumanProfile,

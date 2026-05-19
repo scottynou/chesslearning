@@ -13,6 +13,7 @@ Quality = Literal["excellent", "good", "playable", "inaccurate", "mistake", "blu
 BotStyle = Literal["balanced", "safe", "aggressive", "solid", "educational"]
 SkillLevel = Literal["beginner", "intermediate", "pro"]
 HumanProfile = Literal["lambda", "strong", "veryStrong"]
+CoachStyle = Literal["balanced", "aggressive", "solid", "creative", "educational"]
 PlanPhase = Literal["opening", "transition", "middlegame", "endgame"]
 OpeningState = Literal["on_track", "recoverable", "completed", "abandoned"]
 PlanStatus = Literal["on_plan", "transposed", "opponent_deviated", "out_of_book", "plan_completed"]
@@ -232,6 +233,8 @@ class ReviewMoveResponse(BaseModel):
     analysis_kind: AnalysisKind = Field(default="heuristic", alias="analysisKind")
     quality: Quality
     quality_label: str = Field(alias="qualityLabel")
+    accuracy_percent: float = Field(default=0.0, alias="accuracyPercent")
+    centipawn_loss: int = Field(default=0, alias="centipawnLoss")
     played_move_eval_label: str = Field(alias="playedMoveEvalLabel")
     best_move_label: str = Field(alias="bestMoveLabel")
     best_move_was_different: bool = Field(alias="bestMoveWasDifferent")
@@ -380,6 +383,7 @@ class PlanRecommendationsRequest(BaseModel):
     elo: int = Field(default=1200, ge=600, le=3200)
     skill_level: SkillLevel | None = Field(default=None, alias="skillLevel")
     human_profile: HumanProfile | None = Field(default=None, alias="humanProfile")
+    coach_style: CoachStyle = Field(default="balanced", alias="coachStyle")
     move_history_uci: list[str] = Field(default_factory=list, alias="moveHistoryUci")
     max_moves: int = Field(default=10, alias="maxMoves", ge=1)
     engine_depth: int = Field(default=10, alias="engineDepth", ge=1, le=24)

@@ -4,55 +4,21 @@ import chess
 
 
 def analyze_middlegame(fen: str) -> dict[str, object]:
+    """
+    Phase de milieu de jeu : on garde uniquement les signaux analytiques
+    (pieces en prise, colonnes ouvertes, pieces non developpees) sans
+    generer de cours ecrit. Les conseils concrets viennent du moteur via
+    les recommandations de coups, pas d'un script.
+    """
     board = chess.Board(fen)
-    priorities = []
-    candidate_plans = []
-
-    if board.is_check():
-        priorities.append("Ton roi est en échec : réponds à cette menace avant tout.")
-    else:
-        priorities.append("Vérifie que ton roi reste en sécurité avant de chercher une attaque.")
-
-    hanging = hanging_pieces(board)
-    if hanging:
-        priorities.append(f"Pièces non défendues à surveiller : {', '.join(hanging[:3])}.")
-    undeveloped = undeveloped_pieces(board)
-    if undeveloped:
-        priorities.append(f"Pièce à améliorer : {undeveloped[0]}.")
-
-    open_files = detect_open_files(board)
-    if open_files:
-        candidate_plans.append(
-            {
-                "name": "Mettre une tour sur une colonne ouverte",
-                "why": f"Une tour devient plus forte sur une colonne sans pion, comme la colonne {open_files[0]}.",
-            }
-        )
-    candidate_plans.append(
-        {
-            "name": "Améliorer la pire pièce",
-            "why": "Une pièce active crée plus de menaces et défend mieux ton roi.",
-        }
-    )
-    candidate_plans.append(
-        {
-            "name": "Attaquer une faiblesse",
-            "why": "Un pion isolé, une pièce clouée ou une case faible donne un objectif concret.",
-        }
-    )
-
     return {
-        "phase": "Milieu de jeu",
-        "mainGoal": "Améliorer les pièces et éviter les gaffes.",
-        "currentPriorities": priorities[:4],
-        "candidatePlans": candidate_plans[:3],
-        "checklist": [
-            "Est-ce que mon roi est en danger ?",
-            "Est-ce que je peux gagner du matériel tout de suite ?",
-            "Est-ce que l'adversaire menace quelque chose ?",
-            "Quelle est ma pire pièce ?",
-            "Puis-je occuper une colonne ouverte avec une tour ?",
-        ],
+        "phase": "middlegame",
+        "signals": {
+            "inCheck": board.is_check(),
+            "hangingPieces": hanging_pieces(board)[:5],
+            "undevelopedPieces": undeveloped_pieces(board)[:4],
+            "openFiles": detect_open_files(board),
+        },
     }
 
 

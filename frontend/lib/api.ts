@@ -137,6 +137,7 @@ export function getPlanRecommendations(params: {
   elo: number;
   skillLevel?: SkillLevel;
   humanProfile?: "lambda" | "strong" | "veryStrong" | null;
+  coachStyle?: "balanced" | "aggressive" | "solid" | "creative" | "educational";
   moveHistoryUci: string[];
   maxMoves: number;
   engineDepth?: number;

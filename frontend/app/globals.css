@@ -856,3 +856,350 @@ button:disabled { cursor: not-allowed; }
   .promotion-popover { position: static; margin-top: 0.65rem; }
   .plan-path-list { grid-template-columns: 1fr; }
 }
+
+/* ---------- Accuracy meter ---------- */
+.accuracy-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: 0.65rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  font-size: 0.85rem;
+  color: #0f172a;
+}
+.accuracy-meter--in { border-color: #bbf7d0; background: #f0fdf4; }
+.accuracy-meter--under { border-color: #fecaca; background: #fef2f2; }
+.accuracy-meter--over { border-color: #fde68a; background: #fffbeb; }
+.accuracy-meter--compact { padding: 0.4rem 0.55rem; gap: 0.3rem; }
+.accuracy-meter__row { display: flex; justify-content: space-between; align-items: baseline; }
+.accuracy-meter__value { font-size: 1.25rem; font-weight: 700; }
+.accuracy-meter__target { font-size: 0.75rem; color: #475569; }
+.accuracy-meter__bar {
+  position: relative;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+.accuracy-meter__bar-target {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(34, 197, 94, 0.18);
+  border-left: 1px dashed #16a34a;
+  border-right: 1px dashed #16a34a;
+}
+.accuracy-meter__bar-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: linear-gradient(90deg, #38bdf8, #6366f1);
+  transition: width 0.3s ease;
+}
+.accuracy-meter--in .accuracy-meter__bar-fill { background: linear-gradient(90deg, #22c55e, #15803d); }
+.accuracy-meter--under .accuracy-meter__bar-fill { background: linear-gradient(90deg, #f87171, #b91c1c); }
+.accuracy-meter--over .accuracy-meter__bar-fill { background: linear-gradient(90deg, #fbbf24, #d97706); }
+.accuracy-meter__last { font-size: 0.75rem; color: #64748b; }
+
+/* ---------- Post-game review modal ---------- */
+.post-game-review-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.2rem;
+  z-index: 60;
+}
+.post-game-review {
+  background: #ffffff;
+  border-radius: 1.1rem;
+  padding: 1.4rem;
+  max-width: 32rem;
+  width: 100%;
+  max-height: 92vh;
+  overflow-y: auto;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.28);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.post-game-review__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+.post-game-review__header h2 { font-size: 1.15rem; font-weight: 700; margin: 0; }
+.post-game-review__result { font-size: 0.85rem; color: #475569; margin: 0; }
+.post-game-review__close {
+  background: transparent;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: #475569;
+  padding: 0.2rem 0.45rem;
+  border-radius: 0.5rem;
+}
+.post-game-review__close:hover { background: #f1f5f9; }
+.post-game-review__metrics {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.65rem;
+}
+.post-game-review__metric {
+  display: flex;
+  flex-direction: column;
+  padding: 0.6rem 0.7rem;
+  background: #f8fafc;
+  border-radius: 0.6rem;
+  border: 1px solid #e2e8f0;
+}
+.post-game-review__metric-label { font-size: 0.72rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; }
+.post-game-review__metric-value { font-size: 1.3rem; font-weight: 700; color: #0f172a; }
+.post-game-review__metric-helper { font-size: 0.7rem; color: #94a3b8; }
+.post-game-review__breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.post-game-review__chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.4rem 0.55rem;
+  border-radius: 0.55rem;
+  background: #f1f5f9;
+  font-size: 0.75rem;
+  min-width: 3.6rem;
+}
+.post-game-review__chip-value { font-size: 1.05rem; font-weight: 700; }
+.post-game-review__chip-label { color: #475569; }
+.post-game-review__chip--excellent { background: #dcfce7; }
+.post-game-review__chip--good { background: #d1fae5; }
+.post-game-review__chip--playable { background: #e0f2fe; }
+.post-game-review__chip--inaccurate { background: #fef3c7; }
+.post-game-review__chip--mistake { background: #fed7aa; }
+.post-game-review__chip--blunder { background: #fecaca; }
+.post-game-review__worst h3 { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.5rem; }
+.post-game-review__worst ol {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  list-style: none;
+  padding: 0;
+}
+.post-game-review__worst li {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  gap: 0.55rem;
+  align-items: center;
+  padding: 0.45rem 0.6rem;
+  background: #f8fafc;
+  border-radius: 0.55rem;
+  font-size: 0.82rem;
+}
+.post-game-review__worst-move { font-weight: 600; color: #0f172a; }
+.post-game-review__worst-acc { font-weight: 700; color: #b91c1c; }
+.post-game-review__worst-quality { font-size: 0.72rem; color: #64748b; }
+.post-game-review--in { box-shadow: 0 18px 48px rgba(22, 163, 74, 0.25); }
+.post-game-review--under { box-shadow: 0 18px 48px rgba(185, 28, 28, 0.28); }
+.post-game-review--over { box-shadow: 0 18px 48px rgba(217, 119, 6, 0.28); }
+
+/* ---------- Saved games panel ---------- */
+.site-menu-link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.55rem;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 0.45rem;
+}
+.site-menu-link:hover { background: #e2e8f0; }
+.saved-games-panel {
+  background: #ffffff;
+  border-radius: 1.1rem;
+  padding: 1.2rem;
+  max-width: 30rem;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.saved-games-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.saved-games-header h3 { font-size: 1.1rem; font-weight: 700; margin: 0; }
+.saved-games-close {
+  background: transparent;
+  border: none;
+  font-size: 1.15rem;
+  cursor: pointer;
+  color: #475569;
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.45rem;
+}
+.saved-games-close:hover { background: #f1f5f9; }
+.saved-games-back {
+  background: transparent;
+  border: none;
+  font-size: 0.85rem;
+  color: #2563eb;
+  cursor: pointer;
+  padding: 0.2rem 0;
+  text-align: left;
+}
+.saved-games-empty { font-size: 0.85rem; color: #64748b; }
+.saved-games-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  list-style: none;
+  padding: 0;
+}
+.saved-games-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.4rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.6rem;
+  padding: 0.55rem 0.7rem;
+}
+.saved-games-item-main {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.2rem 0.55rem;
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+}
+.saved-games-item-date { font-size: 0.78rem; color: #475569; font-weight: 600; }
+.saved-games-item-meta { font-size: 0.72rem; color: #64748b; grid-column: 1 / -1; }
+.saved-games-item-result { font-size: 0.85rem; font-weight: 600; }
+.saved-games-item-accuracy {
+  justify-self: end;
+  font-weight: 700;
+  color: #1d4ed8;
+}
+.saved-games-item-delete {
+  align-self: start;
+  background: transparent;
+  border: none;
+  color: #b91c1c;
+  font-size: 0.72rem;
+  cursor: pointer;
+  padding: 0.2rem 0.35rem;
+  border-radius: 0.4rem;
+}
+.saved-games-item-delete:hover { background: #fee2e2; }
+
+/* ---------- Plan switch modal ---------- */
+.plan-switch-modal {
+  background: #ffffff;
+  border-radius: 1.1rem;
+  padding: 1.2rem;
+  max-width: 30rem;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.plan-switch-header { display: flex; justify-content: space-between; align-items: center; }
+.plan-switch-header h3 { font-size: 1.1rem; font-weight: 700; margin: 0; }
+.plan-switch-note { font-size: 0.78rem; color: #64748b; margin: 0; }
+.plan-switch-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0.45rem; }
+.plan-switch-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.25rem 0.65rem;
+  text-align: left;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  cursor: pointer;
+  font: inherit;
+}
+.plan-switch-item:hover { background: #f1f5f9; }
+.plan-switch-item.is-active { border-color: #2563eb; background: #eff6ff; }
+.plan-switch-name { font-weight: 600; font-size: 0.92rem; color: #0f172a; }
+.plan-switch-tier {
+  justify-self: end;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.4rem;
+  background: #e2e8f0;
+  color: #475569;
+}
+.plan-switch-tier--recommended { background: #dcfce7; color: #15803d; }
+.plan-switch-tier--good { background: #dbeafe; color: #1d4ed8; }
+.plan-switch-tier--situational { background: #fef3c7; color: #92400e; }
+.plan-switch-tier--hidden { background: #fee2e2; color: #b91c1c; }
+.plan-switch-goal { grid-column: 1 / -1; font-size: 0.78rem; color: #64748b; }
+
+/* ---------- Opponent profile pill ---------- */
+.opponent-profile-pill {
+  display: flex;
+  flex-direction: column;
+  padding: 0.45rem 0.75rem;
+  border-radius: 0.65rem;
+  font-size: 0.78rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+.opponent-profile-pill strong { font-size: 0.85rem; font-weight: 700; text-transform: capitalize; }
+.opponent-profile-pill span { color: #475569; }
+.opponent-profile-pill--agressif { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+.opponent-profile-pill--tactique { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.opponent-profile-pill--solide { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
+.opponent-profile-pill--positionnel { background: #eff6ff; border-color: #bfdbfe; color: #1e40af; }
+
+/* ---------- PGN import ---------- */
+.pgn-import-textarea {
+  width: 100%;
+  resize: vertical;
+  font-family: "Fira Code", monospace;
+  font-size: 0.82rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.55rem;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+}
+.pgn-import-side {
+  display: flex;
+  gap: 0.85rem;
+  font-size: 0.85rem;
+}
+.pgn-import-error { color: #b91c1c; font-size: 0.82rem; }
+.pgn-import-button {
+  background: #2563eb;
+  color: white;
+  border: none;
+  padding: 0.55rem 1rem;
+  border-radius: 0.55rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pgn-import-button:hover { background: #1d4ed8; }
+

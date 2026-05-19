@@ -4,15 +4,26 @@ import type { ChangeEvent, ReactNode, TouchEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chess, Move, Square } from "chess.js";
 import { ChevronLeft, ChevronRight, ImageUp, Menu, X } from "lucide-react";
+import { AccuracyMeter } from "@/components/AccuracyMeter";
 import { ChessCoachBoard } from "@/components/ChessCoachBoard";
 import { GameControls } from "@/components/GameControls";
 import { MoveHistory } from "@/components/MoveHistory";
 import { OpeningRepertoirePanel } from "@/components/OpeningRepertoirePanel";
+import { MistakePatternsPanel } from "@/components/MistakePatternsPanel";
+import { PgnImportModal } from "@/components/PgnImportModal";
 import { PlanFirstPanel } from "@/components/PlanFirstPanel";
+import { PlanSwitchModal } from "@/components/PlanSwitchModal";
+import { PostGameReview } from "@/components/PostGameReview";
+import { SavedGamesPanel } from "@/components/SavedGamesPanel";
 import { SideSelectionPanel } from "@/components/SideSelectionPanel";
+import { saveGame } from "@/lib/gameHistory";
+import { profileOpponent } from "@/lib/opponentProfile";
+import { useAccuracySession } from "@/lib/useAccuracySession";
 import { getPlanRecommendations, importPositionImage, listAvailablePlans, requestBotMove } from "@/lib/api";
 import { canMoveInMode, gameStatus, isPromotionAttempt, tryMove } from "@/lib/chess";
 import {
+  COACH_STYLE_SETTINGS,
+  DEFAULT_COACH_STYLE,
   DEFAULT_HUMAN_PROFILE,
   ELO_MAX,
   ELO_MIN,
@@ -21,9 +32,11 @@ import {
   baseEloForProfile,
   effectiveElo,
   freshEloTrendState,
+  normalizeCoachStyle,
   normalizeHumanProfile,
   skillLevelForElo,
-  type CoachHumanProfile
+  type CoachHumanProfile,
+  type CoachStyle
 } from "@/lib/eloAdaptation";
 import { canStepBack, redoTimeline, undoTimeline, type MoveSource, type TimelineMove } from "@/lib/moveTimeline";
 import type { ImportPositionImageResponse, Orientation, PlanRecommendationsResponse, PlayMode, StrategyPlan } from "@/lib/types";
@@ -962,6 +975,7 @@ export default function HomePage() {
   const [orientation, setOrientation] = useState<Orientation>("white");
   const [mode, setMode] = useState<PlayMode>("both");
   const [humanProfile, setHumanProfile] = useState<CoachHumanProfile>(DEFAULT_HUMAN_PROFILE);
+  const [coachStyle, setCoachStyle] = useState<CoachStyle>(DEFAULT_COACH_STYLE);
   const [boardWidth, setBoardWidth] = useState(360);
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion | null>(null);
@@ -1028,6 +1042,23 @@ export default function HomePage() {
   const baseCoachElo = useMemo(() => baseEloForProfile(humanProfile), [humanProfile]);
   const effectiveCoachElo = useMemo(() => effectiveElo(baseCoachElo, adaptiveBoost), [adaptiveBoost, baseCoachElo]);
   const activeSkillLevel = useMemo(() => skillLevelForElo(effectiveCoachElo), [effectiveCoachElo]);
+  const opponentProfile = useMemo(() => {
+    if (userSide === "both" || appStage !== "coach") return null;
+    return profileOpponent(history, userSide === "white" ? "b" : "w");
+  }, [appStage, history, userSide]);
+  const accuracySession = useAccuracySession({
+    profile: humanProfile,
+    elo: effectiveCoachElo,
+    selectedPlanId
+  });
+  const [showPostGameReview, setShowPostGameReview] = useState(false);
+  const [savedGamesOpen, setSavedGamesOpen] = useState(false);
+  const [planSwitchOpen, setPlanSwitchOpen] = useState(false);
+  const [mistakesOpen, setMistakesOpen] = useState(false);
+  const [pgnImportOpen, setPgnImportOpen] = useState(false);
+  const lastSeenPlyForReview = useRef(0);
+  const savedGameRef = useRef<string | null>(null);
+  const gameOver = game.isGameOver();
   const eloPressureLabel = useMemo(() => {
     const pressure = planRecommendations?.adaptiveSignal?.pressure;
     if (pressure === "critical") return "Pression forte";
@@ -1046,6 +1077,30 @@ export default function HomePage() {
   const selectedPlan = useMemo(() => {
     return plans.find((plan) => plan.id === selectedPlanId) ?? (planRecommendations?.selectedPlan as StrategyPlan | null) ?? null;
   }, [plans, planRecommendations?.selectedPlan, selectedPlanId]);
+  useEffect(() => {
+    if (gameOver && accuracySession.summary.count > 0) {
+      setShowPostGameReview(true);
+      const fingerprint = `${game.fen()}|${historyUci.join(",")}`;
+      if (savedGameRef.current !== fingerprint) {
+        savedGameRef.current = fingerprint;
+        try {
+          saveGame({
+            result: gameStatus(game),
+            pgn: game.pgn(),
+            finalFen: game.fen(),
+            userSide: userSide === "both" ? "both" : userSide,
+            humanProfile,
+            coachStyle,
+            selectedPlanId,
+            selectedPlanName: selectedPlan?.nameFr ?? null,
+            summary: accuracySession.summary
+          });
+        } catch {
+          // Best-effort save
+        }
+      }
+    }
+  }, [gameOver, accuracySession.summary, game, historyUci, userSide, humanProfile, coachStyle, selectedPlanId, selectedPlan?.nameFr]);
   const boardLocked = appStage === "black-plan-selection" || appStage === "white-plan-selection" || appStage === "side-selection";
   const canStepBackward = canStepBack(historyUci.length);
   const canStepForward = !boardLocked && redoStack.length > 0;
@@ -1268,6 +1323,7 @@ export default function HomePage() {
       elo: effectiveCoachElo,
       skillLevel: activeSkillLevel,
       humanProfile,
+      coachStyle,
       moveHistoryUci: historyUci,
       maxMoves: INTERNAL_MAX_MOVES,
       engineDepth: INTERNAL_ENGINE_DEPTH,
@@ -1294,7 +1350,7 @@ export default function HomePage() {
       active = false;
       controller.abort();
     };
-  }, [activeSkillLevel, appStage, botTurnInBotMode, effectiveCoachElo, fen, historyUci, selectedPlanId, userSide]);
+  }, [activeSkillLevel, appStage, botTurnInBotMode, coachStyle, effectiveCoachElo, fen, historyUci, humanProfile, selectedPlanId, userSide]);
 
   useEffect(() => {
     if (appStage !== "coach" || !planRecommendations?.adaptiveSignal) return;
@@ -1373,6 +1429,7 @@ export default function HomePage() {
         return false;
       }
 
+      const fenBeforeMove = game.fen();
       const result = tryMove(game, from, to, promotion);
       if (!result) {
         setLastMessage("Coup illegal refuse.");
@@ -1380,6 +1437,7 @@ export default function HomePage() {
       }
 
       const moveUci = `${from}${to}${promotion ?? ""}`;
+      const moveSan = result.move.san;
       const currentTimeline = getCurrentTimeline();
       const nextHistoryUci = [...currentTimeline.historyUci, moveUci];
       const nextMoveSources = [...currentTimeline.moveSources.slice(0, currentTimeline.historyUci.length), source];
@@ -1388,6 +1446,19 @@ export default function HomePage() {
       setGame(nextGame);
       setMoveSources(nextMoveSources);
       setRedoStack([]);
+
+      if (source === "manual" && appStage === "coach") {
+        const ply = nextHistoryUci.length;
+        accuracySession.recordMove({
+          ply,
+          uci: moveUci,
+          san: moveSan,
+          fenBefore: fenBeforeMove,
+          fenAfter: nextGame.fen(),
+          moveHistoryUci: nextHistoryUci.slice(0, -1)
+        });
+        lastSeenPlyForReview.current = ply;
+      }
       if (source === "manual") {
         botPausedByTimelineNavigation.current = false;
         skipNextAdaptiveSignalForTimeline.current = false;
@@ -1525,8 +1596,9 @@ export default function HomePage() {
     [boardLocked, game, mode, requestMove, selectedSquare]
   );
 
-  function startWhiteFlow(profile: CoachHumanProfile) {
+  function startWhiteFlow(profile: CoachHumanProfile, style: CoachStyle = DEFAULT_COACH_STYLE) {
     setHumanProfile(profile);
+    setCoachStyle(style);
     setAdaptiveBoost(0);
     navigateToSnapshot(
       makeNavigationSnapshot({
@@ -1542,8 +1614,9 @@ export default function HomePage() {
     );
   }
 
-  function startBlackFlow(profile: CoachHumanProfile) {
+  function startBlackFlow(profile: CoachHumanProfile, style: CoachStyle = DEFAULT_COACH_STYLE) {
     setHumanProfile(profile);
+    setCoachStyle(style);
     setAdaptiveBoost(0);
     navigateToSnapshot(
       makeNavigationSnapshot({
@@ -1612,6 +1685,9 @@ export default function HomePage() {
     setBotThinking(false);
     setBotError(null);
     setBotStrategyState({});
+    accuracySession.reset();
+    setShowPostGameReview(false);
+    lastSeenPlyForReview.current = 0;
     if (resetAdaptive) {
       skipNextAdaptiveSignalForTimeline.current = false;
       resetAdaptiveBoost();
@@ -1704,6 +1780,46 @@ export default function HomePage() {
 
   function changePlan() {
     navigateToSnapshot(makeNavigationSnapshot({ appStage: "side-selection", userSide: "white", orientation: "white", selectedPlanId: null, firstOpponentMove: null, historyUci: [], importedFen: null }));
+  }
+
+  function importGameFromPgn(historyUci: string[], side: "white" | "black") {
+    timelineRef.current = { historyUci, moveSources: historyUci.map(() => "manual" as MoveSource), redoStack: [] };
+    const nextGame = buildGameFromHistory(historyUci, null);
+    setBaseFen(null);
+    setGame(nextGame);
+    setMoveSources(timelineRef.current.moveSources);
+    setRedoStack([]);
+    setPgnImportOpen(false);
+    accuracySession.reset();
+    setShowPostGameReview(false);
+    navigateToSnapshot(
+      makeNavigationSnapshot({
+        appStage: "coach",
+        userSide: side,
+        orientation: side,
+        selectedPlanId: null,
+        firstOpponentMove: null,
+        historyUci,
+        importedFen: null
+      })
+    );
+    setLastMessage("Partie importée depuis PGN.");
+  }
+
+  function switchPlanMidGame(newPlanId: string | null) {
+    setSelectedPlanId(newPlanId);
+    setPlanRecommendations(null);
+    setPlanRecommendationsFen(null);
+    setPlanSwitchOpen(false);
+    // Inscrit le nouveau plan dans la nav sans perdre l'historique en cours
+    if (appStage === "coach") {
+      navigateToSnapshot(
+        makeNavigationSnapshot({
+          selectedPlanId: newPlanId
+        }),
+        "replace"
+      );
+    }
   }
 
   function goHome() {
@@ -1947,6 +2063,48 @@ export default function HomePage() {
       />
       {menuOpen ? (
         <SiteMenu status={status} onHome={goHome} onClose={() => setMenuOpen(false)}>
+          <button
+            type="button"
+            className="site-menu-link"
+            onClick={() => {
+              setMenuOpen(false);
+              setSavedGamesOpen(true);
+            }}
+          >
+            Mes parties
+          </button>
+          <button
+            type="button"
+            className="site-menu-link"
+            onClick={() => {
+              setMenuOpen(false);
+              setMistakesOpen(true);
+            }}
+          >
+            Mes erreurs récurrentes
+          </button>
+          <button
+            type="button"
+            className="site-menu-link"
+            onClick={() => {
+              setMenuOpen(false);
+              setPgnImportOpen(true);
+            }}
+          >
+            Importer un PGN
+          </button>
+          {appStage === "coach" && plans.length > 0 ? (
+            <button
+              type="button"
+              className="site-menu-link"
+              onClick={() => {
+                setMenuOpen(false);
+                setPlanSwitchOpen(true);
+              }}
+            >
+              Changer de plan
+            </button>
+          ) : null}
           {appStage === "side-selection" ? null : (
             <CoachUtilityMenu
               orientation={orientation}
@@ -1965,6 +2123,27 @@ export default function HomePage() {
             />
           )}
         </SiteMenu>
+      ) : null}
+      {savedGamesOpen ? (
+        <div className="post-game-review-overlay" role="dialog" aria-modal="true">
+          <SavedGamesPanel onClose={() => setSavedGamesOpen(false)} />
+        </div>
+      ) : null}
+      {planSwitchOpen ? (
+        <PlanSwitchModal
+          plans={plans}
+          currentPlanId={selectedPlanId}
+          onSelect={switchPlanMidGame}
+          onClose={() => setPlanSwitchOpen(false)}
+        />
+      ) : null}
+      {mistakesOpen ? (
+        <div className="post-game-review-overlay" role="dialog" aria-modal="true">
+          <MistakePatternsPanel onClose={() => setMistakesOpen(false)} />
+        </div>
+      ) : null}
+      {pgnImportOpen ? (
+        <PgnImportModal onImport={importGameFromPgn} onClose={() => setPgnImportOpen(false)} />
       ) : null}
       {imageImportError ? (
         <div className="image-import-toast" role="alert">
@@ -2093,6 +2272,15 @@ export default function HomePage() {
   return renderShell(
     <main className="coach-live-shell">
       <section className="coach-board-column">
+        {accuracySession.summary.count > 0 ? (
+          <AccuracyMeter summary={accuracySession.summary} compact />
+        ) : null}
+        {opponentProfile && opponentProfile.movesObserved >= 4 ? (
+          <div className={`opponent-profile-pill opponent-profile-pill--${opponentProfile.style}`}>
+            <strong>Adversaire : {opponentProfile.style}</strong>
+            <span>{opponentProfile.description}</span>
+          </div>
+        ) : null}
         <div className="coach-board-stage">
           <ChessCoachBoard
             fen={fen}
@@ -2113,6 +2301,16 @@ export default function HomePage() {
               <span>Echec et mat</span>
               <strong>{checkmateResult.winner} gagnent</strong>
               <p>{checkmateResult.detail}</p>
+            </div>
+          ) : null}
+
+          {showPostGameReview && accuracySession.summary.count > 0 ? (
+            <div className="post-game-review-overlay" role="dialog" aria-modal="true">
+              <PostGameReview
+                summary={accuracySession.summary}
+                resultText={status}
+                onClose={() => setShowPostGameReview(false)}
+              />
             </div>
           ) : null}
 

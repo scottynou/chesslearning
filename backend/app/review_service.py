@@ -4,6 +4,8 @@ import os
 
 import chess
 
+from .accuracy_math import cp_to_win_percent, move_accuracy_percent  # noqa: F401
+
 from .ai_providers.gemini_provider import GeminiProvider
 from .ai_providers.heuristic_provider import HeuristicProvider
 from .ai_providers.ollama_provider import OllamaProvider
@@ -64,6 +66,7 @@ def review_move(request: ReviewMoveRequest, depth: int = 10) -> ReviewMoveRespon
 
     loss = max(0, best_score - played_score)
     quality = classify_quality(loss)
+    accuracy_pct = move_accuracy_percent(best_score, played_score)
 
     if best_candidate is not None:
         best_notation = beginner_notation_for_uci(request.fen_before, best_candidate.move_uci, best_candidate.move_san)
@@ -108,6 +111,8 @@ def review_move(request: ReviewMoveRequest, depth: int = 10) -> ReviewMoveRespon
         analysisKind=analysis_kind,
         quality=quality,
         qualityLabel=QUALITY_LABELS[quality],
+        accuracyPercent=round(accuracy_pct, 1),
+        centipawnLoss=int(loss),
         playedMoveEvalLabel=evaluation_label(played_eval_cp, played_mate),
         bestMoveLabel=best_label,
         bestMoveWasDifferent=best_different,
@@ -201,6 +206,10 @@ def classify_quality(loss_cp: int) -> str:
     if loss_cp <= 200:
         return "mistake"
     return "blunder"
+
+
+# cp_to_win_percent et move_accuracy_percent sont definis dans app.accuracy_math
+# pour pouvoir etre testes sans toute la stack (chess, AI providers).
 
 
 def _what_it_allows(piece: str, to_square: str, board_after: chess.Board) -> str:

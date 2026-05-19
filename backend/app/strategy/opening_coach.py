@@ -17,6 +17,10 @@ MAIN_FILES = [
 ]
 
 
+TIER_ORDER = {"recommended": 3, "good": 2, "situational": 1, "hidden": 0}
+DIFFICULTY_ORDER = {"easy": 3, "medium": 2, "hard": 1}
+
+
 def list_available_plans(
     side: str | None = None,
     elo: int | None = None,
@@ -54,7 +58,20 @@ def list_available_plans(
             if plan.get("recommendedElo", [600, 3200])[0] <= elo <= plan.get("recommendedElo", [600, 3200])[1]
             or plan.get("tier") in {"recommended", "good"}
         ]
+
+    # Tri par qualite objective : tier > difficulte > nom
+    # Pour les blancs : du meilleur (Italian/Queen's Gambit) au plus situationnel.
+    # Pour les noirs : meme ordre dans le sous-ensemble matchant le premier coup.
+    plans.sort(key=_plan_quality_key)
     return plans
+
+
+def _plan_quality_key(plan: dict[str, Any]) -> tuple:
+    tier_score = TIER_ORDER.get(str(plan.get("tier") or ""), 0)
+    difficulty_score = DIFFICULTY_ORDER.get(str(plan.get("difficulty") or "medium"), 2)
+    name = str(plan.get("nameFr") or plan.get("id") or "")
+    # Ordre decroissant : on negate pour que sort ascendant donne meilleur en tete.
+    return (-tier_score, -difficulty_score, name.lower())
 
 
 def get_plan(plan_id: str | None) -> dict[str, Any] | None:
@@ -76,16 +93,47 @@ def detect_current_opening(move_history: list[str]) -> dict[str, Any] | None:
 
 
 def detect_transposition(move_history: list[str]) -> dict[str, Any] | None:
-    played = set(move_history)
+    """
+    Detection par cle de position (FEN piece+trait+roque+en-passant), pas
+    par sequence de coups. Permet de matcher un plan meme si l'ordre des
+    coups differe, tant qu'une position equivalente est atteinte.
+    """
+    if not move_history:
+        return None
+
+    played_positions: set[str] = set()
+    board = chess.Board()
+    for move_uci in move_history:
+        try:
+            board.push_uci(move_uci)
+        except ValueError:
+            return None
+        played_positions.add(_position_key(board))
+
     best: dict[str, Any] | None = None
-    best_overlap = 0
+    best_match_index = 0
+
     for plan in load_opening_plans():
-        line = set(plan.get("mainLineUci", []))
-        overlap = len(played & line)
-        if overlap > best_overlap and overlap >= 4:
-            best = plan
-            best_overlap = overlap
+        line = plan.get("mainLineUci", [])
+        if not line:
+            continue
+        plan_board = chess.Board()
+        for index, plan_move in enumerate(line):
+            try:
+                plan_board.push_uci(plan_move)
+            except ValueError:
+                break
+            if _position_key(plan_board) in played_positions and index >= 2 and index > best_match_index:
+                best = plan
+                best_match_index = index
+
     return best
+
+
+def _position_key(board: chess.Board) -> str:
+    """FEN sans les compteurs : position + couleur + droits de roque + en-passant."""
+    parts = board.fen().split(" ")
+    return " ".join(parts[:4])
 
 
 def get_next_plan_steps(selected_plan_id: str | None, move_history: list[str]) -> list[str]:

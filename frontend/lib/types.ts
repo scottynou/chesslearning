@@ -67,6 +67,8 @@ export type ReviewMoveResponse = {
   analysisKind: "ai" | "heuristic";
   quality: "excellent" | "good" | "playable" | "inaccurate" | "mistake" | "blunder";
   qualityLabel: string;
+  accuracyPercent: number;
+  centipawnLoss: number;
   playedMoveEvalLabel: string;
   bestMoveLabel: string;
   bestMoveWasDifferent: boolean;

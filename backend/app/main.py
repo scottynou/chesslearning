@@ -342,7 +342,7 @@ def available_plans(
 @app.post("/plan-recommendations", response_model=PlanRecommendationsResponse)
 def plan_recommendations_endpoint(request: PlanRecommendationsRequest) -> PlanRecommendationsResponse:
     cache_key = (
-        f"{request.fen}|{request.selected_plan_id}|{request.user_side}|{request.elo}|{request.skill_level}|{request.human_profile}|{request.max_moves}|"
+        f"{request.fen}|{request.selected_plan_id}|{request.user_side}|{request.elo}|{request.skill_level}|{request.human_profile}|{request.coach_style}|{request.max_moves}|"
         f"{request.engine_depth}|{','.join(request.move_history_uci)}|{os.getenv('AI_RERANK_PROVIDER', 'gemini')}|"
         f"{os.getenv('AI_RERANK_MODEL') or os.getenv('GEMINI_MODEL', 'gemini-2.5-flash-lite')}"
     )
@@ -358,6 +358,7 @@ def plan_recommendations_endpoint(request: PlanRecommendationsRequest) -> PlanRe
                 elo=request.elo,
                 skill_level=request.skill_level,
                 human_profile=request.human_profile,
+                coach_style=request.coach_style,
                 move_history=request.move_history_uci,
                 max_moves=request.max_moves,
                 engine_depth=request.engine_depth,

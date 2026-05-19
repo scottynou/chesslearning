@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 from typing import Any
 
 import chess
+
+logger = logging.getLogger(__name__)
 
 from ..ai_reranker import rerank_recommendations
 from ..beginner_notation import beginner_notation_for_uci
@@ -33,6 +36,7 @@ def get_plan_recommendations(
     move_history: list[str],
     skill_level: str | None = None,
     human_profile: str | None = None,
+    coach_style: str = "balanced",
     max_moves: int = 10,
     engine_depth: int = 10,
     user_side: str | None = None,
@@ -187,6 +191,8 @@ def get_plan_recommendations(
         "phaseKey": phase_display["key"],
         "phaseStatus": phase_status,
         "openingState": opening_state,
+        "coachStyle": coach_style,
+        "styleModifiers": coach_style_modifiers(coach_style),
         "openingSafetyMode": should_apply_opening_safety(
             phase_display=phase_display,
             phase_status=phase_status,
@@ -197,6 +203,20 @@ def get_plan_recommendations(
             mating_danger=mating_danger,
         ),
     }
+    logger.info(
+        "plan_recommendations profile=%s style=%s elo=%s mode=%s crisis=%.2f bands=%s/%s/%s draw=%s mating=%s pos=%scp",
+        accuracy_profile.get("humanProfile"),
+        accuracy_profile.get("coachStyle"),
+        elo,
+        accuracy_profile.get("mode"),
+        float(accuracy_profile.get("crisisFactor") or 0.0),
+        accuracy_profile.get("min"),
+        accuracy_profile.get("target"),
+        accuracy_profile.get("max"),
+        (accuracy_profile.get("drawPressure") or {}).get("level"),
+        mating_danger,
+        position_score,
+    )
     strong_human_profile = strong_human_profile_for(accuracy_profile, opponent_strength)
     if player_turn and visible_merged and should_shape_for_human_accuracy(phase_display, phase_status, opening_state):
         visible_merged = shape_recommendations_for_accuracy(visible_merged, accuracy_profile)
@@ -740,6 +760,26 @@ def accuracy_bands_for_profile(human_profile: str | None, elo: int) -> dict[str,
     }
 
 
+def coach_style_modifiers(coach_style: str) -> dict[str, float]:
+    """
+    Modulateurs appliques au score final selon le style du coach.
+    Style != niveau ELO : a niveau egal, un coach 'aggressive' poussera
+    vers des coups plus tranchants, 'solid' vers la securite, etc.
+    En cas de crise (crisis_factor > 0.5) ces modulateurs sont attenues
+    automatiquement (cf. apply_coach_style_to_score) pour ne pas
+    contrarier l'objectif de survie/victoire.
+    """
+    if coach_style == "aggressive":
+        return {"risk_mul": 0.30, "simplicity_bonus": -0.05, "distance_relax": 0.0, "creative_rank_bonus": 0.0}
+    if coach_style == "solid":
+        return {"risk_mul": 0.85, "simplicity_bonus": 0.10, "distance_relax": 0.0, "creative_rank_bonus": 0.0}
+    if coach_style == "creative":
+        return {"risk_mul": 0.45, "simplicity_bonus": -0.06, "distance_relax": 0.22, "creative_rank_bonus": 8.0}
+    if coach_style == "educational":
+        return {"risk_mul": 0.62, "simplicity_bonus": 0.16, "distance_relax": 0.0, "creative_rank_bonus": 0.0}
+    return {"risk_mul": 0.50, "simplicity_bonus": 0.0, "distance_relax": 0.0, "creative_rank_bonus": 0.0}
+
+
 def compute_crisis_factor(
     position_score: int,
     mating_danger: str,
@@ -1084,21 +1124,37 @@ def human_accuracy_sort_score(item: dict[str, Any], profile: dict[str, Any]) -> 
         engine_score=engine_score,
         profile=profile,
     )
+    style_mods = profile.get("styleModifiers") or coach_style_modifiers(str(profile.get("coachStyle") or "balanced"))
+    # En crise (>0.5), on attenue progressivement les modulateurs de style :
+    # l'objectif devient gagner/ne pas perdre, pas exprimer un style.
+    style_strength = max(0.0, 1.0 - max(0.0, crisis_factor - 0.4) / 0.6)
+    risk_multiplier = 0.50 + (float(style_mods.get("risk_mul", 0.50)) - 0.50) * style_strength
+    simplicity_style_bonus = float(style_mods.get("simplicity_bonus", 0.0)) * style_strength
+    distance_relax = float(style_mods.get("distance_relax", 0.0)) * style_strength
+    creative_rank_bonus_value = float(style_mods.get("creative_rank_bonus", 0.0)) * style_strength
+    creative_rank_bonus = (
+        creative_rank_bonus_value
+        if creative_rank_bonus_value > 0 and 2 <= engine_rank <= 5 and minimum <= engine_score <= maximum and risk <= 28
+        else 0.0
+    )
+    effective_distance_penalty = max(0.0, distance_penalty * (1.0 - distance_relax))
+
     return (
         in_band_bonus
         + top_engine_bonus
         + elite_practical_bonus
         + plan_bonus
+        + creative_rank_bonus
         + final_score * weights[3]
         + plan_fit * weights[1]
-        + simplicity * weights[2]
+        + simplicity * (weights[2] + simplicity_style_bonus)
         + engine_score * weights[0]
         + opening_safety_adjustment_for(item, profile)
         + draw_avoidance_bonus(item, profile)
         + elite_crisis_adjustment_for(item, profile)
         + (0.0 if elite_selection_boost > 0 else deterministic_human_variation(item, profile))
-        - risk * 0.50
-        - abs(engine_score - target) * distance_penalty
+        - risk * risk_multiplier
+        - abs(engine_score - target) * effective_distance_penalty
         - max(0, minimum - engine_score) * under_penalty
         - max(0, engine_score - maximum) * over_penalty
         - anti_perfection_penalty
