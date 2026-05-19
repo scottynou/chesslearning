@@ -17,7 +17,6 @@ import { PostGameReview } from "@/components/PostGameReview";
 import { SavedGamesPanel } from "@/components/SavedGamesPanel";
 import { SideSelectionPanel } from "@/components/SideSelectionPanel";
 import { saveGame } from "@/lib/gameHistory";
-import { profileOpponent } from "@/lib/opponentProfile";
 import { useAccuracySession } from "@/lib/useAccuracySession";
 import { getPlanRecommendations, importPositionImage, listAvailablePlans, requestBotMove } from "@/lib/api";
 import { canMoveInMode, gameStatus, isPromotionAttempt, tryMove } from "@/lib/chess";
@@ -1042,10 +1041,6 @@ export default function HomePage() {
   const baseCoachElo = useMemo(() => baseEloForProfile(humanProfile), [humanProfile]);
   const effectiveCoachElo = useMemo(() => effectiveElo(baseCoachElo, adaptiveBoost), [adaptiveBoost, baseCoachElo]);
   const activeSkillLevel = useMemo(() => skillLevelForElo(effectiveCoachElo), [effectiveCoachElo]);
-  const opponentProfile = useMemo(() => {
-    if (userSide === "both" || appStage !== "coach") return null;
-    return profileOpponent(history, userSide === "white" ? "b" : "w");
-  }, [appStage, history, userSide]);
   const accuracySession = useAccuracySession({
     profile: humanProfile,
     elo: effectiveCoachElo,
@@ -2272,14 +2267,8 @@ export default function HomePage() {
   return renderShell(
     <main className="coach-live-shell">
       <section className="coach-board-column">
-        {accuracySession.summary.count > 0 ? (
+        {accuracySession.summary.count > 0 && accuracySession.summary.weightedAccuracy > 1 ? (
           <AccuracyMeter summary={accuracySession.summary} compact />
-        ) : null}
-        {opponentProfile && opponentProfile.movesObserved >= 4 ? (
-          <div className={`opponent-profile-pill opponent-profile-pill--${opponentProfile.style}`}>
-            <strong>Adversaire : {opponentProfile.style}</strong>
-            <span>{opponentProfile.description}</span>
-          </div>
         ) : null}
         <div className="coach-board-stage">
           <ChessCoachBoard
