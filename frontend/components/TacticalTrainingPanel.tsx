@@ -63,22 +63,12 @@ export function TacticalTrainingPanel({ onClose }: Props) {
   const [queue, setQueue] = useState<Puzzle[]>([]);
   const [index, setIndex] = useState(0);
   const [status, setStatus] = useState<Status>("idle");
-  const [boardWidth, setBoardWidth] = useState(360);
   const [stats, setStats] = useState<Stats>(EMPTY_STATS);
   const [showHint, setShowHint] = useState(false);
 
   useEffect(() => {
     setQueue(shuffledPuzzles());
     setStats(loadStats());
-  }, []);
-
-  useEffect(() => {
-    function onResize() {
-      setBoardWidth(Math.min(420, Math.max(240, window.innerWidth - 80)));
-    }
-    onResize();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
   }, []);
 
   const currentPuzzle = queue[index];
@@ -168,7 +158,6 @@ export function TacticalTrainingPanel({ onClose }: Props) {
       <div className="tactical-board-wrap">
         <ChessCoachBoard
           fen={currentPuzzle.fen}
-          boardWidth={boardWidth}
           orientation={sideToMove}
           selectedSquare={null}
           legalTargets={[]}

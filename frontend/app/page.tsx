@@ -2239,7 +2239,6 @@ export default function HomePage() {
         <section className="first-move-board">
           <ChessCoachBoard
             fen={fen}
-            boardWidth={boardWidth}
             orientation={orientation}
             selectedSquare={selectedSquare}
             legalTargets={legalTargets}
@@ -2309,7 +2308,6 @@ export default function HomePage() {
         <div className="coach-board-stage">
           <ChessCoachBoard
             fen={fen}
-            boardWidth={boardWidth}
             orientation={orientation}
             selectedSquare={selectedSquare}
             legalTargets={legalTargets}

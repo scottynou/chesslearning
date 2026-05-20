@@ -1,7 +1,7 @@
 "use client";
 
 import { Chessboard } from "react-chessboard";
-import type { CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { Square } from "chess.js";
 import type { Orientation } from "@/lib/types";
 
@@ -13,7 +13,12 @@ type BoardMove = {
 
 type ChessCoachBoardProps = {
   fen: string;
-  boardWidth: number;
+  /**
+   * Optionnel : taille en pixels imposee par le parent. Si omise, le composant
+   * mesure son propre conteneur (qui suit la spec CSS responsive aspect-ratio
+   * 1/1, voir .coach-board-fluid) et adapte react-chessboard a la taille reelle.
+   */
+  boardWidth?: number;
   orientation: Orientation;
   selectedSquare: string | null;
   legalTargets: string[];
@@ -41,37 +46,73 @@ export function ChessCoachBoard({
   onSquareClick
 }: ChessCoachBoardProps) {
   const customSquareStyles = buildSquareStyles(selectedSquare, legalTargets, lastMove, recommendationArrows, highlightedMove);
-  const frameClassName = ["coach-board-frame", locked && "is-locked", thinking && "is-thinking"].filter(Boolean).join(" ");
+  const frameClassName = [
+    "coach-board-frame",
+    "coach-board-fluid",
+    locked && "is-locked",
+    thinking && "is-thinking"
+  ]
+    .filter(Boolean)
+    .join(" ");
   const customArrows = buildArrows(recommendationArrows, highlightedMove);
 
+  // Si pas de boardWidth explicite, on mesure le conteneur (responsive container).
+  // Sinon on respecte ce que le parent a calcule (legacy comportement).
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [measuredWidth, setMeasuredWidth] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (boardWidth) return; // parent gere
+    if (typeof window === "undefined") return;
+    const el = wrapperRef.current;
+    if (!el) return;
+    const apply = () => {
+      const rect = el.getBoundingClientRect();
+      const size = Math.floor(Math.min(rect.width, rect.height));
+      if (size > 0) setMeasuredWidth(size);
+    };
+    apply();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", apply);
+      return () => window.removeEventListener("resize", apply);
+    }
+    const observer = new ResizeObserver(apply);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [boardWidth]);
+
+  const effectiveWidth = boardWidth ?? measuredWidth;
+
   return (
-    <div className={frameClassName}>
+    <div ref={wrapperRef} className={frameClassName}>
       <div className="coach-board-canvas">
-        <Chessboard
-          id="chess-elo-coach-board"
-          position={fen}
-          boardWidth={boardWidth}
-          boardOrientation={orientation}
-          animationDuration={220}
-          areArrowsAllowed={false}
-          arePiecesDraggable={!locked && !thinking}
-          onPieceDrop={onDrop}
-          onSquareClick={(square) => onSquareClick(square)}
-          customSquareStyles={customSquareStyles}
-          customArrows={customArrows}
-          customBoardStyle={{
-            borderRadius: "8px",
-            boxShadow: "0 46px 130px rgba(0, 0, 0, 0.56), 0 0 0 1px rgba(247, 239, 224, 0.24), inset 0 0 0 1px rgba(255,255,255,0.08)"
-          }}
-          customDarkSquareStyle={{ backgroundColor: "#625f52" }}
-          customLightSquareStyle={{ backgroundColor: "#eadfc8" }}
-          customDropSquareStyle={{ boxShadow: "inset 0 0 0 4px rgba(247,239,224,0.58), inset 0 0 28px rgba(231,185,106,0.26)" }}
-          customNotationStyle={{
-            color: "rgba(3, 5, 10, 0.62)",
-            fontSize: "0.62rem",
-            fontWeight: 900
-          }}
-        />
+        {effectiveWidth ? (
+          <Chessboard
+            id="chess-elo-coach-board"
+            position={fen}
+            boardWidth={effectiveWidth}
+            boardOrientation={orientation}
+            animationDuration={220}
+            areArrowsAllowed={false}
+            arePiecesDraggable={!locked && !thinking}
+            onPieceDrop={onDrop}
+            onSquareClick={(square) => onSquareClick(square)}
+            customSquareStyles={customSquareStyles}
+            customArrows={customArrows}
+            customBoardStyle={{
+              borderRadius: "8px",
+              boxShadow: "0 46px 130px rgba(0, 0, 0, 0.56), 0 0 0 1px rgba(247, 239, 224, 0.24), inset 0 0 0 1px rgba(255,255,255,0.08)"
+            }}
+            customDarkSquareStyle={{ backgroundColor: "#625f52" }}
+            customLightSquareStyle={{ backgroundColor: "#eadfc8" }}
+            customDropSquareStyle={{ boxShadow: "inset 0 0 0 4px rgba(247,239,224,0.58), inset 0 0 28px rgba(231,185,106,0.26)" }}
+            customNotationStyle={{
+              color: "rgba(3, 5, 10, 0.62)",
+              fontSize: "0.62rem",
+              fontWeight: 900
+            }}
+          />
+        ) : null}
       </div>
     </div>
   );
