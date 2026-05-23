@@ -1394,6 +1394,45 @@ button:disabled { cursor: not-allowed; }
   margin: 0 0.65rem 0.65rem;
 }
 
+/* ---------- Edit mode (board libre) ---------- */
+.coach-board-edit-hint {
+  flex: 1;
+  font-size: 0.75rem;
+  color: rgba(247,239,224,0.7);
+  padding: 0 0.6rem;
+  font-weight: 600;
+}
+.coach-board-controls .control-button.is-primary {
+  background: rgba(231,185,106,0.22);
+  border-color: rgba(231,185,106,0.55);
+  color: #f7d89b;
+}
+.coach-board-controls .control-button.is-primary:hover {
+  background: rgba(231,185,106,0.32);
+  border-color: rgba(231,185,106,0.75);
+  color: #f7efe0;
+}
+.edit-side-dialog {
+  background: #ffffff;
+  border-radius: 1rem;
+  padding: 1.4rem;
+  max-width: 22rem;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  text-align: center;
+  color: #0f172a;
+}
+.edit-side-dialog h3 { margin: 0; font-size: 1.15rem; font-weight: 800; }
+.edit-side-dialog p { margin: 0; font-size: 0.85rem; color: #475569; }
+.edit-side-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+  margin-top: 0.45rem;
+}
+
 /* ---------- Position editor ---------- */
 .position-editor-modal {
   background: #ffffff;

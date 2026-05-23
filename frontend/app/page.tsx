@@ -11,7 +11,6 @@ import { MoveHistory } from "@/components/MoveHistory";
 import { OpeningRepertoirePanel } from "@/components/OpeningRepertoirePanel";
 import { MistakePatternsPanel } from "@/components/MistakePatternsPanel";
 import { PgnImportModal } from "@/components/PgnImportModal";
-import { PositionEditorModal } from "@/components/PositionEditorModal";
 import { PlanFirstPanel } from "@/components/PlanFirstPanel";
 import { PlanSwitchModal } from "@/components/PlanSwitchModal";
 import { PostGameReview } from "@/components/PostGameReview";
@@ -1055,7 +1054,9 @@ export default function HomePage() {
   const [mistakesOpen, setMistakesOpen] = useState(false);
   const [pgnImportOpen, setPgnImportOpen] = useState(false);
   const [tacticalOpen, setTacticalOpen] = useState(false);
-  const [positionEditorOpen, setPositionEditorOpen] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editFen, setEditFen] = useState<string | null>(null);
+  const [editAskSide, setEditAskSide] = useState(false);
   const { t, locale, setLocale } = useI18n();
   const lastSeenPlyForReview = useRef(0);
   const savedGameRef = useRef<string | null>(null);
@@ -1796,7 +1797,6 @@ export default function HomePage() {
     setGame(importedGame);
     setMoveSources([]);
     setRedoStack([]);
-    setPositionEditorOpen(false);
     accuracySession.reset();
     setShowPostGameReview(false);
     navigateToSnapshot(
@@ -1811,6 +1811,139 @@ export default function HomePage() {
       })
     );
     setLastMessage("Position éditée appliquée.");
+  }
+
+  function enterEditMode() {
+    setEditFen(game.fen());
+    setEditMode(true);
+    setEditAskSide(false);
+  }
+
+  function cancelEdit() {
+    setEditMode(false);
+    setEditFen(null);
+    setEditAskSide(false);
+  }
+
+  /** Drop libre : pas de regle d'echecs, le coup met juste a jour le FEN d'edition. */
+  function handleEditDrop(from: string, to: string): boolean {
+    if (!editFen) return false;
+    const placement = editFen.split(" ")[0];
+    if (!placement) return false;
+    const board: (string | null)[][] = placement.split("/").map((row) => {
+      const cells: (string | null)[] = [];
+      for (const ch of row) {
+        const n = Number(ch);
+        if (Number.isInteger(n) && n > 0) {
+          for (let i = 0; i < n; i += 1) cells.push(null);
+        } else {
+          cells.push(ch);
+        }
+      }
+      while (cells.length < 8) cells.push(null);
+      return cells.slice(0, 8);
+    });
+    while (board.length < 8) board.push(Array(8).fill(null));
+
+    function toIdx(square: string): [number, number] | null {
+      const file = square.charCodeAt(0) - "a".charCodeAt(0);
+      const rank = Number(square[1]);
+      if (file < 0 || file > 7 || !rank || rank < 1 || rank > 8) return null;
+      return [8 - rank, file];
+    }
+
+    const src = toIdx(from);
+    const dst = toIdx(to);
+    if (!src || !dst) return false;
+    const piece = board[src[0]][src[1]];
+    if (!piece) return false;
+    board[src[0]][src[1]] = null;
+    board[dst[0]][dst[1]] = piece;
+
+    const newPlacement = board
+      .map((row) => {
+        let out = "";
+        let empty = 0;
+        for (const cell of row) {
+          if (cell) {
+            if (empty > 0) {
+              out += String(empty);
+              empty = 0;
+            }
+            out += cell;
+          } else {
+            empty += 1;
+          }
+        }
+        if (empty > 0) out += String(empty);
+        return out || "8";
+      })
+      .join("/");
+
+    setEditFen(`${newPlacement} w - - 0 1`);
+    return true;
+  }
+
+  /** Click droit en mode edit : retire la piece de la case. */
+  function handleEditSquareRightClick(square: string) {
+    if (!editFen) return;
+    const placement = editFen.split(" ")[0];
+    if (!placement) return;
+    const board: (string | null)[][] = placement.split("/").map((row) => {
+      const cells: (string | null)[] = [];
+      for (const ch of row) {
+        const n = Number(ch);
+        if (Number.isInteger(n) && n > 0) {
+          for (let i = 0; i < n; i += 1) cells.push(null);
+        } else {
+          cells.push(ch);
+        }
+      }
+      while (cells.length < 8) cells.push(null);
+      return cells.slice(0, 8);
+    });
+    while (board.length < 8) board.push(Array(8).fill(null));
+    const file = square.charCodeAt(0) - "a".charCodeAt(0);
+    const rank = Number(square[1]);
+    if (file < 0 || file > 7 || !rank) return;
+    board[8 - rank][file] = null;
+    const newPlacement = board
+      .map((row) => {
+        let out = "";
+        let empty = 0;
+        for (const cell of row) {
+          if (cell) {
+            if (empty > 0) {
+              out += String(empty);
+              empty = 0;
+            }
+            out += cell;
+          } else {
+            empty += 1;
+          }
+        }
+        if (empty > 0) out += String(empty);
+        return out || "8";
+      })
+      .join("/");
+    setEditFen(`${newPlacement} w - - 0 1`);
+  }
+
+  function confirmEditWithSide(side: "white" | "black") {
+    if (!editFen) {
+      cancelEdit();
+      return;
+    }
+    const parts = editFen.split(" ");
+    parts[1] = side === "white" ? "w" : "b";
+    while (parts.length < 6) parts.push("-", "-", "0", "1");
+    parts[2] = "-";
+    parts[3] = "-";
+    parts[4] = "0";
+    parts[5] = "1";
+    const finalFen = parts.slice(0, 6).join(" ");
+    applyEditedPosition(finalFen, side);
+    cancelEdit();
   }
 
   function importGameFromPgn(historyUci: string[], side: "white" | "black") {
@@ -2129,16 +2262,6 @@ export default function HomePage() {
             className="site-menu-link"
             onClick={() => {
               setMenuOpen(false);
-              setPositionEditorOpen(true);
-            }}
-          >
-            {t("menu.editPosition")}
-          </button>
-          <button
-            type="button"
-            className="site-menu-link"
-            onClick={() => {
-              setMenuOpen(false);
               setTacticalOpen(true);
             }}
           >
@@ -2213,12 +2336,24 @@ export default function HomePage() {
       {pgnImportOpen ? (
         <PgnImportModal onImport={importGameFromPgn} onClose={() => setPgnImportOpen(false)} />
       ) : null}
-      {positionEditorOpen ? (
-        <PositionEditorModal
-          initialFen={fen}
-          onApply={applyEditedPosition}
-          onClose={() => setPositionEditorOpen(false)}
-        />
+      {editAskSide ? (
+        <div className="post-game-review-overlay" role="dialog" aria-modal="true">
+          <div className="edit-side-dialog">
+            <h3>Au trait ?</h3>
+            <p>Indique à qui c'est de jouer avec cette position.</p>
+            <div className="edit-side-buttons">
+              <button type="button" className="tactical-primary" onClick={() => confirmEditWithSide("white")}>
+                Aux Blancs
+              </button>
+              <button type="button" className="tactical-primary" onClick={() => confirmEditWithSide("black")}>
+                Aux Noirs
+              </button>
+            </div>
+            <button type="button" className="tactical-secondary" onClick={() => setEditAskSide(false)}>
+              Annuler
+            </button>
+          </div>
+        </div>
       ) : null}
       {tacticalOpen ? (
         <div className="post-game-review-overlay" role="dialog" aria-modal="true">
@@ -2356,16 +2491,18 @@ export default function HomePage() {
         ) : null}
         <div className="coach-board-stage">
           <ChessCoachBoard
-            fen={fen}
+            fen={editMode && editFen ? editFen : fen}
             orientation={orientation}
-            selectedSquare={selectedSquare}
-            legalTargets={legalTargets}
-            highlightedMove={highlightedMove}
-            recommendationArrows={recommendationArrows}
-            lastMove={lastBoardMove}
-            thinking={botThinking}
-            onDrop={requestMove}
-            onSquareClick={handleSquareClick}
+            selectedSquare={editMode ? null : selectedSquare}
+            legalTargets={editMode ? [] : legalTargets}
+            highlightedMove={editMode ? null : highlightedMove}
+            recommendationArrows={editMode ? [] : recommendationArrows}
+            lastMove={editMode ? null : lastBoardMove}
+            thinking={editMode ? false : botThinking}
+            editMode={editMode}
+            onDrop={editMode ? handleEditDrop : requestMove}
+            onSquareClick={editMode ? () => {} : handleSquareClick}
+            onSquareRightClick={editMode ? handleEditSquareRightClick : undefined}
           />
 
           {checkmateResult ? (
@@ -2411,42 +2548,63 @@ export default function HomePage() {
         </div>
 
         <div className="coach-board-controls">
-          <button
-            type="button"
-            onClick={openImageImport}
-            className="control-button icon-control"
-            disabled={imageImporting}
-            aria-label="Importer une position depuis une image"
-            title="Importer une position"
-          >
-            <ImageUp size={18} />
-          </button>
-          <button
-            type="button"
-            onClick={() => runTimelineClick(undo)}
-            onTouchEnd={(event) => runTimelineTouch(event, undo)}
-            className="control-button icon-control"
-            disabled={!canStepBackward}
-            aria-disabled={!canStepBackward}
-            aria-label="Coup precedent"
-            title="Coup precedent"
-          >
-            <ChevronLeft size={18} />
-          </button>
-          <button
-            type="button"
-            onClick={() => runTimelineClick(redo)}
-            onTouchEnd={(event) => runTimelineTouch(event, redo)}
-            className="control-button icon-control"
-            disabled={!canStepForward}
-            aria-disabled={!canStepForward}
-            aria-label="Coup suivant"
-            title="Coup suivant"
-          >
-            <ChevronRight size={18} />
-          </button>
-          <button type="button" onClick={reset} className="control-button">Reset</button>
-          <button type="button" onClick={() => setOrientation(orientation === "white" ? "black" : "white")} className="control-button">Tourner</button>
+          {editMode ? (
+            <>
+              <span className="coach-board-edit-hint">
+                Édition libre : déplace n'importe quelle pièce. Clic droit = retirer.
+              </span>
+              <button type="button" onClick={cancelEdit} className="control-button">
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditAskSide(true)}
+                className="control-button is-primary"
+              >
+                Valider
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={openImageImport}
+                className="control-button icon-control"
+                disabled={imageImporting}
+                aria-label="Importer une position depuis une image"
+                title="Importer une position"
+              >
+                <ImageUp size={18} />
+              </button>
+              <button
+                type="button"
+                onClick={() => runTimelineClick(undo)}
+                onTouchEnd={(event) => runTimelineTouch(event, undo)}
+                className="control-button icon-control"
+                disabled={!canStepBackward}
+                aria-disabled={!canStepBackward}
+                aria-label="Coup precedent"
+                title="Coup precedent"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <button
+                type="button"
+                onClick={() => runTimelineClick(redo)}
+                onTouchEnd={(event) => runTimelineTouch(event, redo)}
+                className="control-button icon-control"
+                disabled={!canStepForward}
+                aria-disabled={!canStepForward}
+                aria-label="Coup suivant"
+                title="Coup suivant"
+              >
+                <ChevronRight size={18} />
+              </button>
+              <button type="button" onClick={reset} className="control-button">Reset</button>
+              <button type="button" onClick={() => setOrientation(orientation === "white" ? "black" : "white")} className="control-button">Tourner</button>
+              <button type="button" onClick={enterEditMode} className="control-button">Édit</button>
+            </>
+          )}
         </div>
 
         <details className="elo-live-collapsible">

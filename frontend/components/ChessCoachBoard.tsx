@@ -27,8 +27,11 @@ type ChessCoachBoardProps = {
   lastMove?: BoardMove | null;
   locked?: boolean;
   thinking?: boolean;
+  /** Mode edit libre : tous les drops sont autorises (pas de regle d'echecs). */
+  editMode?: boolean;
   onDrop: (source: string, target: string) => boolean;
   onSquareClick: (square: string) => void;
+  onSquareRightClick?: (square: string) => void;
 };
 
 export function ChessCoachBoard({
@@ -42,8 +45,10 @@ export function ChessCoachBoard({
   lastMove,
   locked = false,
   thinking = false,
+  editMode = false,
   onDrop,
-  onSquareClick
+  onSquareClick,
+  onSquareRightClick
 }: ChessCoachBoardProps) {
   const customSquareStyles = buildSquareStyles(selectedSquare, legalTargets, lastMove, recommendationArrows, highlightedMove);
   const frameClassName = [
@@ -92,11 +97,12 @@ export function ChessCoachBoard({
             position={fen}
             boardWidth={effectiveWidth}
             boardOrientation={orientation}
-            animationDuration={220}
+            animationDuration={editMode ? 0 : 220}
             areArrowsAllowed={false}
-            arePiecesDraggable={!locked && !thinking}
+            arePiecesDraggable={editMode || (!locked && !thinking)}
             onPieceDrop={onDrop}
             onSquareClick={(square) => onSquareClick(square)}
+            onSquareRightClick={(square) => onSquareRightClick?.(square)}
             customSquareStyles={customSquareStyles}
             customArrows={customArrows}
             customBoardStyle={{
