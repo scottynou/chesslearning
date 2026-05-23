@@ -89,11 +89,29 @@ class MaiaEngine:
                 process = self._ensure_process()
                 self._send(process, f"position fen {fen}")
                 self._send(process, "go nodes 1")
-                return self._read_policy(process, top_n)
+                results, raw = self._read_policy(process, top_n)
+                if not results and raw:
+                    logger.warning("Maia raw lines (no parse): %s", raw[:1500])
+                return results
         except Exception as exc:  # noqa: BLE001
             logger.warning("Maia suggest failed: %s", exc)
             self._close_process()
             return []
+
+    def suggest_with_raw(self, fen: str, top_n: int = 12) -> tuple[list[MaiaMove], str]:
+        """Variante diagnostique : renvoie aussi le raw stdout pour debug."""
+        if not self.is_available():
+            return [], ""
+        try:
+            with self._lock:
+                process = self._ensure_process()
+                self._send(process, f"position fen {fen}")
+                self._send(process, "go nodes 1")
+                return self._read_policy(process, top_n)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Maia suggest failed: %s", exc)
+            self._close_process()
+            return [], f"error: {exc}"
 
     def shutdown(self) -> None:
         with self._lock:
@@ -102,8 +120,10 @@ class MaiaEngine:
     def _ensure_process(self) -> subprocess.Popen[bytes]:
         if self._process is not None and self._process.poll() is None:
             return self._process
+        # stderr=DEVNULL pour eviter que le buffer ne se remplisse et bloque
+        # lc0 (on ne lit pas activement stderr dans le process persistent).
         self._process = subprocess.Popen(
-            [self.lc0_path, f"--weights={self.weights_path}", "--backend=eigen"],
+            [self.lc0_path, f"--weights={self.weights_path}"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
@@ -111,6 +131,9 @@ class MaiaEngine:
         )
         self._send(self._process, "uci")
         self._wait_for(self._process, b"uciok")
+        # Active la sortie des probas pour tous les coups (clef de l'humanisation Maia).
+        # NB : doit etre envoye AVANT isready/ucinewgame pour etre pris en compte.
+        self._send(self._process, "setoption name VerboseMoveStats value true")
         self._send(self._process, "isready")
         self._wait_for(self._process, b"readyok")
         return self._process
@@ -131,23 +154,25 @@ class MaiaEngine:
                 return
         raise TimeoutError(f"Maia timeout waiting for {token!r}")
 
-    def _read_policy(self, process: subprocess.Popen[bytes], top_n: int) -> list[MaiaMove]:
+    def _read_policy(self, process: subprocess.Popen[bytes], top_n: int) -> tuple[list[MaiaMove], str]:
         assert process.stdout is not None
         results: list[MaiaMove] = []
+        raw_lines: list[str] = []
         deadline = monotonic() + self.timeout_seconds
         while monotonic() < deadline:
             line = process.stdout.readline()
             if not line:
                 break
             decoded = line.decode("utf-8", errors="ignore").strip()
-            if decoded.startswith("info string") and " P:" in decoded:
+            raw_lines.append(decoded)
+            if decoded.startswith("info string"):
                 parsed = _parse_policy_line(decoded)
                 if parsed is not None:
                     results.append(parsed)
             elif decoded.startswith("bestmove"):
                 break
         results.sort(key=lambda move: -move.probability)
-        return results[:top_n]
+        return results[:top_n], "\n".join(raw_lines)
 
     def _close_process(self) -> None:
         if self._process is None:
@@ -167,17 +192,21 @@ class MaiaEngine:
 
 def _parse_policy_line(line: str) -> MaiaMove | None:
     """
-    Parse une ligne type 'info string e2e4  (322 ) N:       0 (+ 0) (P:  9.41%) ...'
-    On extrait le coup UCI (1er token apres 'info string') et le P:%.
+    Parse une ligne 'info string ... (P: X.YZ%) ...' en cherchant un coup UCI
+    quelque part dans la ligne. Robuste a la variation de format entre versions
+    de lc0 (v0.30 : 'info string e2e4 ...', v0.31+ : 'info string node PV: e2e4 ...').
     """
-    parts = line.split()
-    if len(parts) < 3:
-        return None
-    move_uci = parts[2]
-    if not _looks_like_uci(move_uci):
-        return None
     pct_index = line.find("P:")
     if pct_index == -1:
+        return None
+    # Cherche le premier token UCI-like dans toute la ligne.
+    move_uci: str | None = None
+    for token in line.split():
+        clean = token.strip("()[],.")
+        if _looks_like_uci(clean):
+            move_uci = clean
+            break
+    if move_uci is None:
         return None
     tail = line[pct_index + 2 :].strip()
     pct_token = tail.split("%", 1)[0].strip()
@@ -193,4 +222,10 @@ def _looks_like_uci(token: str) -> bool:
         return False
     files = "abcdefgh"
     ranks = "12345678"
-    return token[0] in files and token[1] in ranks and token[2] in files and token[3] in ranks
+    return (
+        token[0] in files
+        and token[1] in ranks
+        and token[2] in files
+        and token[3] in ranks
+        and (len(token) == 4 or token[4] in "qrbn")
+    )

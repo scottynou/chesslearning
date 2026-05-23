@@ -47,10 +47,41 @@ from .schemas import (
 from .stockfish_engine import StockfishConfigurationError, StockfishEngine, StockfishRuntimeError
 from .strategy.opening_coach import list_available_plans
 from .strategy.plan_engine import get_plan_recommendations
+from .maia_engine import get_engine as get_maia_engine, is_enabled as maia_is_enabled
 
 load_dotenv()
 
 app = FastAPI(title="Chess Learning API", version="0.1.0")
+
+
+@app.on_event("startup")
+def warm_engines() -> None:
+    """Lance lc0+Maia et un coup Stockfish des le boot pour eviter le cold
+    start du premier utilisateur. Sans bloquer le boot du serveur si l'un
+    des deux echoue."""
+    import threading
+
+    def _warm():
+        try:
+            if maia_is_enabled():
+                # Force le boot du process lc0 + une suggest pour mettre en cache.
+                engine = get_maia_engine(1500)
+                engine.suggest("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", top_n=3)
+                logger.info("Maia warmed up")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Maia warmup failed: %s", exc)
+        try:
+            StockfishEngine().analyze(
+                "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+                multipv=3,
+                depth=8,
+                movetime_ms=200,
+            )
+            logger.info("Stockfish warmed up")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Stockfish warmup failed: %s", exc)
+
+    threading.Thread(target=_warm, daemon=True).start()
 logger = logging.getLogger(__name__)
 
 frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
@@ -145,15 +176,17 @@ async def text_json_body_compat(request: Request, call_next):
         ]
     return await call_next(request)
 
-analyze_cache: MemoryCache[AnalyzeResponse] = MemoryCache(ttl_seconds=300)
-explain_cache: MemoryCache[ExplainResponse] = MemoryCache(ttl_seconds=900)
-explain_candidate_cache: MemoryCache[ExplainCandidateResponse] = MemoryCache(ttl_seconds=900)
-review_cache: MemoryCache[ReviewMoveResponse] = MemoryCache(ttl_seconds=900)
-plan_cache: MemoryCache[PositionPlanResponse] = MemoryCache(ttl_seconds=300)
-plan_recommendations_cache: MemoryCache[PlanRecommendationsResponse] = MemoryCache(ttl_seconds=300)
-live_plan_insight_cache: MemoryCache[LivePlanInsightResponse] = MemoryCache(ttl_seconds=900)
-bot_move_cache: MemoryCache[BotMoveResponse] = MemoryCache(ttl_seconds=120)
-image_import_cache: MemoryCache[ImportPositionImageResponse] = MemoryCache(ttl_seconds=1800)
+# Caches : TTL augmente sur les positions d'analyse (deterministes) pour
+# tirer parti des positions communes (ouvertures jouees par beaucoup d'users).
+analyze_cache: MemoryCache[AnalyzeResponse] = MemoryCache(ttl_seconds=1800)
+explain_cache: MemoryCache[ExplainResponse] = MemoryCache(ttl_seconds=1800)
+explain_candidate_cache: MemoryCache[ExplainCandidateResponse] = MemoryCache(ttl_seconds=1800)
+review_cache: MemoryCache[ReviewMoveResponse] = MemoryCache(ttl_seconds=1800)
+plan_cache: MemoryCache[PositionPlanResponse] = MemoryCache(ttl_seconds=900)
+plan_recommendations_cache: MemoryCache[PlanRecommendationsResponse] = MemoryCache(ttl_seconds=900)
+live_plan_insight_cache: MemoryCache[LivePlanInsightResponse] = MemoryCache(ttl_seconds=1800)
+bot_move_cache: MemoryCache[BotMoveResponse] = MemoryCache(ttl_seconds=300)
+image_import_cache: MemoryCache[ImportPositionImageResponse] = MemoryCache(ttl_seconds=3600)
 
 
 @app.get("/health")
@@ -177,6 +210,62 @@ def health() -> dict[str, bool | str]:
         "maiaWeights1500": os.path.isfile(f"{weights_dir}/maia-1500.pb.gz"),
         "maiaWeights1900": os.path.isfile(f"{weights_dir}/maia-1900.pb.gz"),
     }
+
+
+@app.get("/debug/maia-suggest")
+def debug_maia_suggest() -> dict[str, object]:
+    """Appelle MaiaEngine.suggest_with_raw pour voir le format brut de lc0."""
+    from .maia_engine import get_engine
+    try:
+        engine = get_engine(1500)
+        suggestions, raw = engine.suggest_with_raw("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", top_n=10)
+        return {
+            "ok": True,
+            "available": engine.is_available(),
+            "count": len(suggestions),
+            "moves": [{"uci": m.move_uci, "prob": m.probability} for m in suggestions],
+            "raw": raw[:3000],
+        }
+    except Exception as exc:  # noqa: BLE001
+        import traceback
+        return {"ok": False, "error": str(exc), "trace": traceback.format_exc()[:2000]}
+
+
+@app.get("/debug/maia-test")
+def debug_maia_test() -> dict[str, object]:
+    """Lance lc0 et execute une analyse pour capturer le format exact des coups."""
+    import subprocess
+    lc0_path = os.getenv("LC0_PATH", "/opt/lc0/lc0")
+    weights = f"{os.getenv('MAIA_WEIGHTS_DIR', '/opt/maia-weights')}/maia-1500.pb.gz"
+    if not os.path.isfile(lc0_path):
+        return {"ok": False, "error": "lc0 binary missing"}
+    try:
+        cmds = b"uci\nsetoption name VerboseMoveStats value true\nisready\nposition startpos moves e2e4\ngo nodes 1\nquit\n"
+        result = subprocess.run(
+            [lc0_path, f"--weights={weights}"],
+            input=cmds,
+            capture_output=True,
+            timeout=30,
+        )
+        out = result.stdout.decode("utf-8", errors="ignore")
+        # Garde uniquement les lignes apres "readyok" pour voir la sortie de go.
+        post_ready = out.split("readyok", 1)[-1]
+        return {
+            "ok": True,
+            "returncode": result.returncode,
+            "lengthTotal": len(out),
+            "postReadyok": post_ready[:5000],
+            "stderr": result.stderr.decode("utf-8", errors="ignore")[:500],
+        }
+    except subprocess.TimeoutExpired as exc:
+        return {
+            "ok": False,
+            "error": "timeout",
+            "stdout": (exc.stdout or b"").decode("utf-8", errors="ignore")[-4000:],
+            "stderr": (exc.stderr or b"").decode("utf-8", errors="ignore")[:500],
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc)}
 
 
 @app.post("/analyze", response_model=AnalyzeResponse)

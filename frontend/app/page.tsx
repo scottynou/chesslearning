@@ -11,6 +11,7 @@ import { MoveHistory } from "@/components/MoveHistory";
 import { OpeningRepertoirePanel } from "@/components/OpeningRepertoirePanel";
 import { MistakePatternsPanel } from "@/components/MistakePatternsPanel";
 import { PgnImportModal } from "@/components/PgnImportModal";
+import { PositionEditorModal } from "@/components/PositionEditorModal";
 import { PlanFirstPanel } from "@/components/PlanFirstPanel";
 import { PlanSwitchModal } from "@/components/PlanSwitchModal";
 import { PostGameReview } from "@/components/PostGameReview";
@@ -1054,6 +1055,7 @@ export default function HomePage() {
   const [mistakesOpen, setMistakesOpen] = useState(false);
   const [pgnImportOpen, setPgnImportOpen] = useState(false);
   const [tacticalOpen, setTacticalOpen] = useState(false);
+  const [positionEditorOpen, setPositionEditorOpen] = useState(false);
   const { t, locale, setLocale } = useI18n();
   const lastSeenPlyForReview = useRef(0);
   const savedGameRef = useRef<string | null>(null);
@@ -1781,6 +1783,36 @@ export default function HomePage() {
     navigateToSnapshot(makeNavigationSnapshot({ appStage: "side-selection", userSide: "white", orientation: "white", selectedPlanId: null, firstOpponentMove: null, historyUci: [], importedFen: null }));
   }
 
+  function applyEditedPosition(newFen: string, side: "white" | "black") {
+    let importedGame: Chess;
+    try {
+      importedGame = new Chess(newFen);
+    } catch (e) {
+      setLastMessage("Position invalide.");
+      return;
+    }
+    timelineRef.current = { historyUci: [], moveSources: [], redoStack: [] };
+    setBaseFen(newFen);
+    setGame(importedGame);
+    setMoveSources([]);
+    setRedoStack([]);
+    setPositionEditorOpen(false);
+    accuracySession.reset();
+    setShowPostGameReview(false);
+    navigateToSnapshot(
+      makeNavigationSnapshot({
+        appStage: "coach",
+        userSide: side,
+        orientation: side,
+        selectedPlanId: null,
+        firstOpponentMove: null,
+        historyUci: [],
+        importedFen: newFen
+      })
+    );
+    setLastMessage("Position éditée appliquée.");
+  }
+
   function importGameFromPgn(historyUci: string[], side: "white" | "black") {
     timelineRef.current = { historyUci, moveSources: historyUci.map(() => "manual" as MoveSource), redoStack: [] };
     const nextGame = buildGameFromHistory(historyUci, null);
@@ -2097,6 +2129,16 @@ export default function HomePage() {
             className="site-menu-link"
             onClick={() => {
               setMenuOpen(false);
+              setPositionEditorOpen(true);
+            }}
+          >
+            Éditer la position
+          </button>
+          <button
+            type="button"
+            className="site-menu-link"
+            onClick={() => {
+              setMenuOpen(false);
               setTacticalOpen(true);
             }}
           >
@@ -2170,6 +2212,13 @@ export default function HomePage() {
       ) : null}
       {pgnImportOpen ? (
         <PgnImportModal onImport={importGameFromPgn} onClose={() => setPgnImportOpen(false)} />
+      ) : null}
+      {positionEditorOpen ? (
+        <PositionEditorModal
+          initialFen={fen}
+          onApply={applyEditedPosition}
+          onClose={() => setPositionEditorOpen(false)}
+        />
       ) : null}
       {tacticalOpen ? (
         <div className="post-game-review-overlay" role="dialog" aria-modal="true">

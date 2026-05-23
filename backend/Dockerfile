@@ -42,7 +42,9 @@ RUN apt-get update \
         libgomp1 \
         libstdc++6 \
         libopenblas0 \
-    && rm -rf /var/lib/apt/lists/*
+        zlib1g \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /lib/x86_64-linux-gnu/libz.so.1 /usr/lib/x86_64-linux-gnu/libz.so
 
 # Recopie le binaire lc0 compile depuis le stage 1
 RUN mkdir -p /opt/lc0
