@@ -1357,14 +1357,19 @@ button:disabled { cursor: not-allowed; }
   }
 }
 
-/* ---------- ELO indicator collapsible (gain d'espace pour le board) ----- */
+/* ---------- ELO indicator collapsible (gain d'espace pour le board) -----
+ * Theme sombre pour matcher l'indicator d'origine qui est concu pour
+ * cream-on-dark. Sinon le contenu interne (color: rgba(247,239,224,...))
+ * devient invisible sur fond cream.
+ */
 .elo-live-collapsible {
   width: min(95vw, 600px);
-  background: rgba(255, 252, 245, 0.78);
-  border: 1px solid var(--line);
-  border-radius: 12px;
+  background: rgba(3, 5, 10, 0.55);
+  border: 1px solid rgba(247, 239, 224, 0.12);
+  border-radius: 14px;
   font-size: 0.78rem;
-  color: var(--night);
+  color: rgba(247, 239, 224, 0.85);
+  backdrop-filter: blur(8px);
 }
 .elo-live-collapsible > summary {
   list-style: none;
@@ -1373,25 +1378,28 @@ button:disabled { cursor: not-allowed; }
   justify-content: space-between;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.45rem 0.85rem;
-  font-weight: 800;
+  padding: 0.5rem 0.9rem;
+  font-weight: 900;
+  color: #f7efe0;
 }
 .elo-live-collapsible > summary::-webkit-details-marker { display: none; }
 .elo-live-collapsible > summary::after {
   content: "▾";
-  font-size: 0.75rem;
-  opacity: 0.55;
+  font-size: 0.8rem;
+  color: rgba(247, 239, 224, 0.55);
   transition: transform 0.15s ease;
 }
 .elo-live-collapsible[open] > summary::after { transform: rotate(180deg); }
 .elo-live-collapsible > summary em {
   font-style: normal;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 0.72rem;
-  color: rgba(23, 32, 45, 0.65);
+  color: rgba(247, 239, 224, 0.6);
+  letter-spacing: 0.04em;
 }
 .elo-live-collapsible .elo-live-indicator {
   margin: 0 0.65rem 0.65rem;
+  box-shadow: none;
 }
 
 /* ---------- Edit mode (board libre) ---------- */
