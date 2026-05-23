@@ -2132,7 +2132,7 @@ export default function HomePage() {
               setPositionEditorOpen(true);
             }}
           >
-            Éditer la position
+            {t("menu.editPosition")}
           </button>
           <button
             type="button"
