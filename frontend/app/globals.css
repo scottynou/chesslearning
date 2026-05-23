@@ -1324,14 +1324,13 @@ button:disabled { cursor: not-allowed; }
 }
 .tactical-secondary:hover { background: #e2e8f0; }
 
-/* ---------- Responsive board (suit la spec utilisateur) ----------
- * Conteneur carre force par aspect-ratio. Le composant React mesure
- * la taille rendue via ResizeObserver et adapte react-chessboard.
- * Pas de pixels fixes -> width: min(90vw, 600px) sur desktop,
- * pleine largeur sur mobile.
+/* ---------- Responsive board MAX SIZE (focus partie) ----------
+ * Conteneur carre force par aspect-ratio. Prend le plus grand carre qui
+ * tient dans la fenetre, en gardant un peu de marge pour le meter (haut)
+ * et les controles (bas). Pas de cap arbitraire en px.
  */
 .coach-board-fluid {
-  width: min(90vw, 600px);
+  width: min(96vw, calc(100svh - 11rem));
   aspect-ratio: 1 / 1;
   max-width: 100%;
   padding: 0;
@@ -1348,8 +1347,51 @@ button:disabled { cursor: not-allowed; }
 }
 @media (max-width: 640px) {
   .coach-board-fluid {
-    width: min(96vw, 480px);
+    width: min(98vw, calc(100svh - 9rem));
   }
+}
+@media (min-width: 1250px) {
+  /* Sur grand ecran on garde le panneau droit donc on cap a la colonne. */
+  .coach-board-fluid {
+    width: min(770px, calc(100svh - 11rem));
+  }
+}
+
+/* ---------- ELO indicator collapsible (gain d'espace pour le board) ----- */
+.elo-live-collapsible {
+  width: min(95vw, 600px);
+  background: rgba(255, 252, 245, 0.78);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-size: 0.78rem;
+  color: var(--night);
+}
+.elo-live-collapsible > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.85rem;
+  font-weight: 800;
+}
+.elo-live-collapsible > summary::-webkit-details-marker { display: none; }
+.elo-live-collapsible > summary::after {
+  content: "▾";
+  font-size: 0.75rem;
+  opacity: 0.55;
+  transition: transform 0.15s ease;
+}
+.elo-live-collapsible[open] > summary::after { transform: rotate(180deg); }
+.elo-live-collapsible > summary em {
+  font-style: normal;
+  font-weight: 600;
+  font-size: 0.72rem;
+  color: rgba(23, 32, 45, 0.65);
+}
+.elo-live-collapsible .elo-live-indicator {
+  margin: 0 0.65rem 0.65rem;
 }
 
 /* ---------- Position editor ---------- */

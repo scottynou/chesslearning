@@ -2449,13 +2449,19 @@ export default function HomePage() {
           <button type="button" onClick={() => setOrientation(orientation === "white" ? "black" : "white")} className="control-button">Tourner</button>
         </div>
 
-        <EloLiveIndicator
-          baseElo={baseCoachElo}
-          currentElo={effectiveCoachElo}
-          boost={adaptiveBoost}
-          change={eloChange}
-          pressureLabel={eloPressureLabel}
-        />
+        <details className="elo-live-collapsible">
+          <summary>
+            <span>ELO {effectiveCoachElo}</span>
+            <em>{eloPressureLabel}</em>
+          </summary>
+          <EloLiveIndicator
+            baseElo={baseCoachElo}
+            currentElo={effectiveCoachElo}
+            boost={adaptiveBoost}
+            change={eloChange}
+            pressureLabel={eloPressureLabel}
+          />
+        </details>
 
         {botError ? <div className="coach-board-error">{botError}</div> : null}
         {lastMessage ? <div className="coach-board-note">{lastMessage}</div> : null}
