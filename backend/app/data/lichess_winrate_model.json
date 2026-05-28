@@ -1,0 +1,70 @@
+{
+  "calibration": {
+    "temperature": 1.0
+  },
+  "confidence": "high",
+  "createdAt": "2026-05-28T10:58:07.487426+00:00",
+  "featureNames": [
+    "bias",
+    "material_pawns_white",
+    "side_to_move_white",
+    "legal_moves_scaled",
+    "white_in_check",
+    "black_in_check",
+    "endgame_phase",
+    "fullmove_scaled",
+    "rating_avg_scaled",
+    "rating_diff_white_scaled",
+    "speed_bullet",
+    "speed_blitz",
+    "speed_rapid",
+    "speed_classical"
+  ],
+  "targets": {
+    "black": {
+      "weights": {
+        "bias": -0.04782234,
+        "black_in_check": -0.00015828,
+        "endgame_phase": -8.663e-05,
+        "fullmove_scaled": -0.00079646,
+        "legal_moves_scaled": -0.03158033,
+        "material_pawns_white": 0.00022666,
+        "rating_avg_scaled": -0.00331196,
+        "rating_diff_white_scaled": 0.0,
+        "side_to_move_white": -0.02271626,
+        "speed_blitz": -0.02247515,
+        "speed_bullet": -0.0097096,
+        "speed_classical": -0.01560313,
+        "speed_rapid": 0.0,
+        "white_in_check": -0.00030443
+      }
+    },
+    "white": {
+      "weights": {
+        "bias": 0.01265778,
+        "black_in_check": 8.039e-05,
+        "endgame_phase": 6.646e-05,
+        "fullmove_scaled": 0.00021081,
+        "legal_moves_scaled": 0.00821528,
+        "material_pawns_white": -0.00021184,
+        "rating_avg_scaled": -0.00309819,
+        "rating_diff_white_scaled": 0.0,
+        "side_to_move_white": 0.00467931,
+        "speed_blitz": 0.00800409,
+        "speed_bullet": 0.00244054,
+        "speed_classical": 0.00220408,
+        "speed_rapid": 0.0,
+        "white_in_check": 0.00023561
+      }
+    }
+  },
+  "training": {
+    "blackLogLoss": 0.690086,
+    "epochs": 8,
+    "games": 2532718,
+    "minPositionGames": 25,
+    "rows": 14611,
+    "whiteLogLoss": 0.692929
+  },
+  "version": 1
+}
