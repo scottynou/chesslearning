@@ -50,10 +50,9 @@ export function SideSelectionPanel({ onChooseWhite, onChooseBlack, onChooseFreeM
             <h1>Style du coach</h1>
             <div className="landing-profile-grid">
               {styleEntries.map(([id, style]) => (
-                <button key={id} type="button" className="landing-profile-choice" onClick={() => chooseStyle(id)}>
+                <button key={id} type="button" className="landing-profile-choice" onClick={() => chooseStyle(id)} title={style.description}>
                   <span>{style.label}</span>
                   <strong>{style.shortLabel}</strong>
-                  <em>{style.description}</em>
                 </button>
               ))}
             </div>
@@ -66,10 +65,9 @@ export function SideSelectionPanel({ onChooseWhite, onChooseBlack, onChooseFreeM
             <h1>Style humain</h1>
             <div className="landing-profile-grid">
               {profileEntries.map(([id, profile]) => (
-                <button key={id} type="button" className="landing-profile-choice" onClick={() => chooseProfile(id)}>
+                <button key={id} type="button" className="landing-profile-choice" onClick={() => chooseProfile(id)} title={profile.description}>
                   <span>{profile.label}</span>
                   <strong>{profile.baseElo}</strong>
-                  <em>{profile.description}</em>
                 </button>
               ))}
             </div>

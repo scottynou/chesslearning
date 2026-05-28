@@ -50,23 +50,38 @@ def review_move(request: ReviewMoveRequest, depth: int = 10) -> ReviewMoveRespon
     best_candidate = min(before_candidates, key=lambda candidate: candidate.stockfish_rank, default=None)
 
     played_candidate = next((candidate for candidate in before_candidates if candidate.move_uci == request.move_uci), None)
-    best_score = _score_value(before_lines[0]) if before_lines else 0
+    best_line = before_lines[0] if before_lines else None
+    best_score = _score_value(best_line) if best_line else 0
+    best_eval_cp = best_line.eval_cp if best_line else None
+    best_mate = best_line.mate_in if best_line else None
+    best_wdl = best_line.wdl if best_line else None
 
     if played_candidate is not None:
         played_line = next((line for line in before_lines if line.move_uci == request.move_uci), None)
         played_score = _score_value(played_line) if played_line else best_score
-        played_eval_cp = played_candidate.eval_cp
-        played_mate = played_candidate.mate_in
+        played_eval_cp = played_line.eval_cp if played_line else played_candidate.eval_cp
+        played_mate = played_line.mate_in if played_line else played_candidate.mate_in
+        played_wdl = played_line.wdl if played_line else None
     else:
         after_lines = engine.analyze(request.fen_after, multipv=1, depth=depth)
-        after_score = _score_value(after_lines[0]) if after_lines else 0
+        after_line = after_lines[0] if after_lines else None
+        after_score = _score_value(after_line) if after_line else 0
         played_score = -after_score
-        played_eval_cp = -after_lines[0].eval_cp if after_lines and after_lines[0].eval_cp is not None else None
-        played_mate = -after_lines[0].mate_in if after_lines and after_lines[0].mate_in is not None else None
+        played_eval_cp = -after_line.eval_cp if after_line and after_line.eval_cp is not None else None
+        played_mate = -after_line.mate_in if after_line and after_line.mate_in is not None else None
+        played_wdl = _invert_wdl(after_line.wdl if after_line else None)
 
     loss = max(0, best_score - played_score)
     quality = classify_quality(loss)
-    accuracy_pct = move_accuracy_percent(best_score, played_score)
+    accuracy_pct = move_accuracy_percent(
+        best_eval_cp,
+        played_eval_cp,
+        mate_best=best_mate,
+        mate_played=played_mate,
+        wdl_best=best_wdl,
+        wdl_played=played_wdl,
+    )
+    displayed_loss = min(loss, 2000)
 
     if best_candidate is not None:
         best_notation = beginner_notation_for_uci(request.fen_before, best_candidate.move_uci, best_candidate.move_san)
@@ -112,7 +127,7 @@ def review_move(request: ReviewMoveRequest, depth: int = 10) -> ReviewMoveRespon
         quality=quality,
         qualityLabel=QUALITY_LABELS[quality],
         accuracyPercent=round(accuracy_pct, 1),
-        centipawnLoss=int(loss),
+        centipawnLoss=int(displayed_loss),
         playedMoveEvalLabel=evaluation_label(played_eval_cp, played_mate),
         bestMoveLabel=best_label,
         bestMoveWasDifferent=best_different,
@@ -208,6 +223,16 @@ def classify_quality(loss_cp: int) -> str:
     return "blunder"
 
 
+def _invert_wdl(wdl: tuple[int, int, int] | list[int] | None) -> tuple[int, int, int] | None:
+    if not wdl or len(wdl) != 3:
+        return None
+    try:
+        wins, draws, losses = (max(0, int(value)) for value in wdl)
+    except (TypeError, ValueError):
+        return None
+    return losses, draws, wins
+
+
 # cp_to_win_percent et move_accuracy_percent sont definis dans app.accuracy_math
 # pour pouvoir etre testes sans toute la stack (chess, AI providers).
 
@@ -255,7 +280,7 @@ def _connection_to_plan(
 
     plan_name = str(plan.get("nameFr") or "ton plan")
     line = list(plan.get("mainLineUci") or [])
-    ply_index = max(0, len(move_history) - 1)
+    ply_index = _played_ply_index(move_history, move_uci)
     expected_uci = line[ply_index] if ply_index < len(line) else None
 
     if expected_uci == move_uci:
@@ -265,7 +290,7 @@ def _connection_to_plan(
         )
 
     if expected_uci:
-        expected_label = _label_for_expected_move(expected_uci, move_history)
+        expected_label = _label_for_expected_move(expected_uci, move_history, ply_index)
         if quality in {"excellent", "good", "playable"}:
             return (
                 f"L'adversaire sort de la ligne de {plan_name}. La reponse attendue etait {expected_label}, "
@@ -289,9 +314,16 @@ def _connection_to_plan(
     )
 
 
-def _label_for_expected_move(move_uci: str, move_history: list[str]) -> str:
+def _played_ply_index(move_history: list[str], move_uci: str) -> int:
+    if move_history and move_history[-1] == move_uci:
+        return len(move_history) - 1
+    return len(move_history)
+
+
+def _label_for_expected_move(move_uci: str, move_history: list[str], ply_index: int | None = None) -> str:
     board = chess.Board()
-    for played in move_history[:-1]:
+    history_before_move = move_history[:ply_index] if ply_index is not None else move_history
+    for played in history_before_move:
         try:
             board.push_uci(played)
         except ValueError:

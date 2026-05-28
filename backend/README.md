@@ -41,9 +41,35 @@ pytest
 - `POST /review-move`
 - `POST /bot-move`
 - `POST /position-plan`
+- `POST /winrate`
 - `GET /available-plans`
 - `POST /plan-recommendations`
 - `GET /health`
+
+## Winrate Lichess
+
+`POST /winrate` returns one readable number: the chance that the requested side wins from a FEN. It prefers exact aggregated Lichess positions, then an optional local Lichess model, then Stockfish, then a simple local formula. Draws stay in the denominator for Lichess exact stats, so `40 white wins / 30 draws / 30 black wins` returns a 40% white winrate.
+
+Build the exact-position database from streamed Lichess PGN exports:
+
+```bash
+python scripts/ingest_lichess_winrates.py lichess_db_standard_rated_YYYY-MM.pgn.zst
+```
+
+Optionally train the rare-position model from the aggregate DB:
+
+```bash
+python scripts/train_lichess_winrate_model.py
+```
+
+Useful env vars:
+
+```env
+LICHESS_WINRATE_DB=app/data/lichess_winrates.sqlite
+LICHESS_WINRATE_MODEL_PATH=app/data/lichess_winrate_model.json
+WINRATE_STOCKFISH_DEPTH=12
+WINRATE_STOCKFISH_MOVETIME_MS=350
+```
 
 ## Plan-First Coaching
 

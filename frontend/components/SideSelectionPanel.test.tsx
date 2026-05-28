@@ -15,7 +15,8 @@ describe("SideSelectionPanel", () => {
     render(<SideSelectionPanel onChooseWhite={() => undefined} onChooseBlack={onChooseBlack} onChooseFreeMode={() => undefined} />);
     fireEvent.click(screen.getByRole("button", { name: "Je joue les noirs" }));
     fireEvent.click(screen.getByRole("button", { name: /Humain 2000/i }));
-    expect(onChooseBlack).toHaveBeenCalledWith("strong");
+    fireEvent.click(screen.getByRole("button", { name: /Equilibre/i }));
+    expect(onChooseBlack).toHaveBeenCalledWith("strong", "balanced");
   });
 
   it("can start the elite white flow", () => {
@@ -23,6 +24,7 @@ describe("SideSelectionPanel", () => {
     render(<SideSelectionPanel onChooseWhite={onChooseWhite} onChooseBlack={() => undefined} onChooseFreeMode={() => undefined} />);
     fireEvent.click(screen.getByRole("button", { name: "Je joue les blancs" }));
     fireEvent.click(screen.getByRole("button", { name: /Elite humaine 3000/i }));
-    expect(onChooseWhite).toHaveBeenCalledWith("veryStrong");
+    fireEvent.click(screen.getByRole("button", { name: /Equilibre/i }));
+    expect(onChooseWhite).toHaveBeenCalledWith("veryStrong", "balanced");
   });
 });

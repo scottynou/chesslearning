@@ -87,9 +87,10 @@ export function ChessCoachBoard({
   }, [boardWidth]);
 
   const effectiveWidth = boardWidth ?? measuredWidth;
+  const frameStyle = boardWidth ? ({ "--coach-board-size": `${boardWidth}px` } as CSSProperties) : undefined;
 
   return (
-    <div ref={wrapperRef} className={frameClassName}>
+    <div ref={wrapperRef} className={frameClassName} style={frameStyle}>
       <div className="coach-board-canvas">
         {effectiveWidth ? (
           <Chessboard
@@ -125,19 +126,22 @@ export function ChessCoachBoard({
 }
 
 function buildArrows(recommendationArrows: BoardMove[], highlightedMove?: BoardMove | null) {
-  const arrows = recommendationArrows.map((move) => [
-    move.from as Square,
-    move.to as Square,
-    move.color ?? "rgba(224, 185, 118, 0.72)"
-  ]) as [Square, Square, string][];
-  if (highlightedMove && !arrows.some(([from, to]) => from === highlightedMove.from && to === highlightedMove.to)) {
-    arrows.push([
+  const arrowsByMove = new Map<string, [Square, Square, string]>();
+  for (const move of recommendationArrows) {
+    arrowsByMove.set(`${move.from}-${move.to}`, [
+      move.from as Square,
+      move.to as Square,
+      move.color ?? "rgba(224, 185, 118, 0.72)"
+    ]);
+  }
+  if (highlightedMove) {
+    arrowsByMove.set(`${highlightedMove.from}-${highlightedMove.to}`, [
       highlightedMove.from as Square,
       highlightedMove.to as Square,
       highlightedMove.color ?? "rgba(224, 185, 118, 0.72)"
     ]);
   }
-  return arrows;
+  return [...arrowsByMove.values()];
 }
 
 function buildSquareStyles(

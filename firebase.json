@@ -55,6 +55,13 @@
         }
       },
       {
+        "source": "/calibration-report",
+        "run": {
+          "serviceId": "chess-elo-coach-api",
+          "region": "europe-west1"
+        }
+      },
+      {
         "source": "/analyze",
         "run": {
           "serviceId": "chess-elo-coach-api",

@@ -25,6 +25,7 @@ class EngineLine:
     eval_cp: int | None
     mate_in: int | None
     pv: list[str]
+    wdl: tuple[int, int, int] | None = None
 
 
 _ANALYSIS_CACHE_TTL_SECONDS = 120
@@ -148,6 +149,7 @@ class _PersistentStockfishProcess:
 
         self._send(process, "uci")
         self._wait_for("uciok")
+        self._send(process, "setoption name UCI_ShowWDL value true")
         self._send(process, "isready")
         self._wait_for("readyok")
         self._send(process, "ucinewgame")
@@ -288,6 +290,18 @@ def _parse_engine_lines(lines: list[str]) -> list[EngineLine]:
             elif score_type == "mate":
                 mate_in = score_value
 
+        wdl: tuple[int, int, int] | None = None
+        if "wdl" in tokens:
+            wdl_index = tokens.index("wdl")
+            try:
+                wdl = (
+                    int(tokens[wdl_index + 1]),
+                    int(tokens[wdl_index + 2]),
+                    int(tokens[wdl_index + 3]),
+                )
+            except (IndexError, ValueError):
+                wdl = None
+
         pv_index = tokens.index("pv")
         pv = tokens[pv_index + 1 :]
         if not pv:
@@ -298,6 +312,7 @@ def _parse_engine_lines(lines: list[str]) -> list[EngineLine]:
             move_uci=pv[0],
             eval_cp=eval_cp,
             mate_in=mate_in,
+            wdl=wdl,
             pv=pv,
         )
 

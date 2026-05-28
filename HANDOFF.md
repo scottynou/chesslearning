@@ -118,7 +118,7 @@ score = in_band_bonus (+26 si dans [min, max])
       + elite_practical_bonus (pour veryStrong, rangs 2-6)
       + plan_bonus (+10 si suit le plan d'ouverture)
       + creative_rank_bonus (style creative)
-      + maia_bonus (jusqu'à +40)
+      + maia_bonus (jusqu'à +25)
       + final_score * weight
       + plan_fit * weight
       + simplicity * weight (avec bonus du style)
@@ -167,7 +167,7 @@ Le boost augmente l'ELO effectif envoyé au backend, qui durcit les bandes. Déc
 
 ### Post-partie
 - Modal automatique avec :
-  - Accuracy globale (moyenne harmonique, plus stricte que la moyenne simple)
+  - Accuracy globale (moyenne simple des coups revus)
   - ACPL (average centipawn loss)
   - Compteurs par qualité (excellent / bon / jouable / imprécis / erreur / gaffe)
   - Top 3 des pires coups
@@ -226,7 +226,7 @@ Le boost augmente l'ELO effectif envoyé au backend, qui durcit les bandes. Déc
 | `lib/api.ts` | Client HTTP vers le backend (fetch JSON, abort signals) |
 | `lib/types.ts` | Types TypeScript miroirs des schemas Pydantic |
 | `lib/eloAdaptation.ts` | Profils, styles, calcul ELO effectif, boost adaptatif |
-| `lib/accuracySession.ts` | Agrégation accuracy session (samples, moyenne harmonique) |
+| `lib/accuracySession.ts` | Agrégation accuracy session (samples, moyenne simple, ACPL) |
 | `lib/useAccuracySession.ts` | Hook React qui appelle `/review-move` après chaque coup joueur |
 | `lib/gameHistory.ts` | localStorage `chess_learner_games_v1` (max 50) |
 | `lib/mistakeTracker.ts` | Analyse des patterns d'erreurs |
@@ -241,7 +241,7 @@ Le boost augmente l'ELO effectif envoyé au backend, qui durcit les bandes. Déc
 - `backend/tests/test_accuracy_and_crisis.py` — bandes, crisis factor, styles (13 cas)
 - `backend/tests/test_plan_first.py` — accuracy profiles dans le contexte du plan engine
 - `backend/tests/test_elo_ranker.py` / `test_v2_coach.py` / `test_schemas.py` / `test_stockfish_engine.py` / `test_image_import_service.py` / `test_ai_provider_selection.py`
-- **98 tests passants** au total — `python -m pytest tests/`
+- **109 tests passants** au total — `python -m pytest tests/`
 
 ---
 
@@ -290,7 +290,7 @@ gcloud run deploy chess-elo-coach-api \
 ## 7. État connu / limitations / TODO
 
 ### Tuning à vérifier
-- **Maia bias jugé trop fort** par l'utilisateur final (moins de victoires depuis activation). Possibilité de réduire `maia_bonus` de 40 → 25 et descendre le seuil de désactivation `crisis_factor > 0.35` à `0.20`.
+- **Maia bias réduit** : `maia_bonus` est maintenant à 25 et le seuil de désactivation Maia est `crisis_factor > 0.20`. Le prochain réglage utile est une vraie calibration par positions ou self-play.
 - Les targets d'accuracy (70/75/85) sont des constantes dans `scoring_profile.accuracy_bands_for_profile` — facile à ajuster.
 
 ### Limitations actuelles

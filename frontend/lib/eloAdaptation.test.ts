@@ -14,15 +14,16 @@ import {
 
 describe("eloAdaptation", () => {
   it("clamps and steps base Elo values", () => {
-    expect(normalizeBaseElo(421)).toBe(1500);
+    expect(normalizeBaseElo(421)).toBe(800);
     expect(normalizeBaseElo(1987)).toBe(2000);
     expect(normalizeBaseElo(3900)).toBe(3000);
     expect(effectiveElo(2950, 400)).toBe(3000);
-    expect(effectiveElo(1500, -200)).toBe(1500);
+    expect(effectiveElo(800, -200)).toBe(800);
     expect(effectiveElo(2000, 1800)).toBe(3000);
   });
 
   it("maps Elo to the internal skill level", () => {
+    expect(skillLevelForElo(800)).toBe("beginner");
     expect(skillLevelForElo(1500)).toBe("beginner");
     expect(skillLevelForElo(1750)).toBe("beginner");
     expect(skillLevelForElo(2000)).toBe("intermediate");
@@ -30,12 +31,13 @@ describe("eloAdaptation", () => {
     expect(skillLevelForElo(3000)).toBe("pro");
   });
 
-  it("raises the adaptive boost after a serious mistake without jumping more than 200 Elo", () => {
-    expect(nextAdaptiveBoost({ currentBoost: 0, autoEnabled: true, playerReviewQuality: "blunder", stablePlyCount: 0 })).toBe(200);
-    expect(nextAdaptiveBoost({ currentBoost: 100, autoEnabled: true, playerReviewQuality: "mistake", stablePlyCount: 0 })).toBe(300);
+  it("raises the adaptive boost after a serious mistake without jumping brutally", () => {
+    expect(nextAdaptiveBoost({ currentBoost: 0, autoEnabled: true, playerReviewQuality: "blunder", stablePlyCount: 0 })).toBe(250);
+    expect(nextAdaptiveBoost({ currentBoost: 100, autoEnabled: true, playerReviewQuality: "mistake", stablePlyCount: 0 })).toBe(250);
   });
 
   it("maps human profiles to their hidden base Elo", () => {
+    expect(baseEloForProfile("beginner")).toBe(800);
     expect(baseEloForProfile("lambda")).toBe(1500);
     expect(baseEloForProfile("strong")).toBe(2000);
     expect(baseEloForProfile("veryStrong")).toBe(3000);
@@ -78,8 +80,8 @@ describe("eloAdaptation", () => {
       suggestedBoostDelta: 100,
       trend: first.trend
     });
-    expect(repeated.boost).toBe(300);
-    expect(repeated.appliedDelta).toBe(200);
+    expect(repeated.boost).toBe(200);
+    expect(repeated.appliedDelta).toBe(100);
 
     const critical = applyAdaptiveSignal({
       currentBoost: repeated.boost,
@@ -90,7 +92,7 @@ describe("eloAdaptation", () => {
     expect(critical.appliedDelta).toBe(200);
   });
 
-  it("does not boost after the player's own move unless the position is critical", () => {
+  it("does not double-count non-critical pressure after the player's own move", () => {
     const ownGoodMove = applyAdaptiveSignal({
       currentBoost: 0,
       pressure: "worse",
@@ -132,12 +134,37 @@ describe("eloAdaptation", () => {
     expect(repeated.appliedDelta).toBe(-50);
   });
 
+  it("slowly calms down after repeated neutral positions", () => {
+    const first = applyAdaptiveSignal({
+      currentBoost: 300,
+      pressure: "stable",
+      suggestedBoostDelta: 0,
+      trend: freshEloTrendState()
+    });
+    const second = applyAdaptiveSignal({
+      currentBoost: first.boost,
+      pressure: "stable",
+      suggestedBoostDelta: 0,
+      trend: first.trend
+    });
+    const third = applyAdaptiveSignal({
+      currentBoost: second.boost,
+      pressure: "stable",
+      suggestedBoostDelta: 0,
+      trend: second.trend
+    });
+
+    expect(first.boost).toBe(300);
+    expect(second.boost).toBe(300);
+    expect(third.boost).toBe(250);
+  });
+
   it("keeps the hidden boost inside the configured bounds", () => {
     expect(
       applyAdaptiveSignal({
         currentBoost: 1450,
         pressure: "critical",
-        suggestedBoostDelta: 200,
+        suggestedBoostDelta: 300,
         trend: freshEloTrendState()
       }).boost
     ).toBe(1500);

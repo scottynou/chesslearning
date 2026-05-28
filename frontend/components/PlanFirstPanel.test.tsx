@@ -89,6 +89,18 @@ const response: PlanRecommendationsResponse = {
     opponentTurn: false,
     gameOver: false
   },
+  positionWinRate: {
+    available: true,
+    playerSide: "black",
+    perspective: "player",
+    playerWinPercent: 52.4,
+    whiteWinPercent: 47.6,
+    blackWinPercent: 52.4,
+    sideToMoveWinPercent: 52.4,
+    evalCp: 26,
+    mateIn: null,
+    label: "Equilibre"
+  },
   aiRerankStatus: {
     provider: "local",
     model: null,
@@ -101,6 +113,7 @@ const response: PlanRecommendationsResponse = {
     suggestedBoostDelta: 0,
     reason: "stable"
   },
+  eloComparisons: [],
   technicalDetails: {},
   technicalEngineMoves: []
 };

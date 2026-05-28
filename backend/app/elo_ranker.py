@@ -69,6 +69,7 @@ def rank_candidates(fen: str, lines: list[EngineLine], elo: int, max_moves: int)
                 stockfishRank=line.stockfish_rank,
                 evalCp=line.eval_cp,
                 mateIn=line.mate_in,
+                wdl=list(line.wdl) if line.wdl is not None else None,
                 pv=line.pv,
                 coachScore=coach_score,
                 engineScore=engine_score,

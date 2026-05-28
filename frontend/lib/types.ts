@@ -6,6 +6,10 @@ export type Risk = "low" | "medium" | "high";
 export type OpeningState = "on_track" | "recoverable" | "completed" | "abandoned";
 export type AnalysisProvider = "heuristic" | "openai" | "gemini" | "ollama";
 export type AnalysisKind = "ai" | "heuristic";
+export type WinratePerspective = "white" | "black" | "sideToMove";
+export type WinrateSpeed = "bullet" | "blitz" | "rapid" | "classical";
+export type WinrateSource = "lichess_exact" | "lichess_model" | "stockfish" | "fallback";
+export type WinrateConfidence = "high" | "medium" | "low";
 
 export type CandidateMove = {
   rank: number;
@@ -14,6 +18,7 @@ export type CandidateMove = {
   stockfishRank: number;
   evalCp: number | null;
   mateIn: number | null;
+  wdl?: number[] | null;
   pv: string[];
   coachScore: number;
   engineScore: number;
@@ -160,11 +165,41 @@ export type PlanRecommendation = {
   planConnection: string;
   pedagogicalExplanation?: string;
   moveComplexity?: "simple" | "moyen" | "complexe";
+  humanAccuracyEstimate?: number;
+  accuracyBand?: string;
+  winRateEstimate?: number;
+  humanizationScore?: number;
   warning: string | null;
   candidate: CandidateMove | null;
   displayRank?: number;
   displayRole?: string;
   arrowColor?: string;
+  movePlan?: MovePlan | null;
+};
+
+export type MovePlanStep = {
+  ply: number;
+  actor: "you" | "opponent";
+  moveUci: string;
+  label: string;
+  shortLabel: string;
+  idea: string;
+};
+
+export type MovePlanBranch = {
+  ifLabel: string;
+  thenLabel: string;
+  goal: string;
+};
+
+export type MovePlan = {
+  title: string;
+  summary: string;
+  compactLine: string;
+  source: "engine_pv" | "opening_plan" | "principle" | string;
+  depth: number;
+  steps: MovePlanStep[];
+  branches: MovePlanBranch[];
 };
 
 export type GamePlanState = {
@@ -209,6 +244,54 @@ export type AdaptiveSignal = {
   pressure: "stable" | "worse" | "critical" | "drawish";
   suggestedBoostDelta: number;
   reason: string;
+};
+
+export type PositionWinRate = {
+  available: boolean;
+  playerSide: "white" | "black" | string;
+  perspective: "player" | "side_to_move";
+  playerWinPercent: number;
+  whiteWinPercent: number;
+  blackWinPercent: number;
+  sideToMoveWinPercent: number;
+  evalCp: number | null;
+  mateIn: number | null;
+  sideToMoveWdl?: number[] | null;
+  source?: WinrateSource | "stockfish_wdl" | "centipawn" | "mate" | "game_over" | "unavailable";
+  confidence?: WinrateConfidence;
+  label: string;
+};
+
+export type WinrateResponse = {
+  winrate: number;
+  perspective: WinratePerspective;
+  source: WinrateSource;
+  confidence: WinrateConfidence;
+};
+
+export type ForcedMateSignal = {
+  mateIn: 1 | 2 | 3;
+  side: "white" | "black";
+  moveUci: string;
+  moveSan: string;
+  label: string;
+  line: string[];
+  lineSan: string[];
+};
+
+export type EloMoveComparison = {
+  elo: number;
+  label: string;
+  active: boolean;
+  moveUci: string;
+  moveSan: string;
+  beginnerLabel: string;
+  source: string;
+  engineRank: number | null;
+  engineScore: number | null;
+  finalCoachScore: number | null;
+  moveComplexity: string | null;
+  warning: string | null;
 };
 
 export type PlanRecommendationsResponse = {
@@ -274,6 +357,9 @@ export type PlanRecommendationsResponse = {
     opponentTurn: boolean;
     gameOver: boolean;
   };
+  positionWinRate: PositionWinRate;
+  forcedMate?: ForcedMateSignal | null;
+  eloComparisons: EloMoveComparison[];
   aiRerankStatus: AiRerankStatus;
   adaptiveSignal: AdaptiveSignal;
   technicalDetails?: Record<string, unknown>;
@@ -288,6 +374,36 @@ export type LivePlanInsightResponse = {
   event: PlanEvent | null;
   analysisProvider: AnalysisProvider;
   analysisKind: AnalysisKind;
+};
+
+export type CoachStyle = "balanced" | "aggressive" | "solid" | "creative" | "educational";
+export type CoachHumanProfile = "beginner" | "lambda" | "strong" | "veryStrong";
+
+export type CalibrationReportRow = {
+  profile: CoachHumanProfile;
+  profileLabel: string;
+  elo: number;
+  style: CoachStyle;
+  styleLabel: string;
+  targetAccuracy: number;
+  minAccuracy: number;
+  maxAccuracy: number;
+  humanizationScore: number;
+  winRateVsOpponent: number;
+  positionWinChance: number;
+  averageEngineScore: number;
+  averageCpLoss: number;
+  topEngineMoveRate: number;
+  sampleCount: number;
+  recommendation: string;
+};
+
+export type CalibrationReportResponse = {
+  opponentElo: number;
+  methodology: string;
+  sampleCount: number;
+  rows: CalibrationReportRow[];
+  bestByProfile: Record<CoachHumanProfile, CoachStyle>;
 };
 
 export type ImportPositionImageResponse = {

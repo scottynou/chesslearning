@@ -83,6 +83,24 @@ def test_review_move_works_when_played_move_is_not_top_10(monkeypatch) -> None:
     assert response.json()["bestMoveWasDifferent"] is True
 
 
+def test_review_plan_connection_uses_played_ply_when_history_excludes_move() -> None:
+    from app.review_service import _connection_to_plan
+    from app.strategy.opening_coach import get_plan
+
+    plan = get_plan("italian_game_beginner")
+
+    connection = _connection_to_plan(
+        plan=plan,
+        move_history=["e2e4"],
+        move_uci="e7e5",
+        best_label="...e5",
+        best_uci="e7e5",
+        quality="excellent",
+    )
+
+    assert "reponse attendue" in connection
+
+
 def test_bot_move_returns_legal_move_and_respects_elo_pool(monkeypatch) -> None:
     import app.bot_service as bot_service
 

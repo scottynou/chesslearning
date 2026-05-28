@@ -17,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .bot_service import choose_bot_move
 from .ai_providers.selection import configured_provider_name
 from .cache import MemoryCache
+from .calibration_service import build_calibration_report
 from .elo_ranker import rank_candidates
 from .explanation_service import explain_candidate, explain_move
 from .image_import_service import ImageImportProviderError, import_position_image
@@ -27,6 +28,7 @@ from .schemas import (
     AnalyzeRequest,
     AnalyzeResponse,
     AvailablePlansResponse,
+    CalibrationReportResponse,
     BotMoveRequest,
     BotMoveResponse,
     ExplainCandidateRequest,
@@ -43,11 +45,14 @@ from .schemas import (
     PlanRecommendationsResponse,
     ReviewMoveRequest,
     ReviewMoveResponse,
+    WinrateRequest,
+    WinrateResponse,
 )
 from .stockfish_engine import StockfishConfigurationError, StockfishEngine, StockfishRuntimeError
 from .strategy.opening_coach import list_available_plans
 from .strategy.plan_engine import get_plan_recommendations
 from .maia_engine import get_engine as get_maia_engine, is_enabled as maia_is_enabled
+from .winrate_service import get_winrate
 
 load_dotenv()
 
@@ -120,6 +125,10 @@ def _with_cors_headers(response: Response, origin: str | None) -> Response:
     return response
 
 
+def _debug_endpoints_enabled() -> bool:
+    return os.getenv("DEBUG_ENDPOINTS_ENABLED", "false").lower() in {"1", "true", "yes"}
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=frontend_origins,
@@ -129,7 +138,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-EXPENSIVE_PATHS = {"/analyze", "/plan-recommendations", "/bot-move", "/review-move", "/explain-candidate", "/live-plan-insight", "/import-position-image"}
+EXPENSIVE_PATHS = {"/analyze", "/plan-recommendations", "/bot-move", "/review-move", "/explain-candidate", "/live-plan-insight", "/import-position-image", "/winrate"}
 JSON_BODY_PATHS = EXPENSIVE_PATHS | {"/position-plan", "/explain"}
 rate_limit_window_seconds = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
 rate_limit_per_window = int(os.getenv("RATE_LIMIT_PER_WINDOW", "45"))
@@ -187,6 +196,8 @@ plan_recommendations_cache: MemoryCache[PlanRecommendationsResponse] = MemoryCac
 live_plan_insight_cache: MemoryCache[LivePlanInsightResponse] = MemoryCache(ttl_seconds=1800)
 bot_move_cache: MemoryCache[BotMoveResponse] = MemoryCache(ttl_seconds=300)
 image_import_cache: MemoryCache[ImportPositionImageResponse] = MemoryCache(ttl_seconds=3600)
+calibration_cache: MemoryCache[CalibrationReportResponse] = MemoryCache(ttl_seconds=1800)
+winrate_cache: MemoryCache[WinrateResponse] = MemoryCache(ttl_seconds=1800)
 
 
 @app.get("/health")
@@ -215,6 +226,8 @@ def health() -> dict[str, bool | str]:
 @app.get("/debug/maia-suggest")
 def debug_maia_suggest() -> dict[str, object]:
     """Appelle MaiaEngine.suggest_with_raw pour voir le format brut de lc0."""
+    if not _debug_endpoints_enabled():
+        raise HTTPException(status_code=404, detail="Not found")
     from .maia_engine import get_engine
     try:
         engine = get_engine(1500)
@@ -234,6 +247,8 @@ def debug_maia_suggest() -> dict[str, object]:
 @app.get("/debug/maia-test")
 def debug_maia_test() -> dict[str, object]:
     """Lance lc0 et execute une analyse pour capturer le format exact des coups."""
+    if not _debug_endpoints_enabled():
+        raise HTTPException(status_code=404, detail="Not found")
     import subprocess
     lc0_path = os.getenv("LC0_PATH", "/opt/lc0/lc0")
     weights = f"{os.getenv('MAIA_WEIGHTS_DIR', '/opt/maia-weights')}/maia-1500.pb.gz"
@@ -266,6 +281,29 @@ def debug_maia_test() -> dict[str, object]:
         }
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "error": str(exc)}
+
+
+@app.post("/winrate", response_model=WinrateResponse)
+def winrate_endpoint(request: WinrateRequest) -> WinrateResponse:
+    cache_key = (
+        f"{request.fen}|{request.perspective}|{request.player_rating}|"
+        f"{request.opponent_rating}|{request.speed}"
+    )
+    cached = winrate_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    response = WinrateResponse.model_validate(
+        get_winrate(
+            fen=request.fen,
+            perspective=request.perspective,
+            player_rating=request.player_rating,
+            opponent_rating=request.opponent_rating,
+            speed=request.speed,
+        ).to_dict()
+    )
+    winrate_cache.set(cache_key, response)
+    return response
 
 
 @app.post("/analyze", response_model=AnalyzeResponse)
@@ -435,11 +473,24 @@ def available_plans(
     )
 
 
+@app.get("/calibration-report", response_model=CalibrationReportResponse)
+def calibration_report(opponentElo: int = 1600) -> CalibrationReportResponse:
+    opponent = max(800, min(2600, int(opponentElo)))
+    cache_key = str(opponent)
+    cached = calibration_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    response = CalibrationReportResponse.model_validate(build_calibration_report(opponent))
+    calibration_cache.set(cache_key, response)
+    return response
+
+
 @app.post("/plan-recommendations", response_model=PlanRecommendationsResponse)
 def plan_recommendations_endpoint(request: PlanRecommendationsRequest) -> PlanRecommendationsResponse:
     cache_key = (
         f"{request.fen}|{request.selected_plan_id}|{request.user_side}|{request.elo}|{request.skill_level}|{request.human_profile}|{request.coach_style}|{request.max_moves}|"
-        f"{request.engine_depth}|{','.join(request.move_history_uci)}|{os.getenv('AI_RERANK_PROVIDER', 'gemini')}|"
+        f"{request.engine_depth}|{request.include_elo_comparisons}|{','.join(request.move_history_uci)}|{os.getenv('AI_RERANK_PROVIDER', 'gemini')}|"
         f"{os.getenv('AI_RERANK_MODEL') or os.getenv('GEMINI_MODEL', 'gemini-2.5-flash-lite')}"
     )
     cached = plan_recommendations_cache.get(cache_key)
@@ -458,6 +509,7 @@ def plan_recommendations_endpoint(request: PlanRecommendationsRequest) -> PlanRe
                 move_history=request.move_history_uci,
                 max_moves=request.max_moves,
                 engine_depth=request.engine_depth,
+                include_elo_comparisons=request.include_elo_comparisons,
             )
         )
     except StockfishConfigurationError as exc:

@@ -29,6 +29,7 @@ export function OpeningRepertoirePanel({
     <section className="repertoire-shell">
       <div className="repertoire-intro">
         <h2 className="repertoire-title">{title}</h2>
+        <span className="repertoire-count">{sortedPlans.length}</span>
       </div>
 
       <div className="repertoire-grid">

@@ -15,12 +15,25 @@ logger = logging.getLogger(__name__)
 # economiser la latence de Maia (200-500ms) en les overlappant.
 _parallel_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="plan-parallel")
 
+MAIA_BONUS_MAX = 25.0
+MAIA_CRISIS_DISABLE_THRESHOLD = 0.20
+ELO_COMPARISON_LEVELS = (800, 1500, 2000, 3000)
+PROFILE_REFERENCE_ELO = {
+    "beginner": 800,
+    "lambda": 1500,
+    "strong": 2000,
+    "veryStrong": 3000,
+}
+
 from ..ai_reranker import rerank_recommendations
+from ..accuracy_math import score_to_expected_percent
 from ..beginner_notation import beginner_notation_for_uci
 from ..elo_ranker import rank_candidates
 from ..evaluation_label import evaluation_label
 from ..maia_engine import get_engine as get_maia_engine, is_enabled as maia_is_enabled
-from ..stockfish_engine import StockfishEngine
+from ..pv_translator import simple_move_explanation
+from ..stockfish_engine import EngineLine, StockfishEngine
+from ..winrate_service import get_winrate
 from .endgame_coach import analyze_endgame
 from .middlegame_coach import analyze_middlegame
 from .move_merger import merge_plan_and_engine_moves
@@ -57,6 +70,7 @@ def get_plan_recommendations(
     max_moves: int = 10,
     engine_depth: int = 10,
     user_side: str | None = None,
+    include_elo_comparisons: bool = True,
 ) -> dict[str, Any]:
     board = chess.Board(fen)
     selected_plan = get_plan(selected_plan_id)
@@ -89,7 +103,7 @@ def get_plan_recommendations(
         else None
     )
 
-    if game_over or plan_can_drive_opening:
+    if game_over:
         engine_lines = []
         engine_candidates = []
     else:
@@ -98,15 +112,29 @@ def get_plan_recommendations(
         recommend_ms = int(engine_profile["movetimeMs"])
         critical_ms = int(engine_profile["criticalMovetimeMs"])
         effective_engine_depth = max(engine_depth, int(engine_profile["minDepth"]))
-        engine_lines = StockfishEngine().analyze(fen, multipv=multipv, depth=effective_engine_depth, movetime_ms=recommend_ms)
-        engine_candidates = rank_candidates(fen, engine_lines, elo=elo, max_moves=safety_window)
+        try:
+            engine_lines = StockfishEngine().analyze(fen, multipv=multipv, depth=effective_engine_depth, movetime_ms=recommend_ms)
+            engine_candidates = rank_candidates(fen, engine_lines, elo=elo, max_moves=safety_window)
+        except Exception:
+            if not plan_can_drive_opening:
+                raise
+            engine_lines = []
+            engine_candidates = []
         if (
             critical_ms > recommend_ms
             and engine_candidates
-            and (mate_danger_from_side_to_move(engine_candidates) == "critical" or score_from_side_to_move(engine_candidates) <= -260)
+            and (
+                mate_danger_from_side_to_move(engine_candidates) == "critical"
+                or score_from_side_to_move(engine_candidates) <= -260
+                or side_to_move_expected_percent_for_candidates(engine_candidates) <= 38.0
+            )
         ):
-            engine_lines = StockfishEngine().analyze(fen, multipv=multipv, depth=effective_engine_depth, movetime_ms=critical_ms)
-            engine_candidates = rank_candidates(fen, engine_lines, elo=elo, max_moves=safety_window)
+            try:
+                engine_lines = StockfishEngine().analyze(fen, multipv=multipv, depth=effective_engine_depth, movetime_ms=critical_ms)
+                engine_candidates = rank_candidates(fen, engine_lines, elo=elo, max_moves=safety_window)
+            except Exception:
+                if not plan_can_drive_opening:
+                    raise
     merged = merge_plan_and_engine_moves(
         fen=fen,
         plan_moves=plan_moves,
@@ -183,6 +211,7 @@ def get_plan_recommendations(
     )
     position_score = score_from_side_to_move(engine_candidates)
     mating_danger = mate_danger_from_side_to_move(engine_candidates)
+    side_to_move_expected = side_to_move_expected_percent_for_candidates(engine_candidates)
     accuracy_profile = accuracy_profile_for(
         board=board,
         phase_display=phase_display,
@@ -202,9 +231,10 @@ def get_plan_recommendations(
         mating_danger=mating_danger,
         opponent_strength=opponent_strength,
         draw_pressure=accuracy_profile.get("drawPressure"),
+        side_to_move_expected_percent=side_to_move_expected,
     )
     crisis_factor_value = float(accuracy_profile.get("crisisFactor") or 0.0)
-    if maia_future is not None and crisis_factor_value <= 0.35 and engine_candidates:
+    if maia_future is not None and crisis_factor_value <= MAIA_CRISIS_DISABLE_THRESHOLD and engine_candidates:
         try:
             maia_probabilities = maia_future.result(timeout=4.0)
         except Exception:  # noqa: BLE001
@@ -221,6 +251,7 @@ def get_plan_recommendations(
         "eliteSelectionBoost": elite_selection_boost,
         "eliteSelectionMode": elite_selection_mode_for(elite_selection_boost),
         "positionScore": position_score,
+        "sideToMoveExpectedPercent": side_to_move_expected,
         "matingDanger": mating_danger,
         "humanSeed": human_seed_for(fen, move_history),
         "fen": fen,
@@ -241,7 +272,7 @@ def get_plan_recommendations(
         ),
     }
     logger.info(
-        "plan_recommendations profile=%s style=%s elo=%s mode=%s crisis=%.2f bands=%s/%s/%s draw=%s mating=%s pos=%scp",
+        "plan_recommendations profile=%s style=%s elo=%s mode=%s crisis=%.2f bands=%s/%s/%s draw=%s mating=%s pos=%scp expected=%.1f",
         accuracy_profile.get("humanProfile"),
         accuracy_profile.get("coachStyle"),
         elo,
@@ -253,9 +284,11 @@ def get_plan_recommendations(
         (accuracy_profile.get("drawPressure") or {}).get("level"),
         mating_danger,
         position_score,
+        side_to_move_expected,
     )
     strong_human_profile = strong_human_profile_for(accuracy_profile, opponent_strength)
-    if player_turn and visible_merged and should_shape_for_human_accuracy(phase_display, phase_status, opening_state):
+    survival_shaping = float(accuracy_profile.get("crisisFactor") or 0.0) > 0.0 or str(accuracy_profile.get("mode")) in {"pressure", "survival", "draw_break"}
+    if player_turn and visible_merged and (should_shape_for_human_accuracy(phase_display, phase_status, opening_state) or survival_shaping):
         visible_merged = shape_recommendations_for_accuracy(visible_merged, accuracy_profile)
         primary_move = choose_primary_move([], visible_merged)
     visible_recommendations = visible_recommendations_for(
@@ -289,7 +322,7 @@ def get_plan_recommendations(
                 recommendations=visible_recommendations,
                 strong_human_profile=strong_human_profile,
             )
-        if should_shape_for_human_accuracy(phase_display, phase_status, opening_state):
+        if should_shape_for_human_accuracy(phase_display, phase_status, opening_state) or survival_shaping:
             visible_recommendations = shape_recommendations_for_accuracy(visible_recommendations, accuracy_profile)
         visible_recommendations = decorate_recommendations(
             visible_recommendations,
@@ -298,6 +331,13 @@ def get_plan_recommendations(
     primary_move = visible_recommendations[0] if visible_recommendations else None
     adapted_alternatives = visible_recommendations[1:]
     blocked_expected_move = blocked_expected_move_for(primary_move, deviation)
+    if primary_move is not None:
+        primary_move["movePlan"] = move_plan_for_recommendation(
+            fen=fen,
+            recommendation=primary_move,
+            active_plan=active_plan,
+            move_history=move_history,
+        )
     adaptive_signal = adaptive_signal_for(
         primary_move=primary_move,
         phase_status=phase_status,
@@ -331,6 +371,30 @@ def get_plan_recommendations(
     phase_reason = phase_reason_for(phase, opening_state, active_plan, progress, phase_coach_context)
     pedagogical_summary = pedagogical_summary_for(coach_message, what_changed, next_objective)
     response_move_complexity = str(primary_move.get("moveComplexity", "simple")) if primary_move else "simple"
+    position_win_rate = position_win_rate_for(
+        board=board,
+        engine_candidates=engine_candidates,
+        user_side=user_side,
+    )
+    forced_mate = forced_mate_signal_for(board, engine_lines)
+    elo_comparisons = (
+        elo_comparisons_for(
+            fen=fen,
+            player_turn=player_turn,
+            game_over=game_over,
+            selected_reference_elo=reference_elo_for_profile(human_profile, elo),
+            primary_move=primary_move,
+            engine_lines=engine_lines,
+            plan_moves=plan_moves,
+            active_plan=active_plan,
+            phase_display=phase_display,
+            opening_state=opening_state,
+            current_step_index=len(move_history),
+            max_moves=int(engine_profile["safetyWindow"]),
+        )
+        if include_elo_comparisons
+        else []
+    )
 
     plan_state = {
         "selectedPlanId": active_plan.get("id") if active_plan else None,
@@ -394,6 +458,9 @@ def get_plan_recommendations(
         "pedagogicalSummary": pedagogical_summary,
         "moveComplexity": response_move_complexity,
         "turnContext": turn_context,
+        "positionWinRate": position_win_rate,
+        "forcedMate": forced_mate,
+        "eloComparisons": elo_comparisons,
         "aiRerankStatus": ai_rerank_status,
         "adaptiveSignal": adaptive_signal,
         "technicalDetails": {
@@ -641,6 +708,224 @@ def decorate_recommendations(items: list[dict[str, Any]], style: str) -> list[di
     return decorated
 
 
+def move_plan_for_recommendation(
+    *,
+    fen: str,
+    recommendation: dict[str, Any],
+    active_plan: dict[str, Any] | None,
+    move_history: list[str],
+) -> dict[str, Any] | None:
+    move_uci = str(recommendation.get("moveUci") or "")
+    if not move_uci:
+        return None
+
+    engine_line = engine_pv_for_recommendation(recommendation)
+    plan_line = opening_line_for_recommendation(active_plan, move_history, move_uci)
+    line_source = "engine_pv" if len(engine_line) >= 2 else "opening_plan" if len(plan_line) >= 2 else "principle"
+    raw_line = engine_line if line_source == "engine_pv" else plan_line if line_source == "opening_plan" else [move_uci]
+    steps = move_plan_steps(fen, raw_line, max_plies=5)
+    if not steps:
+        return None
+
+    summary = clean_move_plan_sentence(
+        str(recommendation.get("purpose") or recommendation.get("planConnection") or steps[0].get("idea") or "")
+    )
+    if not summary:
+        summary = "Ce coup ameliore la position et prepare la suite naturelle."
+
+    branches = move_plan_branches(steps)
+    compact_line = compact_move_plan_line(branches, steps, summary)
+    depth = len(steps)
+
+    return {
+        "title": "Plan du coup",
+        "summary": summary,
+        "compactLine": compact_line,
+        "source": line_source,
+        "depth": depth,
+        "steps": steps,
+        "branches": branches,
+    }
+
+
+def engine_pv_for_recommendation(recommendation: dict[str, Any]) -> list[str]:
+    move_uci = str(recommendation.get("moveUci") or "")
+    candidate = recommendation.get("candidate")
+    pv = candidate.get("pv") if isinstance(candidate, dict) else None
+    line = [str(move) for move in pv if isinstance(move, str)] if isinstance(pv, list) else []
+    if not move_uci:
+        return line[:5]
+    if not line:
+        return [move_uci]
+    if line[0] != move_uci:
+        line = [move_uci, *[move for move in line if move != move_uci]]
+    return line[:5]
+
+
+def opening_line_for_recommendation(active_plan: dict[str, Any] | None, move_history: list[str], move_uci: str) -> list[str]:
+    if not active_plan:
+        return [move_uci]
+
+    main_line = [str(move) for move in active_plan.get("mainLineUci", []) if isinstance(move, str)]
+    if len(main_line) > len(move_history) and main_line[: len(move_history)] == move_history:
+        remaining = main_line[len(move_history) :]
+        if remaining and remaining[0] == move_uci:
+            return remaining[:5]
+
+    for branch in active_plan.get("branches", []):
+        if not isinstance(branch, dict):
+            continue
+        trigger = [str(move) for move in branch.get("triggerLineUci", []) if isinstance(move, str)]
+        recommended = [str(move) for move in branch.get("recommendedMoves", []) if isinstance(move, str)]
+        candidate_line = trigger + recommended
+        if len(candidate_line) > len(move_history) and candidate_line[: len(move_history)] == move_history:
+            remaining = candidate_line[len(move_history) :]
+            if remaining and remaining[0] == move_uci:
+                return remaining[:5]
+
+    return [move_uci]
+
+
+def move_plan_steps(fen: str, raw_line: list[str], max_plies: int) -> list[dict[str, Any]]:
+    board = chess.Board(fen)
+    side_to_move = board.turn
+    steps: list[dict[str, Any]] = []
+
+    for ply_index, move_uci in enumerate(raw_line[:max_plies]):
+        try:
+            move = chess.Move.from_uci(move_uci)
+        except ValueError:
+            break
+        if move not in board.legal_moves:
+            break
+
+        san = board.san(move)
+        notation = beginner_notation_for_uci(board.fen(), move_uci, san)
+        actor = "you" if board.turn == side_to_move else "opponent"
+        steps.append(
+            {
+                "ply": ply_index + 1,
+                "actor": actor,
+                "moveUci": move_uci,
+                "label": notation.beginner_label,
+                "shortLabel": notation.short_label,
+                "idea": clean_move_plan_sentence(simple_move_explanation(board, move)),
+            }
+        )
+        board.push(move)
+
+    return steps
+
+
+def move_plan_branches(steps: list[dict[str, Any]]) -> list[dict[str, str]]:
+    branches: list[dict[str, str]] = []
+    # The first step is the recommended move. Then pairs of opponent reply / our answer.
+    for index in range(1, min(len(steps) - 1, 4), 2):
+        condition = steps[index]
+        response = steps[index + 1]
+        if condition.get("actor") != "opponent" or response.get("actor") != "you":
+            continue
+        branches.append(
+            {
+                "ifLabel": str(condition.get("label") or ""),
+                "thenLabel": str(response.get("label") or ""),
+                "goal": str(response.get("idea") or "continuer le plan sans perdre de temps."),
+            }
+        )
+    return branches[:2]
+
+
+def compact_move_plan_line(branches: list[dict[str, str]], steps: list[dict[str, Any]], summary: str) -> str:
+    if branches:
+        first = branches[0]
+        return f"Si {first['ifLabel']}, alors {first['thenLabel']}"
+    if len(steps) >= 2:
+        return f"Suite naturelle : {steps[1]['label']}"
+    return summary
+
+
+def clean_move_plan_sentence(value: str) -> str:
+    text = " ".join(value.strip().split())
+    if not text:
+        return ""
+    return text[0].upper() + text[1:]
+
+
+def reference_elo_for_profile(human_profile: str | None, elo: int) -> int:
+    if human_profile in PROFILE_REFERENCE_ELO:
+        return PROFILE_REFERENCE_ELO[human_profile]
+    return min(ELO_COMPARISON_LEVELS, key=lambda level: abs(level - elo))
+
+
+def elo_comparisons_for(
+    *,
+    fen: str,
+    player_turn: bool,
+    game_over: bool,
+    selected_reference_elo: int,
+    primary_move: dict[str, Any] | None,
+    engine_lines: list[Any],
+    plan_moves: list[str],
+    active_plan: dict[str, Any] | None,
+    phase_display: dict[str, Any],
+    opening_state: str,
+    current_step_index: int,
+    max_moves: int,
+) -> list[dict[str, Any]]:
+    if game_over or not player_turn:
+        return []
+
+    comparison_plan_moves = (
+        plan_moves
+        if phase_display.get("key") == "opening" and opening_state not in {"completed", "abandoned"}
+        else []
+    )
+    plan_name = active_plan.get("nameFr") if active_plan else None
+    comparisons: list[dict[str, Any]] = []
+
+    for comparison_elo in ELO_COMPARISON_LEVELS:
+        is_active = comparison_elo == selected_reference_elo
+        if is_active and primary_move is not None:
+            item = primary_move
+        elif not engine_lines and primary_move is not None:
+            item = primary_move
+        else:
+            candidates = rank_candidates(fen, engine_lines, elo=comparison_elo, max_moves=max_moves)
+            merged = merge_plan_and_engine_moves(
+                fen=fen,
+                plan_moves=comparison_plan_moves,
+                engine_candidates=candidates,
+                engine_lines=engine_lines,
+                plan_name=plan_name,
+                elo=comparison_elo,
+                current_step_index=current_step_index,
+            )
+            plan_items = [item for item in merged if item["source"] in {"plan", "plan_and_engine"}]
+            item = choose_primary_move(plan_items, merged)
+
+        if item is not None:
+            comparisons.append(elo_comparison_payload(comparison_elo, is_active, item))
+
+    return comparisons
+
+
+def elo_comparison_payload(elo: int, active: bool, item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "elo": elo,
+        "label": str(elo),
+        "active": active,
+        "moveUci": str(item.get("moveUci") or ""),
+        "moveSan": str(item.get("moveSan") or ""),
+        "beginnerLabel": str(item.get("beginnerLabel") or item.get("moveSan") or item.get("moveUci") or ""),
+        "source": str(item.get("source") or "engine"),
+        "engineRank": item.get("engineRank"),
+        "engineScore": item.get("engineScore"),
+        "finalCoachScore": item.get("finalCoachScore"),
+        "moveComplexity": item.get("moveComplexity"),
+        "warning": item.get("warning"),
+    }
+
+
 def should_shape_for_human_accuracy(phase_display: dict[str, Any], phase_status: str, opening_state: str) -> bool:
     if phase_display["key"] != "opening":
         return True
@@ -684,7 +969,7 @@ def accuracy_profile_for(
         engine_candidates=engine_candidates,
     )
     bands = accuracy_bands_for_profile(human_profile, elo)
-    resolved_profile = human_profile or ("lambda" if elo < 1700 else "strong" if elo < 2600 else "veryStrong")
+    resolved_profile = human_profile or ("beginner" if elo < 1100 else "lambda" if elo < 1700 else "strong" if elo < 2600 else "veryStrong")
     base_opponent = opponent_strength or {"level": "none", "suggestedBoostDelta": 0}
 
     if not player_turn:
@@ -699,12 +984,18 @@ def accuracy_profile_for(
 
     position_score = score_from_side_to_move(engine_candidates)
     mating_danger = mate_danger_from_side_to_move(engine_candidates)
+    side_to_move_expected = side_to_move_expected_percent_for_candidates(engine_candidates)
     phase_key = str(phase_display.get("key", "opening"))
     opponent_delta = int((opponent_strength or {}).get("suggestedBoostDelta") or 0)
     opponent_level = str((opponent_strength or {}).get("level", "none"))
     planless_opening_fallback = phase_key == "opening" and phase_status == "fallback" and opening_state == "recoverable"
 
-    crisis_factor = compute_crisis_factor(position_score, mating_danger, draw_pressure)
+    crisis_factor = compute_crisis_factor(
+        position_score,
+        mating_danger,
+        draw_pressure,
+        side_to_move_expected_percent=side_to_move_expected,
+    )
 
     def _build(mode: str, band_key: str, reason: str) -> dict[str, Any]:
         selected = bands[band_key]
@@ -725,15 +1016,20 @@ def accuracy_profile_for(
             "opponentStrength": base_opponent,
             "humanProfile": resolved_profile,
             "crisisFactor": crisis_factor,
+            "sideToMoveExpectedPercent": side_to_move_expected,
         }
 
-    if mating_danger == "critical" or position_score <= -260:
+    if mating_danger == "critical" or side_to_move_expected <= 30.0 or position_score <= -320:
         return _build("survival", "survival", "Position critique : le meilleur coup moteur est autorise sans penalite.")
+    if side_to_move_expected <= 38.0 or position_score <= -220:
+        return _build("pressure", "elite_pressure", "Risque de defaite eleve : le coach depasse le profil initial pour sauver la partie.")
+    if side_to_move_expected <= 44.0:
+        return _build("pressure", "strong_pressure", "La probabilite de perte devient trop haute : precision renforcee.")
     if draw_pressure["level"] == "critical":
         return _build("draw_break", "draw_critical", "La position devient trop nulle : on cherche des coups precis qui gardent des chances de gain.")
-    if opponent_delta >= 200 or opponent_level == "elite":
+    if (opponent_delta >= 200 or opponent_level == "elite") and (side_to_move_expected <= 46.0 or planless_opening_fallback is False and phase_status in {"adapted", "fallback"}):
         return _build("pressure", "elite_pressure", "L'adversaire joue proche de Stockfish : les conseils montent vers un humain tres fort.")
-    if opponent_delta >= 150 or opponent_level == "strong":
+    if (opponent_delta >= 150 or opponent_level == "strong") and side_to_move_expected <= 48.0:
         return _build("pressure", "strong_pressure", "L'adversaire joue tres precis : le ranking devient plus exigeant tout de suite.")
     if phase_status == "adapted" or opening_state == "abandoned" or (phase_status == "fallback" and not planless_opening_fallback) or position_score <= -90:
         return _build("pressure", "pressure", "Sous pression : on choisit un coup humain fort, pas un compromis mou.")
@@ -751,7 +1047,7 @@ def accuracy_profile_for(
 
 def _maia_level_for_profile(human_profile: str | None, elo: int) -> int:
     """Mappe le profil humain vers le poids Maia le plus proche."""
-    if human_profile == "lambda":
+    if human_profile in {"beginner", "lambda"}:
         return 1500
     if human_profile == "veryStrong":
         return 1900
@@ -789,6 +1085,7 @@ def elite_selection_boost_for(
     mating_danger: str,
     opponent_strength: dict[str, Any] | None,
     draw_pressure: dict[str, Any] | None,
+    side_to_move_expected_percent: float | None = None,
 ) -> int:
     if elo < 2800:
         return 0
@@ -796,11 +1093,12 @@ def elite_selection_boost_for(
     opponent_delta = int((opponent_strength or {}).get("suggestedBoostDelta") or 0)
     opponent_level = str((opponent_strength or {}).get("level", "none"))
     draw_level = str((draw_pressure or {}).get("level", "none"))
-    if mating_danger == "critical" or mode == "survival" or position_score <= -260:
+    expected = 50.0 if side_to_move_expected_percent is None else float(side_to_move_expected_percent)
+    if mating_danger == "critical" or mode == "survival" or expected <= 30.0 or position_score <= -260:
         return 3
-    if draw_level == "critical" or opponent_level == "elite" or opponent_delta >= 200 or position_score <= -160:
+    if expected <= 38.0 or draw_level == "critical" or opponent_level == "elite" or opponent_delta >= 200 or position_score <= -160:
         return 2
-    if mode in {"pressure", "draw_break"} or opponent_level == "strong" or opponent_delta >= 150 or position_score <= -90:
+    if expected <= 44.0 or mode in {"pressure", "draw_break"} or opponent_level == "strong" or opponent_delta >= 150 or position_score <= -90:
         return 1
     return 0
 
@@ -917,17 +1215,18 @@ def shape_recommendations_for_accuracy(items: list[dict[str, Any]], profile: dic
 
     minimum = int(profile.get("min", 78))
     plan_tolerance = int(profile.get("planTolerance", 4))
+    competitive_floor = competitive_human_engine_floor(candidates, profile)
     if elite_humanization_enabled(profile):
         viable = elite_viable_candidates(candidates, profile)
     else:
         viable = [
             item
             for item in candidates
-            if int(item.get("engineScore") or 0) >= minimum
+            if int(item.get("engineScore") or 0) >= max(minimum, competitive_floor)
             or (
                 plan_tolerance > 0
                 and int(item.get("planFitScore") or 0) >= 90
-                and int(item.get("engineScore") or 0) >= minimum - plan_tolerance
+                and int(item.get("engineScore") or 0) >= max(minimum - plan_tolerance, competitive_floor)
                 and int(item.get("tacticalRisk") or 0) <= 22
             )
         ]
@@ -955,6 +1254,49 @@ def shape_recommendations_for_accuracy(items: list[dict[str, Any]], profile: dic
     return [annotate_accuracy(dict(item), profile) for item in [*ordered, *tail]]
 
 
+def human_profile_from_scoring_profile(profile: dict[str, Any]) -> str:
+    explicit = profile.get("humanProfile")
+    if explicit in {"beginner", "lambda", "strong", "veryStrong"}:
+        return str(explicit)
+
+    target = int(profile.get("target") or 79)
+    if target <= 73:
+        return "beginner"
+    if target <= 80:
+        return "lambda"
+    if target < 87:
+        return "strong"
+    return "veryStrong"
+
+
+def competitive_human_engine_floor(candidates: list[dict[str, Any]], profile: dict[str, Any]) -> int:
+    if not candidates:
+        return 0
+
+    top_score = max(int(item.get("engineScore") or 0) for item in candidates)
+    mode = str(profile.get("mode", "normal"))
+    if mode == "survival":
+        return top_score
+
+    human_profile = human_profile_from_scoring_profile(profile)
+    if mode in {"pressure", "draw_break"}:
+        acceptable_drop = 12
+    elif mode == "conversion":
+        acceptable_drop = 14
+    elif human_profile == "beginner":
+        acceptable_drop = 24
+    elif human_profile == "lambda":
+        acceptable_drop = 18
+    elif human_profile == "strong":
+        acceptable_drop = 16
+    else:
+        acceptable_drop = 14
+
+    crisis_factor = max(0.0, min(1.0, float(profile.get("crisisFactor") or 0.0)))
+    effective_drop = round(acceptable_drop * (1.0 - crisis_factor) + 8 * crisis_factor)
+    return max(0, min(100, top_score - effective_drop))
+
+
 def human_accuracy_sort_score(item: dict[str, Any], profile: dict[str, Any]) -> float:
     engine_score = int(item.get("engineScore") or 0)
     plan_fit = int(item.get("planFitScore") or 0)
@@ -968,7 +1310,7 @@ def human_accuracy_sort_score(item: dict[str, Any], profile: dict[str, Any]) -> 
     plan_tolerance = int(profile.get("planTolerance", 4))
     elite_humanization = elite_humanization_enabled(profile)
     elite_selection_boost = int(profile.get("eliteSelectionBoost") or 0)
-    human_profile = str(profile.get("humanProfile") or "strong")
+    human_profile = human_profile_from_scoring_profile(profile)
     crisis_factor = float(profile.get("crisisFactor") or 0.0)
 
     if elite_humanization and elite_selection_boost >= 3:
@@ -996,22 +1338,38 @@ def human_accuracy_sort_score(item: dict[str, Any], profile: dict[str, Any]) -> 
         under_penalty = 5.0
         distance_penalty = 0.95
         weights = (0.30, 0.20, 0.10, 0.24)
+    elif human_profile == "beginner" and mode in {"normal", "favorable", "comfortable"}:
+        # Niveau 800 : prefere les coups naturels et lisibles, tout en gardant
+        # un plancher moteur pour eviter les vraies gaffes.
+        base_over, base_distance = 2.15, 1.70
+        base_weights = (0.20, 0.25, 0.17, 0.12)
+        f = crisis_factor
+        over_penalty = base_over * (1.0 - f) + 0.10 * f
+        under_penalty = 4.8
+        distance_penalty = base_distance * (1.0 - f) + 0.34 * f
+        weights = tuple(b * (1.0 - f) + c * f for b, c in zip(base_weights, (0.72, 0.07, 0.02, 0.20)))
+    elif human_profile == "beginner" and mode == "conversion":
+        f = crisis_factor
+        over_penalty = 1.25 * (1.0 - f) + 0.08 * f
+        under_penalty = 4.8
+        distance_penalty = 1.15 * (1.0 - f) + 0.30 * f
+        weights = tuple(b * (1.0 - f) + c * f for b, c in zip((0.27, 0.22, 0.12, 0.15), (0.70, 0.07, 0.02, 0.20)))
     elif human_profile == "lambda" and mode in {"normal", "favorable", "comfortable"}:
         # Niveau lambda : fort biais vers coups sous-optimaux, évite le meilleur coup
-        base_over, base_distance = 1.90, 1.50
-        base_weights = (0.24, 0.22, 0.13, 0.16)
+        base_over, base_distance = 1.55, 1.30
+        base_weights = (0.28, 0.20, 0.11, 0.16)
         # Débridage progressif : vers précision moteur en cas de crise
         f = crisis_factor
         over_penalty = base_over * (1.0 - f) + 0.08 * f
-        under_penalty = 4.0
+        under_penalty = 5.0
         distance_penalty = base_distance * (1.0 - f) + 0.30 * f
         weights = tuple(b * (1.0 - f) + c * f for b, c in zip(base_weights, (0.72, 0.07, 0.02, 0.20)))
     elif human_profile == "lambda" and mode == "conversion":
         f = crisis_factor
-        over_penalty = 1.20 * (1.0 - f) + 0.06 * f
-        under_penalty = 4.0
-        distance_penalty = 1.10 * (1.0 - f) + 0.28 * f
-        weights = tuple(b * (1.0 - f) + c * f for b, c in zip((0.28, 0.20, 0.10, 0.18), (0.70, 0.07, 0.02, 0.20)))
+        over_penalty = 0.95 * (1.0 - f) + 0.06 * f
+        under_penalty = 5.0
+        distance_penalty = 0.95 * (1.0 - f) + 0.28 * f
+        weights = tuple(b * (1.0 - f) + c * f for b, c in zip((0.34, 0.17, 0.08, 0.18), (0.70, 0.07, 0.02, 0.20)))
     elif human_profile == "strong" and mode in {"normal", "favorable", "comfortable"}:
         # Niveau strong : évitement modéré du meilleur coup
         f = crisis_factor
@@ -1113,10 +1471,10 @@ def human_accuracy_sort_score(item: dict[str, Any], profile: dict[str, Any]) -> 
     maia_probs = profile.get("maiaProbabilities") or {}
     move_uci = str(item.get("moveUci") or "")
     maia_prob = float(maia_probs.get(move_uci, 0.0))
-    # Bonus proportionnel a la proba (40 max), tempere par la crise, gele
+    # Bonus proportionnel a la proba (25 max), tempere par la crise, gele
     # si le coup serait en dessous du minimum d'accuracy (pas de gaffe humaine).
     maia_bonus = (
-        maia_prob * 40.0 * style_strength
+        maia_prob * MAIA_BONUS_MAX * style_strength
         if maia_prob > 0 and engine_score >= minimum - 4
         else 0.0
     )
@@ -1434,11 +1792,95 @@ def candidate_eval_cp(item: dict[str, Any]) -> int:
     return 0
 
 
+def candidate_mate_in(item: dict[str, Any]) -> int | None:
+    candidate = item.get("candidate")
+    if isinstance(candidate, dict):
+        value = candidate.get("mateIn")
+        if value is not None:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
+def candidate_wdl(item: dict[str, Any]) -> list[int] | tuple[int, int, int] | None:
+    candidate = item.get("candidate")
+    if isinstance(candidate, dict):
+        value = candidate.get("wdl")
+        if isinstance(value, (list, tuple)) and len(value) == 3:
+            try:
+                return [int(part) for part in value]
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
+def win_rate_estimate_for_item(item: dict[str, Any]) -> float:
+    return round(
+        score_to_expected_percent(
+            eval_cp=candidate_eval_cp(item),
+            mate_in=candidate_mate_in(item),
+            wdl=candidate_wdl(item),
+        ),
+        1,
+    )
+
+
+def humanization_score_for_item(item: dict[str, Any], profile: dict[str, Any]) -> int:
+    engine_score = int(item.get("engineScore") or 0)
+    target = int(profile.get("target", 80))
+    minimum = int(profile.get("min", 70))
+    maximum = int(profile.get("max", 90))
+    simplicity = int(item.get("beginnerSimplicityScore") or 0)
+    plan_fit = int(item.get("planFitScore") or 0)
+    risk = int(item.get("tacticalRisk") or 0)
+    engine_rank = engine_rank_for(item) or 99
+    coach_style = str(profile.get("coachStyle") or "balanced")
+
+    band_fit = 100 - abs(engine_score - target) * 3
+    if engine_score < minimum:
+        band_fit -= (minimum - engine_score) * 5
+    if engine_score > maximum:
+        band_fit -= (engine_score - maximum) * 4
+
+    if engine_rank == 1:
+        rank_naturalness = 68
+    elif 2 <= engine_rank <= 5:
+        rank_naturalness = 95
+    elif engine_rank <= 8:
+        rank_naturalness = 82
+    else:
+        rank_naturalness = 64
+
+    style_bonus = 0.0
+    if coach_style == "creative" and 2 <= engine_rank <= 5:
+        style_bonus += 5.0
+    elif coach_style == "educational" and simplicity >= 76:
+        style_bonus += 5.0
+    elif coach_style == "solid" and risk <= 14:
+        style_bonus += 4.0
+    elif coach_style == "aggressive" and engine_score >= target and risk <= 32:
+        style_bonus += 3.0
+
+    score = (
+        max(0, min(100, band_fit)) * 0.34
+        + simplicity * 0.23
+        + max(0, 100 - risk) * 0.15
+        + rank_naturalness * 0.16
+        + plan_fit * 0.10
+        + style_bonus
+    )
+    return max(0, min(100, round(score)))
+
+
 def annotate_accuracy(item: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
     engine_score = int(item.get("engineScore") or 0)
     target = int(profile.get("target", 92))
     item["humanAccuracyEstimate"] = max(0, min(99, round(engine_score * 0.92 + target * 0.08)))
     item["accuracyBand"] = str(profile.get("mode", "normal"))
+    item["winRateEstimate"] = win_rate_estimate_for_item(item)
+    item["humanizationScore"] = humanization_score_for_item(item, profile)
     return item
 
 
@@ -1673,83 +2115,84 @@ def adaptive_signal_for(
     adapted = phase_status in {"adapted", "fallback"} or opening_state in {"recoverable", "abandoned"}
     position_score = score_from_side_to_move(engine_candidates)
     mating_danger = mate_danger_from_side_to_move(engine_candidates)
+    side_to_move_expected = side_to_move_expected_percent_for_candidates(engine_candidates)
     draw_level = str((draw_pressure or {}).get("level", "none"))
     opponent_delta = int((opponent_strength or {}).get("suggestedBoostDelta") or 0)
     opponent_level = str((opponent_strength or {}).get("level", "none"))
 
-    if mating_danger == "critical" or position_score <= -420:
+    if mating_danger == "critical" or side_to_move_expected <= 24.0 or position_score <= -520:
+        return {
+            "pressure": "critical",
+            "suggestedBoostDelta": 300,
+            "reason": "La defaite devient tres probable : le coach debride fortement pour sauver la partie.",
+        }
+    if side_to_move_expected <= 32.0 or position_score <= -360:
+        return {
+            "pressure": "critical",
+            "suggestedBoostDelta": 250,
+            "reason": "Le risque de perte est trop haut : le coach depasse le profil initial.",
+        }
+    if side_to_move_expected <= 38.0 or position_score <= -260:
         return {
             "pressure": "critical",
             "suggestedBoostDelta": 200,
-            "reason": "La position est critique : le coach monte fortement pour chercher un coup de survie ou de gain.",
+            "reason": "La partie tourne mal : priorite a ne pas perdre, meme si le coup est moins humain.",
         }
     if draw_level == "critical":
         return {
             "pressure": "drawish",
-            "suggestedBoostDelta": 200,
-            "reason": "La partie risque vraiment de finir nulle : le coach monte fort pour garder des chances de gain.",
+            "suggestedBoostDelta": 100,
+            "reason": "La partie risque vraiment de finir nulle : le coach monte progressivement pour garder des chances de gain.",
         }
-    if opponent_delta >= 200:
-        return {
-            "pressure": "worse",
-            "suggestedBoostDelta": 200,
-            "reason": "L'adversaire vient de jouer un coup quasi Stockfish : le niveau cache monte pour ne pas subir.",
-        }
-    if warning or position_score <= -260:
-        return {
-            "pressure": "critical",
-            "suggestedBoostDelta": 150,
-            "reason": "La position est sous forte pression : le coach monte nettement en precision.",
-        }
-    if opponent_delta >= 150:
+    if warning or side_to_move_expected <= 44.0 or position_score <= -180:
         return {
             "pressure": "worse",
             "suggestedBoostDelta": 150,
-            "reason": "L'adversaire joue tres proche des meilleurs coups : le niveau cache suit progressivement.",
+            "reason": "La probabilite de perte monte : le coach renforce les coups defensifs et pratiques.",
+        }
+    if opponent_delta >= 200 and (side_to_move_expected <= 46.0 or position_score <= -80 or adapted or draw_level in {"warning", "critical"}):
+        return {
+            "pressure": "worse",
+            "suggestedBoostDelta": 100,
+            "reason": "L'adversaire vient de jouer tres precisement dans une position qui demande deja de la vigilance.",
+        }
+    if opponent_delta >= 150 and (side_to_move_expected <= 48.0 or position_score <= -140):
+        return {
+            "pressure": "worse",
+            "suggestedBoostDelta": 100,
+            "reason": "L'adversaire joue proche des meilleurs coups pendant que la position glisse : le niveau cache suit doucement.",
         }
     if draw_level == "warning":
         return {
             "pressure": "drawish",
-            "suggestedBoostDelta": 150,
-            "reason": "La position devient trop egale : le coach monte pour eviter une nulle passive.",
+            "suggestedBoostDelta": 50,
+            "reason": "La position devient trop egale : petit ajustement pour eviter une nulle passive.",
         }
-    if opponent_delta >= 100:
+    if opponent_delta >= 100 and adapted:
         return {
             "pressure": "worse",
-            "suggestedBoostDelta": 100,
-            "reason": "L'adversaire garde une bonne qualite moteur : on augmente le niveau cache.",
+            "suggestedBoostDelta": 50,
+            "reason": "Le plan doit s'adapter apres un coup adverse precis : petit ajustement du niveau cache.",
         }
     if mating_danger == "warning" or position_score <= -180:
         return {
             "pressure": "worse",
-            "suggestedBoostDelta": 150,
+            "suggestedBoostDelta": 100,
             "reason": "L'adversaire met une vraie pression : le niveau cache augmente pour rester dans la partie.",
         }
-    if opponent_delta >= 50 and opponent_level != "weak":
+    if opponent_delta >= 150 and opponent_level != "weak":
         return {
-            "pressure": "worse",
-            "suggestedBoostDelta": 50,
-            "reason": "L'adversaire joue assez proprement : petit boost pour rester ambitieux.",
-        }
-    if adapted and opponent_delta >= 50:
-        return {
-            "pressure": "worse",
-            "suggestedBoostDelta": 100,
-            "reason": "Le plan doit s'adapter apres un coup adverse propre : le niveau cache monte legerement.",
+            "pressure": "stable",
+            "suggestedBoostDelta": 0,
+            "reason": "L'adversaire joue precisement, mais la position reste saine : on surveille sans emballement.",
         }
     if position_score <= -90:
         return {
             "pressure": "worse",
-            "suggestedBoostDelta": 100,
-            "reason": "La position se degrade : le niveau cache monte pour ne pas subir.",
-        }
-    if position_score <= 40 and opponent_delta >= 50:
-        return {
-            "pressure": "drawish",
             "suggestedBoostDelta": 50,
-            "reason": "L'adversaire garde une position trop solide : petit boost pour jouer la gagne.",
+            "reason": "La position se degrade : petit ajustement pour ne pas subir.",
         }
-    if position_score >= 520 and not warning:
+    if position_score >= 420 and not warning:
         return {
             "pressure": "stable",
             "suggestedBoostDelta": -50,
@@ -1772,6 +2215,181 @@ def score_from_side_to_move(engine_candidates: list[Any]) -> int:
     if eval_cp is None:
         return 0
     return int(eval_cp)
+
+
+def side_to_move_expected_percent_for_candidates(engine_candidates: list[Any]) -> float:
+    if not engine_candidates:
+        return 50.0
+    candidate = top_stockfish_candidate(engine_candidates)
+    eval_cp = getattr(candidate, "eval_cp", None)
+    mate_in = getattr(candidate, "mate_in", None)
+    wdl = getattr(candidate, "wdl", None)
+    if isinstance(candidate, dict):
+        eval_cp = candidate.get("evalCp", eval_cp)
+        mate_in = candidate.get("mateIn", mate_in)
+        wdl = candidate.get("wdl", wdl)
+    return side_to_move_win_percent(eval_cp, mate_in, wdl)
+
+
+def forced_mate_signal_for(board: chess.Board, engine_lines: list[EngineLine]) -> dict[str, Any] | None:
+    if board.is_game_over(claim_draw=True) or not engine_lines:
+        return None
+
+    top_line = min(engine_lines, key=lambda line: line.stockfish_rank)
+    mate_in = top_line.mate_in
+    if mate_in is None or mate_in <= 0 or mate_in > 3:
+        return None
+
+    try:
+        move = chess.Move.from_uci(top_line.move_uci)
+    except ValueError:
+        return None
+    if move not in board.legal_moves:
+        return None
+
+    side = "white" if board.turn == chess.WHITE else "black"
+    return {
+        "mateIn": int(mate_in),
+        "side": side,
+        "moveUci": top_line.move_uci,
+        "moveSan": board.san(move),
+        "label": f"Mat en {int(mate_in)}",
+        "line": legal_prefix_for_pv(board, top_line.pv, max_plies=mate_in * 2 - 1),
+        "lineSan": san_prefix_for_pv(board, top_line.pv, max_plies=mate_in * 2 - 1),
+    }
+
+
+def legal_prefix_for_pv(board: chess.Board, pv: list[str], max_plies: int) -> list[str]:
+    clone = board.copy(stack=False)
+    legal_line: list[str] = []
+    for move_uci in pv[:max_plies]:
+        try:
+            move = chess.Move.from_uci(move_uci)
+        except ValueError:
+            break
+        if move not in clone.legal_moves:
+            break
+        legal_line.append(move_uci)
+        clone.push(move)
+    return legal_line
+
+
+def san_prefix_for_pv(board: chess.Board, pv: list[str], max_plies: int) -> list[str]:
+    clone = board.copy(stack=False)
+    san_line: list[str] = []
+    for move_uci in pv[:max_plies]:
+        try:
+            move = chess.Move.from_uci(move_uci)
+        except ValueError:
+            break
+        if move not in clone.legal_moves:
+            break
+        san_line.append(clone.san(move))
+        clone.push(move)
+    return san_line
+
+
+def position_win_rate_for(
+    *,
+    board: chess.Board,
+    engine_candidates: list[Any],
+    user_side: str | None,
+) -> dict[str, Any]:
+    player_side = user_side if user_side in {"white", "black"} else ("white" if board.turn == chess.WHITE else "black")
+    perspective = player_side if user_side in {"white", "black"} else "sideToMove"
+    stockfish_line = top_stockfish_candidate(engine_candidates) if engine_candidates else None
+    result = get_winrate(
+        fen=board.fen(),
+        perspective=perspective,  # type: ignore[arg-type]
+        stockfish_line=stockfish_line,
+        allow_stockfish=False,
+    )
+    white_win = result.white_winrate if result.white_winrate is not None else result.winrate
+    black_win = result.black_winrate if result.black_winrate is not None else max(0.0, 100.0 - white_win)
+    side_to_move_win = result.side_to_move_winrate
+    if side_to_move_win is None:
+        side_to_move_win = white_win if board.turn == chess.WHITE else black_win
+    player_win = white_win if player_side == "white" else black_win
+    eval_cp = getattr(stockfish_line, "eval_cp", None)
+    mate_in = getattr(stockfish_line, "mate_in", None)
+    wdl = getattr(stockfish_line, "wdl", None)
+    if isinstance(stockfish_line, dict):
+        eval_cp = stockfish_line.get("evalCp", eval_cp)
+        mate_in = stockfish_line.get("mateIn", mate_in)
+        wdl = stockfish_line.get("wdl", wdl)
+    displayed_source = win_rate_source(eval_cp, mate_in, wdl) if result.source == "stockfish" else result.source
+    return {
+        "available": True,
+        "playerSide": player_side,
+        "perspective": "player" if user_side in {"white", "black"} else "side_to_move",
+        "playerWinPercent": round(player_win, 1),
+        "whiteWinPercent": round(white_win, 1),
+        "blackWinPercent": round(black_win, 1),
+        "sideToMoveWinPercent": round(side_to_move_win, 1),
+        "evalCp": int(eval_cp) if eval_cp is not None else None,
+        "mateIn": int(mate_in) if mate_in is not None else None,
+        "sideToMoveWdl": normalize_wdl(wdl),
+        "source": displayed_source,
+        "confidence": result.confidence,
+        "label": winrate_source_label(displayed_source, result.confidence),
+    }
+
+
+def side_to_move_win_percent(
+    eval_cp: int | None,
+    mate_in: int | None,
+    wdl: list[int] | tuple[int, int, int] | None = None,
+) -> float:
+    return score_to_expected_percent(eval_cp=eval_cp, mate_in=mate_in, wdl=wdl)
+
+
+def normalize_wdl(wdl: list[int] | tuple[int, int, int] | None) -> list[int] | None:
+    if not wdl or len(wdl) != 3:
+        return None
+    try:
+        return [max(0, int(value)) for value in wdl]
+    except (TypeError, ValueError):
+        return None
+
+
+def win_rate_source(eval_cp: int | None, mate_in: int | None, wdl: list[int] | tuple[int, int, int] | None) -> str:
+    if normalize_wdl(wdl) is not None:
+        return "stockfish_wdl"
+    if mate_in is not None:
+        return "mate"
+    if eval_cp is not None:
+        return "centipawn"
+    return "unavailable"
+
+
+def position_win_rate_label(player_win_percent: float) -> str:
+    if player_win_percent >= 80:
+        return "Gros avantage"
+    if player_win_percent >= 62:
+        return "Avantage"
+    if player_win_percent >= 54:
+        return "Leger avantage"
+    if player_win_percent > 46:
+        return "Equilibre"
+    if player_win_percent > 38:
+        return "Leger retard"
+    if player_win_percent > 20:
+        return "Sous pression"
+    return "Position critique"
+
+
+def winrate_source_label(source: str, confidence: str) -> str:
+    if source == "lichess_exact":
+        base = "Donnees Lichess"
+    elif source == "lichess_model":
+        base = "Modele Lichess"
+    elif source == "stockfish":
+        base = "Estimation moteur"
+    else:
+        base = "Estimation simple"
+    if confidence == "low":
+        return f"{base} - confiance faible"
+    return base
 
 
 def mate_danger_from_side_to_move(engine_candidates: list[Any]) -> str:

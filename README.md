@@ -33,13 +33,13 @@ Edit `.env` and set:
 STOCKFISH_PATH=C:\path\to\stockfish.exe
 ```
 
-This workspace already includes a local Stockfish 18 Windows binary at:
+If you keep a local Stockfish 18 Windows binary in this workspace, the expected path is:
 
 ```text
 tools/stockfish/stockfish/stockfish-windows-x86-64.exe
 ```
 
-The generated `backend/.env` points to it.
+Otherwise install Stockfish globally or set `STOCKFISH_PATH` to your own executable.
 
 Run the API:
 
@@ -160,6 +160,7 @@ RATE_LIMIT_PER_WINDOW=45
 - `POST /review-move`: review of a manually played move.
 - `POST /bot-move`: internal bot move for the app board.
 - `POST /position-plan`: lightweight phase/strategy panel.
+- `POST /winrate`: one-number win probability from Lichess aggregates/model, Stockfish, or fallback.
 - `GET /available-plans`: available opening plans.
 - `POST /plan-recommendations`: plan-first recommendations.
 - `GET /health`: backend status.
@@ -190,7 +191,7 @@ Stockfish chooses and analyzes moves. Opening plans structure the training goal.
 - Stockfish: engine analysis and tactical safety gate: <https://stockfishchess.org/>.
 - `lichess-org/chess-openings`: future structured source for opening names, ECO and PGN/UCI data: <https://github.com/lichess-org/chess-openings>.
 - ECO codes: classification of opening families.
-- Lichess Open Database: optional future source for popularity/statistical training data: <https://database.lichess.org/>.
+- Lichess Open Database: source for optional exact-position winrate aggregates and model training: <https://database.lichess.org/>.
 - Syzygy tablebases through `python-chess`: optional future source for exact endgame results up to 7 pieces: <https://python-chess.readthedocs.io/en/latest/syzygy.html>.
 - Maia/Maia-2: optional future source for human-likelihood by Elo: <https://maiachess.com/>.
 

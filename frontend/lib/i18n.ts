@@ -12,8 +12,10 @@ const FR: Dict = {
   // Menu hamburger
   "menu.myGames": "Mes parties",
   "menu.recurringMistakes": "Mes erreurs récurrentes",
+  "menu.importFen": "Importer un FEN",
   "menu.importPgn": "Importer un PGN",
   "menu.tacticalTraining": "Entraînement tactique",
+  "menu.calibration": "Equilibre winrate",
   "menu.changePlan": "Changer de plan",
   "menu.editPosition": "Éditer la position",
   "menu.commands": "Commandes et réglages",
@@ -84,8 +86,10 @@ const EN: Dict = {
   // Hamburger menu
   "menu.myGames": "My games",
   "menu.recurringMistakes": "Recurring mistakes",
+  "menu.importFen": "Import FEN",
   "menu.importPgn": "Import PGN",
   "menu.tacticalTraining": "Tactical training",
+  "menu.calibration": "Winrate balance",
   "menu.changePlan": "Change plan",
   "menu.editPosition": "Edit position",
   "menu.commands": "Controls and settings",
@@ -159,8 +163,7 @@ function loadLocale(): Locale {
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY);
     if (stored === "fr" || stored === "en") return stored;
-    const nav = window.navigator.language?.slice(0, 2);
-    return nav === "en" ? "en" : "fr";
+    return "fr";
   } catch {
     return "fr";
   }

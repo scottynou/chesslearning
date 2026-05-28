@@ -27,9 +27,10 @@ export type AccuracyTargetBand = {
 };
 
 export const ACCURACY_TARGETS: Record<CoachHumanProfile, AccuracyTargetBand> = {
-  lambda: { profile: "lambda", target: 70, min: 65, max: 75 },
-  strong: { profile: "strong", target: 75, min: 70, max: 78 },
-  veryStrong: { profile: "veryStrong", target: 82, min: 78, max: 85 }
+  beginner: { profile: "beginner", target: 72, min: 64, max: 80 },
+  lambda: { profile: "lambda", target: 79, min: 72, max: 86 },
+  strong: { profile: "strong", target: 84, min: 77, max: 90 },
+  veryStrong: { profile: "veryStrong", target: 88, min: 82, max: 93 }
 };
 
 const EMPTY_COUNTS: AccuracySessionSummary["counts"] = {
@@ -56,7 +57,7 @@ export function summarizeSession(samples: AccuracySample[], profile: CoachHumanP
   }
   const count = samples.length;
   const averageAccuracy = count > 0 ? accuracySum / count : 0;
-  const weightedAccuracy = harmonicMeanAccuracy(samples);
+  const weightedAccuracy = averageAccuracy;
   const acpl = count > 0 ? cplSum / count : 0;
   return {
     samples,
@@ -67,19 +68,6 @@ export function summarizeSession(samples: AccuracySample[], profile: CoachHumanP
     counts,
     targetBand: targetBandForProfile(profile)
   };
-}
-
-// Lichess uses a weighted/harmonic combination so a single blunder is not lost
-// in the average of a long forced game. We approximate with harmonic mean which
-// is more sensitive to low values.
-function harmonicMeanAccuracy(samples: AccuracySample[]): number {
-  if (samples.length === 0) return 0;
-  let denom = 0;
-  for (const sample of samples) {
-    const value = Math.max(1, sample.accuracy);
-    denom += 1 / value;
-  }
-  return samples.length / denom;
 }
 
 export function bandStatus(accuracy: number, band: AccuracyTargetBand): "under" | "in" | "over" {

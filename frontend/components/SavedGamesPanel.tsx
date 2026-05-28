@@ -92,6 +92,7 @@ function formatDate(timestamp: number): string {
 }
 
 function profileLabel(profile: string): string {
+  if (profile === "beginner") return "800";
   if (profile === "lambda") return "1500";
   if (profile === "strong") return "2000";
   if (profile === "veryStrong") return "3000";

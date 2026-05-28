@@ -12,7 +12,7 @@ const result = spawnSync(command, args, {
   env: {
     ...process.env,
     NEXT_PUBLIC_API_BASE_URL: "same-origin",
-    NEXT_PUBLIC_IMAGE_IMPORT_API_BASE_URL: "https://chess-elo-coach-api-gmhvz5pfcq-ew.a.run.app"
+    NEXT_PUBLIC_IMAGE_IMPORT_API_BASE_URL: process.env.NEXT_PUBLIC_IMAGE_IMPORT_API_BASE_URL ?? "same-origin"
   },
   stdio: "inherit"
 });

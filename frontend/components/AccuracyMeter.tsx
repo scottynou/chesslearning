@@ -10,8 +10,7 @@ export function AccuracyMeter({ summary, compact = false }: Props) {
   const { t } = useI18n();
   if (summary.count === 0) return null;
   const value = summary.weightedAccuracy;
-  // Si les samples sont invalides (toutes accuracies a 0 -> harmonic = 1),
-  // on n'affiche pas le meter.
+  // Si les samples sont invalides ou incomplets, on n'affiche pas le meter.
   if (value < 5) return null;
 
   const status = bandStatus(value, summary.targetBand);

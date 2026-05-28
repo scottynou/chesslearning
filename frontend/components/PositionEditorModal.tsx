@@ -63,7 +63,7 @@ export function PositionEditorModal({ initialFen, onApply, onClose }: Props) {
   }
 
   return (
-    <div className="post-game-review-overlay" role="dialog" aria-modal="true">
+    <div className="post-game-review-overlay" role="dialog" aria-modal="true" aria-label="Éditer la position">
       <div className="position-editor-modal">
         <header className="position-editor-header">
           <h3>Éditer la position</h3>

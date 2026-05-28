@@ -3,15 +3,15 @@
 import type { ChangeEvent, ReactNode, TouchEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chess, Move, Square } from "chess.js";
-import { ChevronLeft, ChevronRight, ImageUp, Menu, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ImageUp, Layers, Menu, PencilLine, RefreshCcw, RotateCw, X } from "lucide-react";
 import { AccuracyMeter } from "@/components/AccuracyMeter";
+import { CalibrationReportPanel } from "@/components/CalibrationReportPanel";
 import { ChessCoachBoard } from "@/components/ChessCoachBoard";
 import { GameControls } from "@/components/GameControls";
 import { MoveHistory } from "@/components/MoveHistory";
 import { OpeningRepertoirePanel } from "@/components/OpeningRepertoirePanel";
 import { MistakePatternsPanel } from "@/components/MistakePatternsPanel";
 import { PgnImportModal } from "@/components/PgnImportModal";
-import { PlanFirstPanel } from "@/components/PlanFirstPanel";
 import { PlanSwitchModal } from "@/components/PlanSwitchModal";
 import { PostGameReview } from "@/components/PostGameReview";
 import { SavedGamesPanel } from "@/components/SavedGamesPanel";
@@ -20,7 +20,7 @@ import { SideSelectionPanel } from "@/components/SideSelectionPanel";
 import { saveGame } from "@/lib/gameHistory";
 import { useI18n } from "@/lib/i18n";
 import { useAccuracySession } from "@/lib/useAccuracySession";
-import { getPlanRecommendations, importPositionImage, listAvailablePlans, requestBotMove } from "@/lib/api";
+import { getPlanRecommendations, getWinrate, importPositionImage, listAvailablePlans, requestBotMove } from "@/lib/api";
 import { canMoveInMode, gameStatus, isPromotionAttempt, tryMove } from "@/lib/chess";
 import {
   COACH_STYLE_SETTINGS,
@@ -33,6 +33,8 @@ import {
   baseEloForProfile,
   effectiveElo,
   freshEloTrendState,
+  nextAdaptiveBoost,
+  nextStablePlyCount,
   normalizeCoachStyle,
   normalizeHumanProfile,
   skillLevelForElo,
@@ -40,7 +42,7 @@ import {
   type CoachStyle
 } from "@/lib/eloAdaptation";
 import { canStepBack, redoTimeline, undoTimeline, type MoveSource, type TimelineMove } from "@/lib/moveTimeline";
-import type { ImportPositionImageResponse, Orientation, PlanRecommendationsResponse, PlayMode, StrategyPlan } from "@/lib/types";
+import type { EloMoveComparison, ForcedMateSignal, ImportPositionImageResponse, MovePlan, Orientation, PlanRecommendationsResponse, PlayMode, PositionWinRate, StrategyPlan, WinrateResponse } from "@/lib/types";
 
 type PendingPromotion = {
   from: string;
@@ -94,6 +96,22 @@ type EloChange = {
   delta: number;
 };
 
+type WinRateChange = {
+  ply: number;
+  previous: number;
+  current: number;
+  delta: number;
+};
+
+type BoardArrow = {
+  from: string;
+  to: string;
+  color?: string;
+};
+type ColoredEloComparison = EloMoveComparison & {
+  tone: "active" | "low" | "middle" | "high";
+};
+
 type VerboseMove = Move & {
   before?: string;
   after?: string;
@@ -120,6 +138,7 @@ const BOT_ENGINE_DEPTH = 14;
 const NAVIGATION_KEY = "chess-learning-navigation";
 const PLAYER_RECOMMENDATION_ARROW = "rgba(224,185,118,0.82)";
 const OPPONENT_EXPECTED_ARROW = "rgba(239,118,118,0.78)";
+const FORCED_MATE_ARROW = "rgba(255,215,128,0.94)";
 const IMAGE_IMPORT_MAX_SOURCE_BYTES = 24 * 1024 * 1024;
 const IMAGE_IMPORT_TARGET_BYTES = 1.4 * 1024 * 1024;
 const IMAGE_IMPORT_MAX_PAYLOAD_CHARS = 2.4 * 1024 * 1024;
@@ -175,6 +194,32 @@ function historyFromGame(game: Chess) {
 
 function isUciMove(value: string) {
   return /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(value);
+}
+
+function colorEloComparisons(comparisons: EloMoveComparison[], selectedReferenceElo: number): ColoredEloComparison[] {
+  const activeElo = comparisons.find((item) => item.active)?.elo ?? selectedReferenceElo;
+  const inactive = comparisons
+    .filter((item) => item.elo !== activeElo)
+    .slice()
+    .sort((a, b) => a.elo - b.elo);
+  const toneByElo = new Map<number, ColoredEloComparison["tone"]>();
+  inactive.forEach((item, index) => {
+    toneByElo.set(item.elo, index === 0 ? "low" : index === 1 ? "middle" : "high");
+  });
+
+  return comparisons.map((item) => ({
+    ...item,
+    active: item.elo === activeElo,
+    tone: item.elo === activeElo ? "active" : toneByElo.get(item.elo) ?? "middle"
+  }));
+}
+
+function uniqueBoardArrows(arrows: BoardArrow[]) {
+  const byMove = new Map<string, BoardArrow>();
+  for (const arrow of arrows) {
+    byMove.set(`${arrow.from}-${arrow.to}`, arrow);
+  }
+  return [...byMove.values()];
 }
 
 function parseHistoryParam(params: URLSearchParams, fallbackFirstMove: string | null) {
@@ -389,6 +434,34 @@ function orientationFromBoardOrientation(value: ImageImportDraft["boardOrientati
 
 function sideToMoveFromFen(fen: string): "white" | "black" {
   return fen.split(" ")[1] === "b" ? "black" : "white";
+}
+
+function positionWinRateFromResponse(response: WinrateResponse, fen: string, userSide: UserSide): PositionWinRate {
+  const sideToMove = sideToMoveFromFen(fen);
+  const playerSide = response.perspective === "sideToMove" ? sideToMove : response.perspective;
+  const approximateOpponent = Math.max(0, Math.min(100, 100 - response.winrate));
+  return {
+    available: true,
+    playerSide,
+    perspective: userSide === "both" || response.perspective === "sideToMove" ? "side_to_move" : "player",
+    playerWinPercent: response.winrate,
+    whiteWinPercent: playerSide === "white" ? response.winrate : approximateOpponent,
+    blackWinPercent: playerSide === "black" ? response.winrate : approximateOpponent,
+    sideToMoveWinPercent: playerSide === sideToMove ? response.winrate : approximateOpponent,
+    evalCp: null,
+    mateIn: null,
+    sideToMoveWdl: null,
+    source: response.source,
+    confidence: response.confidence,
+    label: winRateResponseLabel(response)
+  };
+}
+
+function winRateResponseLabel(response: WinrateResponse) {
+  if (response.source === "lichess_exact") return "Donnees Lichess";
+  if (response.source === "lichess_model") return "Modele Lichess";
+  if (response.source === "stockfish") return "Estimation moteur";
+  return response.confidence === "low" ? "Estimation simple - confiance faible" : "Estimation simple";
 }
 
 function createImageImportDraft(params: {
@@ -990,14 +1063,19 @@ export default function HomePage() {
   const [planRecommendationsFen, setPlanRecommendationsFen] = useState<string | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
+  const [standaloneWinRate, setStandaloneWinRate] = useState<PositionWinRate | null>(null);
+  const [standaloneWinRateFen, setStandaloneWinRateFen] = useState<string | null>(null);
+  const [standaloneWinRateLoading, setStandaloneWinRateLoading] = useState(false);
   const [botThinking, setBotThinking] = useState(false);
   const [botError, setBotError] = useState<string | null>(null);
   const [highlightedMove, setHighlightedMove] = useState<{ from: string; to: string } | null>(null);
+  const [multiMoveHintsEnabled, setMultiMoveHintsEnabled] = useState(true);
   const [botStrategyState, setBotStrategyState] = useState<Record<string, unknown>>({});
   const [moveSources, setMoveSources] = useState<MoveSource[]>([]);
   const [redoStack, setRedoStack] = useState<TimelineMove[]>([]);
   const [adaptiveBoost, setAdaptiveBoost] = useState(0);
   const [eloChange, setEloChange] = useState<EloChange | null>(null);
+  const [winRateChange, setWinRateChange] = useState<WinRateChange | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [imageImporting, setImageImporting] = useState(false);
   const [imageImportError, setImageImportError] = useState<string | null>(null);
@@ -1011,9 +1089,13 @@ export default function HomePage() {
   const navigationReady = useRef(false);
   const skipNextHistoryReplace = useRef(false);
   const lastEloAdjustmentPly = useRef<number | null>(null);
+  const lastReviewAdjustmentPly = useRef<number | null>(null);
+  const lastAdaptiveBoostChangePly = useRef<number | null>(null);
+  const reviewStablePlyCount = useRef(0);
   const eloTrend = useRef(freshEloTrendState());
   const previousEffectiveElo = useRef<number | null>(null);
   const eloChangeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastWinRatePoint = useRef<{ ply: number; value: number } | null>(null);
   const botRequestInFlight = useRef(false);
   const botRequestSerial = useRef(0);
   const imageImportSerial = useRef(0);
@@ -1048,12 +1130,14 @@ export default function HomePage() {
     elo: effectiveCoachElo,
     selectedPlanId
   });
+  const recordAccuracyMove = accuracySession.recordMove;
   const [showPostGameReview, setShowPostGameReview] = useState(false);
   const [savedGamesOpen, setSavedGamesOpen] = useState(false);
   const [planSwitchOpen, setPlanSwitchOpen] = useState(false);
   const [mistakesOpen, setMistakesOpen] = useState(false);
   const [pgnImportOpen, setPgnImportOpen] = useState(false);
   const [tacticalOpen, setTacticalOpen] = useState(false);
+  const [calibrationOpen, setCalibrationOpen] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editFen, setEditFen] = useState<string | null>(null);
   const [editAskSide, setEditAskSide] = useState(false);
@@ -1109,14 +1193,28 @@ export default function HomePage() {
   const firstMoveLabel = firstOpponentMove ? history[0]?.san ?? firstOpponentMove : null;
   const primaryRecommendation = planRecommendations?.primaryMove ?? null;
   const expectedOpponentRecommendation = planRecommendations?.expectedOpponentMove ?? null;
+  const visibleMovePlan = planRecommendationsFen === fen ? primaryRecommendation?.movePlan ?? null : null;
+  const eloComparisonItems = useMemo(
+    () => multiMoveHintsEnabled ? colorEloComparisons(planRecommendations?.eloComparisons ?? [], baseCoachElo) : [],
+    [baseCoachElo, multiMoveHintsEnabled, planRecommendations?.eloComparisons]
+  );
+  const standaloneLiveWinRate = standaloneWinRateFen === fen ? standaloneWinRate : null;
+  const liveWinRate = planRecommendationsFen === fen ? planRecommendations?.positionWinRate ?? standaloneLiveWinRate : standaloneLiveWinRate;
+  const displayedLiveWinRate = liveWinRate ?? standaloneLiveWinRate ?? planRecommendations?.positionWinRate ?? standaloneWinRate ?? null;
+  const liveWinRatePending = (planLoading || standaloneWinRateLoading) && !liveWinRate && Boolean(displayedLiveWinRate?.available);
+  const forcedMateSignal = planRecommendationsFen === fen && !editMode ? planRecommendations?.forcedMate ?? null : null;
+  const turnLabel = game.turn() === "w" ? "Blancs" : "Noirs";
+  const coachModeLabel = mode === "both" ? "Libre" : mode === "white" ? "Coach blanc" : "Coach noir";
   const recommendationArrows = useMemo(
     () => {
       const arrows = primaryRecommendation
-        ? [{
+        ? [
+          {
             from: primaryRecommendation.moveUci.slice(0, 2),
             to: primaryRecommendation.moveUci.slice(2, 4),
             color: primaryRecommendation.arrowColor ?? PLAYER_RECOMMENDATION_ARROW
-          }]
+          }
+        ]
         : [];
       if (planRecommendationsFen !== fen) return [];
       if (expectedOpponentRecommendation) {
@@ -1126,9 +1224,16 @@ export default function HomePage() {
           color: expectedOpponentRecommendation.arrowColor ?? OPPONENT_EXPECTED_ARROW
         });
       }
-      return arrows;
+      if (forcedMateSignal) {
+        arrows.push({
+          from: forcedMateSignal.moveUci.slice(0, 2),
+          to: forcedMateSignal.moveUci.slice(2, 4),
+          color: FORCED_MATE_ARROW
+        });
+      }
+      return uniqueBoardArrows(arrows);
     },
-    [expectedOpponentRecommendation, fen, planRecommendationsFen, primaryRecommendation]
+    [expectedOpponentRecommendation, fen, forcedMateSignal, planRecommendationsFen, primaryRecommendation]
   );
   const makeNavigationSnapshot = useCallback(
     (overrides: Partial<NavigationSnapshot> = {}) =>
@@ -1178,6 +1283,9 @@ export default function HomePage() {
     setEloChange(null);
     previousEffectiveElo.current = baseEloForProfile(normalizeHumanProfile(snapshot.humanProfile));
     lastEloAdjustmentPly.current = null;
+    lastReviewAdjustmentPly.current = null;
+    lastAdaptiveBoostChangePly.current = null;
+    reviewStablePlyCount.current = 0;
     botRequestSerial.current += 1;
     botRequestInFlight.current = false;
     botPausedByTimelineNavigation.current = false;
@@ -1259,19 +1367,23 @@ export default function HomePage() {
     function updateBoardWidth() {
       const viewportWidth = Math.min(
         window.innerWidth,
-        window.outerWidth || window.innerWidth,
         document.documentElement.clientWidth || window.innerWidth,
         window.visualViewport?.width ?? window.innerWidth
       );
-      const mobileViewport = viewportWidth <= 540;
-      const horizontalReserve = mobileViewport ? 14 : 38;
+      const mobileViewport = viewportWidth <= 620;
+      const horizontalReserve = mobileViewport ? 20 : 38;
       const maxBoardWidth = mobileViewport ? 520 : 720;
       const width = Math.min(viewportWidth - horizontalReserve, mobileViewport ? viewportWidth * 0.97 : viewportWidth * 0.9, maxBoardWidth);
-      setBoardWidth(Math.floor(Math.max(240, width)));
+      const nextWidth = Math.floor(Math.max(240, width));
+      setBoardWidth((current) => (current === nextWidth ? current : nextWidth));
     }
     updateBoardWidth();
     window.addEventListener("resize", updateBoardWidth);
-    return () => window.removeEventListener("resize", updateBoardWidth);
+    window.visualViewport?.addEventListener("resize", updateBoardWidth);
+    return () => {
+      window.removeEventListener("resize", updateBoardWidth);
+      window.visualViewport?.removeEventListener("resize", updateBoardWidth);
+    };
   }, []);
 
   useEffect(() => {
@@ -1329,6 +1441,7 @@ export default function HomePage() {
       moveHistoryUci: historyUci,
       maxMoves: INTERNAL_MAX_MOVES,
       engineDepth: INTERNAL_ENGINE_DEPTH,
+      includeEloComparisons: multiMoveHintsEnabled,
       signal: controller.signal
     })
       .then((response) => {
@@ -1352,7 +1465,70 @@ export default function HomePage() {
       active = false;
       controller.abort();
     };
-  }, [activeSkillLevel, appStage, botTurnInBotMode, coachStyle, effectiveCoachElo, fen, historyUci, humanProfile, selectedPlanId, userSide]);
+  }, [activeSkillLevel, appStage, botTurnInBotMode, coachStyle, effectiveCoachElo, fen, historyUci, humanProfile, multiMoveHintsEnabled, selectedPlanId, userSide]);
+
+  useEffect(() => {
+    if (appStage !== "coach") {
+      setStandaloneWinRate(null);
+      setStandaloneWinRateFen(null);
+      setStandaloneWinRateLoading(false);
+      return;
+    }
+
+    let active = true;
+    const controller = new AbortController();
+    setStandaloneWinRateLoading(true);
+    getWinrate({
+      fen,
+      perspective: userSide === "both" ? "sideToMove" : userSide,
+      playerRating: userSide === "both" ? undefined : effectiveCoachElo,
+      signal: controller.signal
+    })
+      .then((response) => {
+        if (!active) return;
+        setStandaloneWinRate(positionWinRateFromResponse(response, fen, userSide));
+        setStandaloneWinRateFen(fen);
+      })
+      .catch((error: Error) => {
+        if (isAbortError(error) || !active) return;
+        setStandaloneWinRate(null);
+        setStandaloneWinRateFen(null);
+      })
+      .finally(() => {
+        if (active) setStandaloneWinRateLoading(false);
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [appStage, effectiveCoachElo, fen, userSide]);
+
+  useEffect(() => {
+    if (appStage !== "coach") {
+      lastWinRatePoint.current = null;
+      setWinRateChange(null);
+      return;
+    }
+    if (!liveWinRate?.available) return;
+
+    const ply = historyUci.length;
+    const value = liveWinRate.playerWinPercent;
+    const previous = lastWinRatePoint.current;
+
+    if (!previous || ply === 0 || ply <= previous.ply) {
+      setWinRateChange(null);
+    } else if (previous.ply !== ply) {
+      setWinRateChange({
+        ply,
+        previous: previous.value,
+        current: value,
+        delta: value - previous.value
+      });
+    }
+
+    lastWinRatePoint.current = { ply, value };
+  }, [appStage, historyUci.length, liveWinRate?.available, liveWinRate?.playerWinPercent]);
 
   useEffect(() => {
     if (appStage !== "coach" || !planRecommendations?.adaptiveSignal) return;
@@ -1378,9 +1554,44 @@ export default function HomePage() {
     });
     eloTrend.current = result.trend;
     if (result.boost !== adaptiveBoost) {
+      lastAdaptiveBoostChangePly.current = currentPly;
       setAdaptiveBoost(result.boost);
     }
   }, [adaptiveBoost, appStage, historyUci.length, moveSources, planRecommendations?.adaptiveSignal, userSide]);
+
+  useEffect(() => {
+    if (appStage !== "coach") return;
+    const latestSample = accuracySession.samples[accuracySession.samples.length - 1];
+    if (!latestSample || lastReviewAdjustmentPly.current === latestSample.ply) return;
+
+    lastReviewAdjustmentPly.current = latestSample.ply;
+    if (lastAdaptiveBoostChangePly.current === latestSample.ply) return;
+    const hasDanger =
+      Boolean(planRecommendations?.primaryMove?.warning) ||
+      (planRecommendations?.primaryMove?.tacticalRisk ?? 0) >= 45;
+    reviewStablePlyCount.current = nextStablePlyCount({
+      currentStablePlyCount: reviewStablePlyCount.current,
+      quality: latestSample.quality,
+      hasDanger
+    });
+    const nextBoost = nextAdaptiveBoost({
+      currentBoost: adaptiveBoost,
+      autoEnabled: true,
+      playerReviewQuality: latestSample.quality,
+      stablePlyCount: reviewStablePlyCount.current
+    });
+
+    if (nextBoost !== adaptiveBoost) {
+      lastAdaptiveBoostChangePly.current = latestSample.ply;
+      setAdaptiveBoost(nextBoost);
+    }
+  }, [
+    accuracySession.samples,
+    adaptiveBoost,
+    appStage,
+    planRecommendations?.primaryMove?.tacticalRisk,
+    planRecommendations?.primaryMove?.warning
+  ]);
 
   useEffect(() => {
     if (appStage !== "coach") {
@@ -1451,7 +1662,7 @@ export default function HomePage() {
 
       if (source === "manual" && appStage === "coach") {
         const ply = nextHistoryUci.length;
-        accuracySession.recordMove({
+        recordAccuracyMove({
           ply,
           uci: moveUci,
           san: moveSan,
@@ -1488,7 +1699,7 @@ export default function HomePage() {
       }
       return true;
     },
-    [appStage, baseFen, boardLocked, game, getCurrentTimeline, history.length, makeNavigationSnapshot, mode, writeNavigationSnapshot]
+    [appStage, baseFen, boardLocked, game, getCurrentTimeline, history.length, makeNavigationSnapshot, mode, recordAccuracyMove, writeNavigationSnapshot]
   );
 
   const requestMove = useCallback(
@@ -1671,6 +1882,9 @@ export default function HomePage() {
     setEloChange(null);
     previousEffectiveElo.current = baseEloForProfile(profile);
     lastEloAdjustmentPly.current = null;
+    lastReviewAdjustmentPly.current = null;
+    lastAdaptiveBoostChangePly.current = null;
+    reviewStablePlyCount.current = 0;
     eloTrend.current = freshEloTrendState();
   }, [humanProfile]);
 
@@ -1683,6 +1897,8 @@ export default function HomePage() {
     setPlanRecommendations(null);
     setPlanRecommendationsFen(null);
     setPlanError(null);
+    setWinRateChange(null);
+    lastWinRatePoint.current = null;
     botRequestInFlight.current = false;
     setBotThinking(false);
     setBotError(null);
@@ -1690,6 +1906,9 @@ export default function HomePage() {
     accuracySession.reset();
     setShowPostGameReview(false);
     lastSeenPlyForReview.current = 0;
+    lastReviewAdjustmentPly.current = null;
+    lastAdaptiveBoostChangePly.current = null;
+    reviewStablePlyCount.current = 0;
     if (resetAdaptive) {
       skipNextAdaptiveSignalForTimeline.current = false;
       resetAdaptiveBoost();
@@ -2252,6 +2471,16 @@ export default function HomePage() {
             className="site-menu-link"
             onClick={() => {
               setMenuOpen(false);
+              openFenImport();
+            }}
+          >
+            {t("menu.importFen")}
+          </button>
+          <button
+            type="button"
+            className="site-menu-link"
+            onClick={() => {
+              setMenuOpen(false);
               setPgnImportOpen(true);
             }}
           >
@@ -2266,6 +2495,16 @@ export default function HomePage() {
             }}
           >
             {t("menu.tacticalTraining")}
+          </button>
+          <button
+            type="button"
+            className="site-menu-link"
+            onClick={() => {
+              setMenuOpen(false);
+              setCalibrationOpen(true);
+            }}
+          >
+            {t("menu.calibration")}
           </button>
           {appStage === "coach" && plans.length > 0 ? (
             <button
@@ -2316,7 +2555,7 @@ export default function HomePage() {
         </SiteMenu>
       ) : null}
       {savedGamesOpen ? (
-        <div className="post-game-review-overlay" role="dialog" aria-modal="true">
+        <div className="post-game-review-overlay" role="dialog" aria-modal="true" aria-label="Mes parties sauvegardées">
           <SavedGamesPanel onClose={() => setSavedGamesOpen(false)} />
         </div>
       ) : null}
@@ -2329,7 +2568,7 @@ export default function HomePage() {
         />
       ) : null}
       {mistakesOpen ? (
-        <div className="post-game-review-overlay" role="dialog" aria-modal="true">
+        <div className="post-game-review-overlay" role="dialog" aria-modal="true" aria-label="Erreurs récurrentes">
           <MistakePatternsPanel onClose={() => setMistakesOpen(false)} />
         </div>
       ) : null}
@@ -2337,10 +2576,10 @@ export default function HomePage() {
         <PgnImportModal onImport={importGameFromPgn} onClose={() => setPgnImportOpen(false)} />
       ) : null}
       {editAskSide ? (
-        <div className="post-game-review-overlay" role="dialog" aria-modal="true">
+        <div className="post-game-review-overlay" role="dialog" aria-modal="true" aria-label="Choisir le trait">
           <div className="edit-side-dialog">
             <h3>Au trait ?</h3>
-            <p>Indique à qui c'est de jouer avec cette position.</p>
+            <p>Indique à qui c&apos;est de jouer avec cette position.</p>
             <div className="edit-side-buttons">
               <button type="button" className="tactical-primary" onClick={() => confirmEditWithSide("white")}>
                 Aux Blancs
@@ -2356,8 +2595,13 @@ export default function HomePage() {
         </div>
       ) : null}
       {tacticalOpen ? (
-        <div className="post-game-review-overlay" role="dialog" aria-modal="true">
+        <div className="post-game-review-overlay" role="dialog" aria-modal="true" aria-label="Entraînement tactique">
           <TacticalTrainingPanel onClose={() => setTacticalOpen(false)} />
+        </div>
+      ) : null}
+      {calibrationOpen ? (
+        <div className="post-game-review-overlay" role="dialog" aria-modal="true" aria-label="Rapport de calibration">
+          <CalibrationReportPanel onClose={() => setCalibrationOpen(false)} />
         </div>
       ) : null}
       {imageImportError ? (
@@ -2423,6 +2667,7 @@ export default function HomePage() {
         <section className="first-move-board">
           <ChessCoachBoard
             fen={fen}
+            boardWidth={boardWidth}
             orientation={orientation}
             selectedSquare={selectedSquare}
             legalTargets={legalTargets}
@@ -2435,7 +2680,11 @@ export default function HomePage() {
         </section>
         <section className="first-move-brief">
           <article className="first-move-card">
+            <p>Répondre avec les noirs</p>
             <h1>Premier coup blanc</h1>
+            <p className="answer-line">
+              Le plateau attend le coup initial des Blancs. La réponse noire sera choisie juste après.
+            </p>
           </article>
         </section>
       </main>
@@ -2486,12 +2735,27 @@ export default function HomePage() {
   return renderShell(
     <main className="coach-live-shell">
       <section className="coach-board-column">
-        {accuracySession.summary.count > 0 && accuracySession.summary.weightedAccuracy > 1 ? (
-          <AccuracyMeter summary={accuracySession.summary} compact />
-        ) : null}
+        <div className="coach-context-strip" aria-label="Etat de la position">
+          <span>{status}</span>
+          <span>Trait {turnLabel}</span>
+          <span>{coachModeLabel}</span>
+          {planRecommendations?.phaseDisplay ? <span>{planRecommendations.phaseDisplay.label}</span> : null}
+        </div>
+        <div className="coach-instrument-rack">
+          <LiveWinRateMeter
+            winRate={displayedLiveWinRate}
+            loading={planLoading && !displayedLiveWinRate}
+            pending={liveWinRatePending}
+            change={liveWinRatePending ? null : winRateChange}
+          />
+          {accuracySession.summary.count > 0 && accuracySession.summary.weightedAccuracy > 1 ? (
+            <AccuracyMeter summary={accuracySession.summary} compact />
+          ) : null}
+        </div>
         <div className="coach-board-stage">
           <ChessCoachBoard
             fen={editMode && editFen ? editFen : fen}
+            boardWidth={boardWidth}
             orientation={orientation}
             selectedSquare={editMode ? null : selectedSquare}
             legalTargets={editMode ? [] : legalTargets}
@@ -2505,6 +2769,8 @@ export default function HomePage() {
             onSquareRightClick={editMode ? handleEditSquareRightClick : undefined}
           />
 
+          {forcedMateSignal ? <ForcedMateBadge signal={forcedMateSignal} /> : null}
+
           {checkmateResult ? (
             <div className="checkmate-overlay" role="status" aria-live="polite">
               <span>Echec et mat</span>
@@ -2514,7 +2780,7 @@ export default function HomePage() {
           ) : null}
 
           {showPostGameReview && accuracySession.summary.count > 0 ? (
-            <div className="post-game-review-overlay" role="dialog" aria-modal="true">
+            <div className="post-game-review-overlay" role="dialog" aria-modal="true" aria-label="Bilan de partie">
               <PostGameReview
                 summary={accuracySession.summary}
                 resultText={status}
@@ -2547,11 +2813,19 @@ export default function HomePage() {
           ) : null}
         </div>
 
+        {visibleMovePlan ? (
+          <MovePlanCard plan={visibleMovePlan} />
+        ) : null}
+
+        {planRecommendationsFen === fen && eloComparisonItems.length > 0 ? (
+          <EloComparisonStrip comparisons={eloComparisonItems} />
+        ) : null}
+
         <div className="coach-board-controls">
           {editMode ? (
             <>
               <span className="coach-board-edit-hint">
-                Édition libre : déplace n'importe quelle pièce. Clic droit = retirer.
+                Édition libre : déplace n&apos;importe quelle pièce. Clic droit = retirer.
               </span>
               <button type="button" onClick={cancelEdit} className="control-button">
                 Annuler
@@ -2578,6 +2852,16 @@ export default function HomePage() {
               </button>
               <button
                 type="button"
+                onClick={() => setMultiMoveHintsEnabled((enabled) => !enabled)}
+                className={`control-button icon-control multi-move-toggle${multiMoveHintsEnabled ? " is-active" : ""}`}
+                aria-label={multiMoveHintsEnabled ? "Masquer les multicoups Elo" : "Afficher les multicoups Elo"}
+                aria-pressed={multiMoveHintsEnabled}
+                title={multiMoveHintsEnabled ? "Masquer les multicoups Elo" : "Afficher les multicoups Elo"}
+              >
+                <Layers size={18} />
+              </button>
+              <button
+                type="button"
                 onClick={() => runTimelineClick(undo)}
                 onTouchEnd={(event) => runTimelineTouch(event, undo)}
                 className="control-button icon-control"
@@ -2600,9 +2884,33 @@ export default function HomePage() {
               >
                 <ChevronRight size={18} />
               </button>
-              <button type="button" onClick={reset} className="control-button">Reset</button>
-              <button type="button" onClick={() => setOrientation(orientation === "white" ? "black" : "white")} className="control-button">Tourner</button>
-              <button type="button" onClick={enterEditMode} className="control-button">Édit</button>
+              <button
+                type="button"
+                onClick={reset}
+                className="control-button icon-control"
+                aria-label="Reset"
+                title="Reset"
+              >
+                <RefreshCcw size={18} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setOrientation(orientation === "white" ? "black" : "white")}
+                className="control-button icon-control"
+                aria-label="Tourner"
+                title="Tourner"
+              >
+                <RotateCw size={18} />
+              </button>
+              <button
+                type="button"
+                onClick={enterEditMode}
+                className="control-button icon-control"
+                aria-label="Editer"
+                title="Editer"
+              >
+                <PencilLine size={18} />
+              </button>
             </>
           )}
         </div>
@@ -2625,16 +2933,159 @@ export default function HomePage() {
         {lastMessage ? <div className="coach-board-note">{lastMessage}</div> : null}
       </section>
 
-      <section className="coach-panel-column">
-        <PlanFirstPanel
-          selectedPlan={selectedPlan}
-          recommendations={planRecommendations}
-          loading={planLoading}
-          error={planError}
-        />
-      </section>
+      {planError ? <div className="coach-board-error">{planError}</div> : null}
     </main>
   );
+}
+
+function ForcedMateBadge({ signal }: { signal: ForcedMateSignal }) {
+  const sideLabel = signal.side === "white" ? "blancs" : "noirs";
+  const linePreview = signal.lineSan.length > 1 ? signal.lineSan.slice(1, 5).join(" ") : "";
+
+  return (
+    <aside className="forced-mate-badge" role="status" aria-live="polite" aria-label={signal.label}>
+      <span>Mat force</span>
+      <strong>{signal.label}</strong>
+      <p>{signal.moveSan} pour les {sideLabel}{linePreview ? ` - puis ${linePreview}` : ""}</p>
+    </aside>
+  );
+}
+
+function LiveWinRateMeter({
+  winRate,
+  loading,
+  pending,
+  change
+}: {
+  winRate: PositionWinRate | null;
+  loading: boolean;
+  pending: boolean;
+  change: WinRateChange | null;
+}) {
+  const value = winRate?.available ? Math.max(0, Math.min(100, winRate.playerWinPercent)) : null;
+  const sideLabel = winRate?.playerSide === "black" ? "noirs" : winRate?.playerSide === "white" ? "blancs" : "joueur";
+  const sourceLabel = winRate ? winRateSourceLabel(winRate) : "En attente";
+  const trend = change && Math.abs(change.delta) >= 0.1 ? (change.delta > 0 ? "up" : "down") : "stable";
+  const deltaLabel = change && Math.abs(change.delta) >= 0.1
+    ? `${change.delta > 0 ? "+" : ""}${change.delta.toFixed(1)}%`
+    : null;
+
+  return (
+    <section className={`live-winrate-meter is-${trend}`} aria-live="polite" aria-label="Winrate">
+      <div className="live-winrate-main">
+        <span>Winrate</span>
+        {value == null ? (
+          <strong>{loading ? "Analyse..." : "--"}</strong>
+        ) : (
+          <strong>{Math.round(value)}%</strong>
+        )}
+        {deltaLabel ? <em>{deltaLabel}</em> : null}
+      </div>
+      <div className="live-winrate-track" aria-hidden="true">
+        <span style={{ width: `${value ?? 0}%` }} />
+      </div>
+      <div className="live-winrate-meta">
+        <span>{pending ? "Actualisation..." : winRate?.perspective === "player" ? `Pour les ${sideLabel}` : "Cote au trait"}</span>
+        <span title={winRate?.label}>{sourceLabel}</span>
+      </div>
+    </section>
+  );
+}
+
+function winRateSourceLabel(winRate: PositionWinRate) {
+  const confidence = winRate.confidence === "low" ? " - confiance faible" : "";
+  if (winRate.source === "lichess_exact") return `Donnees Lichess${confidence}`;
+  if (winRate.source === "lichess_model") return `Modele Lichess${confidence}`;
+  if (winRate.source === "stockfish" || winRate.source === "stockfish_wdl" || winRate.source === "centipawn" || winRate.source === "mate") {
+    return `Estimation moteur${confidence}`;
+  }
+  return winRate.confidence === "low" ? "Confiance faible" : "Estimation simple";
+}
+
+function EloComparisonStrip({ comparisons }: { comparisons: ColoredEloComparison[] }) {
+  const ordered = comparisons.slice().sort((a, b) => a.elo - b.elo);
+
+  return (
+    <section className="elo-comparison-strip" aria-label="Coups proposes par niveau Elo">
+      <div className="elo-comparison-grid">
+        {ordered.map((item) => {
+          const moveLabel = item.beginnerLabel || item.moveSan || item.moveUci;
+          const scoreLabel = item.engineScore != null ? `${item.engineScore}/100` : item.finalCoachScore != null ? `${item.finalCoachScore}/100` : null;
+          return (
+            <div
+              key={item.elo}
+              className={`elo-comparison-item is-${item.tone}${item.active ? " is-active" : ""}`}
+            >
+              <span>{item.label}</span>
+              <strong>{moveLabel}</strong>
+              <em>{item.active ? "actif" : scoreLabel ?? item.moveComplexity ?? "variante"}</em>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function MovePlanCard({ plan }: { plan: MovePlan }) {
+  const depthLabel = plan.depth <= 1 ? "court" : `${plan.depth} temps`;
+  const followUpSteps = plan.steps.slice(1, 5);
+  const firstStep = plan.steps[0] ?? null;
+  const firstLabel = firstStep ? plainMoveLabel(firstStep.label) : "ce coup";
+  const reason = compactSentence(plan.summary);
+
+  return (
+    <section className="move-plan-card" aria-label="Logique du coup">
+      <div className="move-plan-head">
+        <span>Plan</span>
+        <em>{depthLabel}</em>
+      </div>
+      <p className="move-plan-main">
+        <strong>Je joue {firstLabel}</strong>
+        <span>{reason}</span>
+      </p>
+      {plan.branches.length > 0 ? (
+        <div className="move-plan-branches">
+          {plan.branches.map((branch, index) => (
+            <div key={`${branch.ifLabel}-${branch.thenLabel}-${index}`} className="move-plan-branch">
+            <span>{index === 0 ? "Si" : "Puis"} {plainMoveLabel(branch.ifLabel)}</span>
+              <strong>alors {plainMoveLabel(branch.thenLabel)}</strong>
+              <em>{compactSentence(branch.goal)}</em>
+            </div>
+          ))}
+        </div>
+      ) : followUpSteps.length > 0 ? (
+        <div className="move-plan-branches">
+          {followUpSteps.map((step, index) => (
+            <div key={`${step.moveUci}-${index}`} className="move-plan-branch">
+              <span>{step.actor === "opponent" ? "S'il joue" : "Ensuite"} {plainMoveLabel(step.label)}</span>
+              <strong>{step.actor === "you" ? "on continue le plan" : "on regarde sa reponse"}</strong>
+              <em>{compactSentence(step.idea)}</em>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function plainMoveLabel(label: string) {
+  return label
+    .replace(/^[^A-Za-zÀ-ÖØ-öø-ÿ0-9]+/u, "")
+    .replace(/\s*→\s*/g, " -> ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function compactSentence(value: string) {
+  const text = value.replace(/\s+/g, " ").trim().replace(/\.$/, "");
+  return text
+    .replace(/^Le pion va en [a-h][1-8] pour /i, "pour ")
+    .replace(/^Le cavalier arrive en [a-h][1-8],?\s*/i, "pour ")
+    .replace(/^Le fou va en [a-h][1-8],?\s*/i, "pour ")
+    .replace(/^La tour va en [a-h][1-8] pour /i, "pour ")
+    .replace(/^La dame va en [a-h][1-8][;,:]?\s*/i, "")
+    .replace(/^Le roi va en [a-h][1-8][;,:]?\s*/i, "");
 }
 
 function EloLiveIndicator({
@@ -3031,7 +3482,7 @@ function SiteHeader({
           <span className="site-brand-mark" aria-hidden="true">
             <span className="site-brand-pawn" />
           </span>
-          <span className="site-brand-text">Chess Learning</span>
+          <span className="site-brand-text">Chess Coach</span>
         </button>
         <div className="site-header-actions">
           {status ? <span className="site-status">{status}</span> : null}

@@ -57,3 +57,14 @@ def test_stockfish_analysis_coalesces_identical_inflight_requests(monkeypatch) -
     assert fake_process.calls == 1
     assert len(results) == 2
     assert all(result[0].move_uci == "e2e4" for result in results)
+
+
+def test_stockfish_parser_keeps_wdl() -> None:
+    from app.stockfish_engine import _parse_engine_lines
+
+    lines = _parse_engine_lines([
+        "info depth 12 seldepth 18 multipv 1 score cp 34 wdl 420 510 70 nodes 10 pv e2e4 e7e5",
+        "bestmove e2e4",
+    ])
+
+    assert lines[0].wdl == (420, 510, 70)

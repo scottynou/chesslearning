@@ -1,6 +1,7 @@
 import type {
   AnalyzeResponse,
   BotMoveResponse,
+  CalibrationReportResponse,
   CandidateMove,
   ExplainResponse,
   ImportPositionImageResponse,
@@ -9,7 +10,10 @@ import type {
   PositionPlanResponse,
   ReviewMoveResponse,
   SkillLevel,
-  StrategyPlan
+  StrategyPlan,
+  WinratePerspective,
+  WinrateResponse,
+  WinrateSpeed
 } from "./types";
 
 const API_BASE_URL =
@@ -20,6 +24,17 @@ const IMAGE_IMPORT_API_BASE_URL =
   process.env.NEXT_PUBLIC_IMAGE_IMPORT_API_BASE_URL === "same-origin"
     ? ""
     : process.env.NEXT_PUBLIC_IMAGE_IMPORT_API_BASE_URL ?? API_BASE_URL;
+
+function normalizeApiErrorMessage(message: string): string {
+  const lower = message.toLowerCase();
+  if (lower.includes("stockfish is not configured")) {
+    return "Le moteur d'analyse n'est pas disponible pour le moment. Configure Stockfish puis réessaie.";
+  }
+  if (lower.includes("failed to fetch") || lower.includes("networkerror") || lower.includes("load failed")) {
+    return "Impossible de joindre le serveur d'analyse. Vérifie que le backend est démarré puis réessaie.";
+  }
+  return message;
+}
 
 async function requestJson<T>(path: string, body: unknown, signal?: AbortSignal, baseUrl = API_BASE_URL): Promise<T> {
   const response = await fetch(`${baseUrl}${path}`, {
@@ -44,7 +59,7 @@ async function requestJson<T>(path: string, body: unknown, signal?: AbortSignal,
     } catch {
       message = response.statusText || message;
     }
-    throw new Error(message);
+    throw new Error(normalizeApiErrorMessage(message));
   }
 
   return response.json() as Promise<T>;
@@ -53,7 +68,7 @@ async function requestJson<T>(path: string, body: unknown, signal?: AbortSignal,
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`);
   if (!response.ok) {
-    throw new Error(response.statusText || "Le backend n'a pas répondu correctement.");
+    throw new Error(normalizeApiErrorMessage(response.statusText || "Le backend n'a pas répondu correctement."));
   }
   return response.json() as Promise<T>;
 }
@@ -121,6 +136,18 @@ export function getPositionPlan(fen: string, moveHistoryUci: string[]): Promise<
   });
 }
 
+export function getWinrate(params: {
+  fen: string;
+  perspective?: WinratePerspective;
+  playerRating?: number;
+  opponentRating?: number;
+  speed?: WinrateSpeed;
+  signal?: AbortSignal;
+}): Promise<WinrateResponse> {
+  const { signal, ...body } = params;
+  return requestJson<WinrateResponse>("/winrate", body, signal);
+}
+
 export function listAvailablePlans(side?: string, elo?: number, firstMove?: string): Promise<{ plans: StrategyPlan[] }> {
   const params = new URLSearchParams();
   if (side) params.set("side", side);
@@ -130,23 +157,30 @@ export function listAvailablePlans(side?: string, elo?: number, firstMove?: stri
   return getJson<{ plans: StrategyPlan[] }>(`/available-plans${query ? `?${query}` : ""}`);
 }
 
+export function getCalibrationReport(opponentElo = 1600): Promise<CalibrationReportResponse> {
+  const params = new URLSearchParams({ opponentElo: String(opponentElo) });
+  return getJson<CalibrationReportResponse>(`/calibration-report?${params.toString()}`);
+}
+
 export function getPlanRecommendations(params: {
   fen: string;
   selectedPlanId?: string | null;
   userSide?: "white" | "black" | null;
   elo: number;
   skillLevel?: SkillLevel;
-  humanProfile?: "lambda" | "strong" | "veryStrong" | null;
+  humanProfile?: "beginner" | "lambda" | "strong" | "veryStrong" | null;
   coachStyle?: "balanced" | "aggressive" | "solid" | "creative" | "educational";
   moveHistoryUci: string[];
   maxMoves: number;
   engineDepth?: number;
+  includeEloComparisons?: boolean;
   signal?: AbortSignal;
 }): Promise<PlanRecommendationsResponse> {
   const { signal, ...body } = params;
   return requestJson<PlanRecommendationsResponse>("/plan-recommendations", {
     ...body,
-    engineDepth: body.engineDepth ?? 10
+    engineDepth: body.engineDepth ?? 10,
+    includeEloComparisons: body.includeEloComparisons ?? true
   }, signal);
 }
 

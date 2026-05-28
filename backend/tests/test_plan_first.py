@@ -30,6 +30,62 @@ class FakePlanStockfish:
         return lines
 
 
+class RaisingStockfish:
+    def analyze(self, *args, **kwargs):
+        raise AssertionError("Stockfish should not run while a plan move can drive the recommendation")
+
+
+def test_plan_move_returns_elo_comparisons_without_stockfish(monkeypatch) -> None:
+    import app.strategy.plan_engine as plan_engine
+
+    monkeypatch.setattr(plan_engine, "StockfishEngine", lambda: RaisingStockfish())
+    client = TestClient(app)
+    response = client.post(
+        "/plan-recommendations",
+        json={
+            "fen": chess.Board().fen(),
+            "selectedPlanId": "italian_game_beginner",
+            "userSide": "white",
+            "elo": 1500,
+            "humanProfile": "lambda",
+            "skillLevel": "beginner",
+            "moveHistoryUci": [],
+            "maxMoves": 4,
+            "engineDepth": 1,
+        },
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert [item["elo"] for item in data["eloComparisons"]] == [800, 1500, 2000, 3000]
+    assert [item["active"] for item in data["eloComparisons"]] == [False, True, False, False]
+    assert {item["moveUci"] for item in data["eloComparisons"]} == {"e2e4"}
+    move_plan = data["primaryMove"]["movePlan"]
+    assert move_plan["source"] == "opening_plan"
+    assert move_plan["depth"] >= 4
+    assert move_plan["branches"]
+    assert move_plan["branches"][0]["ifLabel"]
+    assert move_plan["branches"][0]["thenLabel"]
+    assert move_plan["compactLine"].startswith("Si ")
+
+    disabled_response = client.post(
+        "/plan-recommendations",
+        json={
+            "fen": chess.Board().fen(),
+            "selectedPlanId": "italian_game_beginner",
+            "userSide": "white",
+            "elo": 1500,
+            "humanProfile": "lambda",
+            "skillLevel": "beginner",
+            "moveHistoryUci": [],
+            "maxMoves": 4,
+            "engineDepth": 1,
+            "includeEloComparisons": False,
+        },
+    )
+    assert disabled_response.status_code == 200
+    assert disabled_response.json()["eloComparisons"] == []
+
+
 def test_caro_kann_after_e4_proposes_c6(monkeypatch) -> None:
     import app.strategy.plan_engine as plan_engine
 
@@ -209,9 +265,9 @@ def test_adaptive_signal_progressively_tracks_position_pressure() -> None:
         engine_candidates=[SimpleNamespace(eval_cp=620, mate_in=None)],
     )
 
-    assert worse["suggestedBoostDelta"] == 100
-    assert critical["suggestedBoostDelta"] == 150
-    assert survival["suggestedBoostDelta"] == 200
+    assert worse["suggestedBoostDelta"] == 150
+    assert critical["suggestedBoostDelta"] == 300
+    assert survival["suggestedBoostDelta"] == 300
     assert stable["suggestedBoostDelta"] == 0
     assert comfortable["suggestedBoostDelta"] == -50
 
@@ -242,6 +298,27 @@ def test_position_pressure_uses_stockfish_rank_one_even_after_human_sort() -> No
 
     assert score_from_side_to_move([human_sorted_first, stockfish_best]) == -180
     assert mate_danger_from_side_to_move([human_sorted_first, stockfish_best]) == "critical"
+
+
+def test_forced_mate_signal_only_reports_fresh_short_winning_mates() -> None:
+    from app.strategy.plan_engine import forced_mate_signal_for
+
+    board = chess.Board()
+    signal = forced_mate_signal_for(
+        board,
+        [
+            EngineLine(3, "g1f3", 40, None, ["g1f3"]),
+            EngineLine(1, "e2e4", None, 3, ["e2e4", "e7e5", "d1h5", "b8c6", "f1c4"]),
+        ],
+    )
+
+    assert signal is not None
+    assert signal["mateIn"] == 3
+    assert signal["side"] == "white"
+    assert signal["moveUci"] == "e2e4"
+    assert signal["line"] == ["e2e4", "e7e5", "d1h5", "b8c6", "f1c4"]
+    assert forced_mate_signal_for(board, [EngineLine(1, "e2e4", None, 4, ["e2e4"])]) is None
+    assert forced_mate_signal_for(board, [EngineLine(1, "e2e4", None, -2, ["e2e4"])]) is None
 
 
 def test_human_accuracy_shaping_prefers_strong_human_band() -> None:
@@ -378,7 +455,7 @@ def test_drawish_positions_raise_hidden_accuracy_profile() -> None:
     assert profile["drawPressure"]["level"] == "critical"
 
 
-def test_elite_opponent_move_raises_accuracy_profile_immediately() -> None:
+def test_elite_opponent_move_does_not_raise_accuracy_profile_when_position_is_safe() -> None:
     from app.strategy.plan_engine import accuracy_profile_for
 
     profile = accuracy_profile_for(
@@ -393,10 +470,51 @@ def test_elite_opponent_move_raises_accuracy_profile_immediately() -> None:
         elo=1800,
     )
 
+    assert profile["mode"] == "normal"
+    assert profile["target"] == 84
+    assert profile["min"] == 77
+
+
+def test_low_winrate_debrides_accuracy_profile_to_survival() -> None:
+    from app.strategy.plan_engine import accuracy_profile_for
+
+    profile = accuracy_profile_for(
+        board=chess.Board(),
+        phase_display={"key": "middlegame"},
+        phase_status="opening_success",
+        opening_state="completed",
+        engine_candidates=[SimpleNamespace(eval_cp=0, mate_in=None, wdl=[80, 440, 480])],
+        move_history=["e2e4", "e7e5"],
+        player_turn=True,
+        opponent_strength={"level": "none", "suggestedBoostDelta": 0},
+        elo=1500,
+        human_profile="lambda",
+    )
+
+    assert profile["mode"] == "survival"
+    assert profile["target"] == 97
+    assert profile["max"] == 100
+
+
+def test_dangerous_winrate_can_break_opening_plan_human_caps() -> None:
+    from app.strategy.plan_engine import accuracy_profile_for
+
+    profile = accuracy_profile_for(
+        board=chess.Board(),
+        phase_display={"key": "opening"},
+        phase_status="on_plan",
+        opening_state="on_track",
+        engine_candidates=[SimpleNamespace(eval_cp=0, mate_in=None, wdl=[160, 420, 420])],
+        move_history=["e2e4", "e7e5"],
+        player_turn=True,
+        opponent_strength={"level": "none", "suggestedBoostDelta": 0},
+        elo=1500,
+        human_profile="lambda",
+    )
+
     assert profile["mode"] == "pressure"
-    # Bandes recalibrees : elite_pressure pour strong (1800) cible 93
-    assert profile["target"] >= 90
-    assert profile["min"] >= 85
+    assert profile["target"] > 91
+    assert profile["crisisFactor"] > 0.25
 
 
 def test_accuracy_profile_follows_selected_hidden_elo() -> None:
@@ -413,9 +531,9 @@ def test_accuracy_profile_follows_selected_hidden_elo() -> None:
         "opponent_strength": {"level": "none", "suggestedBoostDelta": 0},
     }
 
-    # Cibles recalibrees vers 70/75/85% chess.com accuracy
-    assert accuracy_profile_for(**common, elo=1500)["target"] == 72
-    assert accuracy_profile_for(**common, elo=2000)["target"] == 79
+    # Cibles recalibrees vers les moyennes Chess.com observees.
+    assert accuracy_profile_for(**common, elo=1500)["target"] == 79
+    assert accuracy_profile_for(**common, elo=2000)["target"] == 84
     assert accuracy_profile_for(**common, elo=3000)["target"] == 88
 
 
@@ -435,17 +553,17 @@ def test_planless_opening_fallback_stays_normal_until_real_pressure() -> None:
     )
 
     assert profile["mode"] == "normal"
-    # Cible recalibree pour lambda (1500) : ~70% chess.com accuracy
-    assert profile["target"] == 72
+    # Cible recalibree pour lambda (1500) : humain, mais plus competitif.
+    assert profile["target"] == 79
 
 
 def test_accuracy_bands_are_distinct_for_three_player_profiles() -> None:
     from app.strategy.plan_engine import accuracy_bands_for_elo
 
-    # Bandes recalibrees (~70/75/85% chess.com accuracy targets) - cf
+    # Bandes recalibrees (~79/84/88% chess.com accuracy targets) - cf
     # scoring_profile.accuracy_bands_for_profile.
-    assert accuracy_bands_for_elo(1500)["normal"] == {"target": 72, "min": 64, "max": 80, "planTolerance": 5}
-    assert accuracy_bands_for_elo(2000)["normal"] == {"target": 79, "min": 71, "max": 86, "planTolerance": 4}
+    assert accuracy_bands_for_elo(1500)["normal"] == {"target": 79, "min": 72, "max": 86, "planTolerance": 4}
+    assert accuracy_bands_for_elo(2000)["normal"] == {"target": 84, "min": 77, "max": 90, "planTolerance": 3}
     assert accuracy_bands_for_elo(3000)["normal"] == {"target": 88, "min": 82, "max": 93, "planTolerance": 4}
     assert accuracy_bands_for_elo(3000)["elite_pressure"] == {"target": 96, "min": 92, "max": 99, "planTolerance": 1}
     assert accuracy_bands_for_elo(3000)["survival"] == {"target": 99, "min": 96, "max": 100, "planTolerance": 0}
@@ -1128,10 +1246,10 @@ def test_drawish_adaptive_signal_boosts_precision() -> None:
     )
 
     assert signal["pressure"] == "drawish"
-    assert signal["suggestedBoostDelta"] == 200
+    assert signal["suggestedBoostDelta"] == 100
 
 
-def test_opponent_engine_quality_raises_adaptive_signal() -> None:
+def test_opponent_engine_quality_is_observed_without_overreacting_in_safe_position() -> None:
     from app.strategy.plan_engine import adaptive_signal_for, opponent_move_strength_from_lines
 
     strength = opponent_move_strength_from_lines(
@@ -1153,8 +1271,34 @@ def test_opponent_engine_quality_raises_adaptive_signal() -> None:
     )
 
     assert strength["level"] == "elite"
+    assert signal["pressure"] == "stable"
+    assert signal["suggestedBoostDelta"] == 0
+
+
+def test_opponent_engine_quality_raises_adaptive_signal_when_position_is_slipping() -> None:
+    from app.strategy.plan_engine import adaptive_signal_for, opponent_move_strength_from_lines
+
+    strength = opponent_move_strength_from_lines(
+        "e7e5",
+        [
+            SimpleNamespace(stockfish_rank=1, move_uci="e7e5", eval_cp=34, mate_in=None),
+            SimpleNamespace(stockfish_rank=2, move_uci="c7c5", eval_cp=18, mate_in=None),
+        ],
+    )
+    signal = adaptive_signal_for(
+        primary_move={"engineScore": 88, "tacticalRisk": 8, "warning": None},
+        phase_status="opening_in_progress",
+        blocked_expected_move=None,
+        opening_state="on_track",
+        player_turn=True,
+        engine_candidates=[SimpleNamespace(eval_cp=-120, mate_in=None)],
+        draw_pressure={"level": "none"},
+        opponent_strength=strength,
+    )
+
+    assert strength["level"] == "elite"
     assert signal["pressure"] == "worse"
-    assert signal["suggestedBoostDelta"] == 200
+    assert signal["suggestedBoostDelta"] == 150
 
 
 def test_draw_break_shaping_prefers_winning_chances_over_flat_move() -> None:
@@ -1229,6 +1373,66 @@ def test_normal_accuracy_shaping_avoids_unnecessary_perfection() -> None:
 
     assert shaped[0]["moveUci"] == "g1f3"
     assert shaped[0]["humanAccuracyEstimate"] < 90
+
+
+def test_lambda_guardrail_rejects_maia_popular_soft_move() -> None:
+    from app.strategy.plan_engine import (
+        MAIA_BONUS_MAX,
+        MAIA_CRISIS_DISABLE_THRESHOLD,
+        accuracy_bands_for_elo,
+        shape_recommendations_for_accuracy,
+    )
+
+    best_engine_move = {
+        "moveUci": "d1a4",
+        "source": "engine",
+        "engineRank": 1,
+        "planFitScore": 42,
+        "engineScore": 100,
+        "beginnerSimplicityScore": 58,
+        "tacticalRisk": 8,
+        "finalCoachScore": 90,
+        "warning": None,
+        "candidate": {"evalCp": 180},
+    }
+    competitive_human_move = {
+        "moveUci": "g1f3",
+        "source": "engine",
+        "engineRank": 2,
+        "planFitScore": 65,
+        "engineScore": 83,
+        "beginnerSimplicityScore": 84,
+        "tacticalRisk": 8,
+        "finalCoachScore": 84,
+        "warning": None,
+        "candidate": {"evalCp": 112},
+    }
+    maia_popular_soft_move = {
+        "moveUci": "b1a3",
+        "source": "engine",
+        "engineRank": 7,
+        "planFitScore": 35,
+        "engineScore": 76,
+        "beginnerSimplicityScore": 72,
+        "tacticalRisk": 8,
+        "finalCoachScore": 76,
+        "warning": None,
+        "candidate": {"evalCp": 42},
+    }
+
+    shaped = shape_recommendations_for_accuracy(
+        [best_engine_move, competitive_human_move, maia_popular_soft_move],
+        {
+            "mode": "normal",
+            "humanProfile": "lambda",
+            "maiaProbabilities": {"b1a3": 1.0},
+            **accuracy_bands_for_elo(1500)["normal"],
+        },
+    )
+
+    assert MAIA_BONUS_MAX == 25.0
+    assert MAIA_CRISIS_DISABLE_THRESHOLD == 0.20
+    assert shaped[0]["moveUci"] == "g1f3"
 
 
 def test_player_turn_after_deviation_returns_primary_move(monkeypatch) -> None:

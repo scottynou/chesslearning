@@ -12,7 +12,7 @@ SideToMove = Literal["white", "black"]
 Quality = Literal["excellent", "good", "playable", "inaccurate", "mistake", "blunder"]
 BotStyle = Literal["balanced", "safe", "aggressive", "solid", "educational"]
 SkillLevel = Literal["beginner", "intermediate", "pro"]
-HumanProfile = Literal["lambda", "strong", "veryStrong"]
+HumanProfile = Literal["beginner", "lambda", "strong", "veryStrong"]
 CoachStyle = Literal["balanced", "aggressive", "solid", "creative", "educational"]
 PlanPhase = Literal["opening", "transition", "middlegame", "endgame"]
 OpeningState = Literal["on_track", "recoverable", "completed", "abandoned"]
@@ -20,6 +20,10 @@ PlanStatus = Literal["on_plan", "transposed", "opponent_deviated", "out_of_book"
 AnalysisProvider = Literal["heuristic", "openai", "gemini", "ollama"]
 AnalysisKind = Literal["ai", "heuristic"]
 BoardOrientation = Literal["white_bottom", "black_bottom", "unknown"]
+WinratePerspective = Literal["white", "black", "sideToMove"]
+WinrateSpeed = Literal["bullet", "blitz", "rapid", "classical"]
+WinrateSource = Literal["lichess_exact", "lichess_model", "stockfish", "fallback"]
+WinrateConfidence = Literal["high", "medium", "low"]
 
 
 class AnalyzeRequest(BaseModel):
@@ -57,6 +61,7 @@ class CandidateMove(BaseModel):
     stockfish_rank: int = Field(alias="stockfishRank")
     eval_cp: int | None = Field(default=None, alias="evalCp")
     mate_in: int | None = Field(default=None, alias="mateIn")
+    wdl: list[int] | None = None
     pv: list[str]
     coach_score: int = Field(alias="coachScore")
     engine_score: int = Field(alias="engineScore")
@@ -374,6 +379,34 @@ class ImportPositionImageResponse(BaseModel):
         return value
 
 
+class WinrateRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    fen: str
+    perspective: WinratePerspective = "sideToMove"
+    player_rating: int | None = Field(default=None, alias="playerRating", ge=400, le=4000)
+    opponent_rating: int | None = Field(default=None, alias="opponentRating", ge=400, le=4000)
+    speed: WinrateSpeed | None = None
+
+    @field_validator("fen")
+    @classmethod
+    def validate_fen(cls, value: str) -> str:
+        try:
+            chess.Board(value)
+        except ValueError as exc:
+            raise ValueError("Invalid FEN") from exc
+        return value
+
+
+class WinrateResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    winrate: float = Field(ge=0, le=100)
+    perspective: WinratePerspective
+    source: WinrateSource
+    confidence: WinrateConfidence
+
+
 class PlanRecommendationsRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -387,6 +420,7 @@ class PlanRecommendationsRequest(BaseModel):
     move_history_uci: list[str] = Field(default_factory=list, alias="moveHistoryUci")
     max_moves: int = Field(default=10, alias="maxMoves", ge=1)
     engine_depth: int = Field(default=10, alias="engineDepth", ge=1, le=24)
+    include_elo_comparisons: bool = Field(default=True, alias="includeEloComparisons")
 
     @field_validator("fen")
     @classmethod
@@ -485,6 +519,53 @@ class AdaptiveSignal(BaseModel):
     reason: str
 
 
+class PositionWinRate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    available: bool = True
+    player_side: str = Field(alias="playerSide")
+    perspective: Literal["player", "side_to_move"]
+    player_win_percent: float = Field(alias="playerWinPercent")
+    white_win_percent: float = Field(alias="whiteWinPercent")
+    black_win_percent: float = Field(alias="blackWinPercent")
+    side_to_move_win_percent: float = Field(alias="sideToMoveWinPercent")
+    eval_cp: int | None = Field(default=None, alias="evalCp")
+    mate_in: int | None = Field(default=None, alias="mateIn")
+    side_to_move_wdl: list[int] | None = Field(default=None, alias="sideToMoveWdl")
+    source: Literal["lichess_exact", "lichess_model", "stockfish", "fallback", "stockfish_wdl", "centipawn", "mate", "game_over", "unavailable"] = "fallback"
+    confidence: WinrateConfidence = "low"
+    label: str
+
+
+class ForcedMateSignal(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    mate_in: int = Field(alias="mateIn", ge=1, le=3)
+    side: SideToMove
+    move_uci: str = Field(alias="moveUci")
+    move_san: str = Field(alias="moveSan")
+    label: str
+    line: list[str] = Field(default_factory=list)
+    line_san: list[str] = Field(default_factory=list, alias="lineSan")
+
+
+class EloMoveComparison(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    elo: int
+    label: str
+    active: bool = False
+    move_uci: str = Field(alias="moveUci")
+    move_san: str = Field(alias="moveSan")
+    beginner_label: str = Field(alias="beginnerLabel")
+    source: str
+    engine_rank: int | None = Field(default=None, alias="engineRank")
+    engine_score: int | None = Field(default=None, alias="engineScore")
+    final_coach_score: int | None = Field(default=None, alias="finalCoachScore")
+    move_complexity: str | None = Field(default=None, alias="moveComplexity")
+    warning: str | None = None
+
+
 class PlanRecommendationsResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -516,6 +597,9 @@ class PlanRecommendationsResponse(BaseModel):
     pedagogical_summary: str = Field(default="", alias="pedagogicalSummary")
     move_complexity: str = Field(default="simple", alias="moveComplexity")
     turn_context: TurnContext = Field(alias="turnContext")
+    position_win_rate: PositionWinRate = Field(alias="positionWinRate")
+    forced_mate: ForcedMateSignal | None = Field(default=None, alias="forcedMate")
+    elo_comparisons: list[EloMoveComparison] = Field(default_factory=list, alias="eloComparisons")
     ai_rerank_status: AiRerankStatus = Field(alias="aiRerankStatus")
     adaptive_signal: AdaptiveSignal = Field(alias="adaptiveSignal")
     technical_details: dict[str, Any] = Field(default_factory=dict, alias="technicalDetails")
@@ -555,3 +639,34 @@ class LivePlanInsightResponse(BaseModel):
     event: PlanEvent | None = None
     analysis_provider: AnalysisProvider = Field(alias="analysisProvider")
     analysis_kind: AnalysisKind = Field(alias="analysisKind")
+
+
+class CalibrationReportRow(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    profile: HumanProfile
+    profile_label: str = Field(alias="profileLabel")
+    elo: int
+    style: CoachStyle
+    style_label: str = Field(alias="styleLabel")
+    target_accuracy: int = Field(alias="targetAccuracy")
+    min_accuracy: int = Field(alias="minAccuracy")
+    max_accuracy: int = Field(alias="maxAccuracy")
+    humanization_score: int = Field(alias="humanizationScore")
+    win_rate_vs_opponent: float = Field(alias="winRateVsOpponent")
+    position_win_chance: float = Field(alias="positionWinChance")
+    average_engine_score: float = Field(alias="averageEngineScore")
+    average_cp_loss: int = Field(alias="averageCpLoss")
+    top_engine_move_rate: float = Field(alias="topEngineMoveRate")
+    sample_count: int = Field(alias="sampleCount")
+    recommendation: str
+
+
+class CalibrationReportResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    opponent_elo: int = Field(alias="opponentElo")
+    methodology: str
+    sample_count: int = Field(alias="sampleCount")
+    rows: list[CalibrationReportRow]
+    best_by_profile: dict[HumanProfile, CoachStyle] = Field(alias="bestByProfile")

@@ -34,7 +34,7 @@ export function PgnImportModal({ onImport, onClose }: Props) {
   }
 
   return (
-    <div className="post-game-review-overlay" role="dialog" aria-modal="true">
+    <div className="post-game-review-overlay" role="dialog" aria-modal="true" aria-label="Importer un PGN">
       <div className="plan-switch-modal">
         <header className="plan-switch-header">
           <h3>Importer un PGN</h3>

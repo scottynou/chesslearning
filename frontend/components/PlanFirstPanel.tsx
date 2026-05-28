@@ -19,7 +19,7 @@ export function PlanFirstPanel({ selectedPlan, recommendations, loading, error }
   const hasStaleRecommendations = Boolean(loading && recommendations);
 
   return (
-    <section className="live-coach-panel is-fast-coach">
+    <section className={`live-coach-panel is-fast-coach ${loading ? "is-updating" : ""}`}>
       <div className="live-coach-header">
         <div>
           <p className="live-coach-kicker">Coups</p>
@@ -27,6 +27,9 @@ export function PlanFirstPanel({ selectedPlan, recommendations, loading, error }
             <h2>{planName}</h2>
             {phaseDisplay ? <span>{phaseDisplay.label}</span> : null}
           </div>
+          {recommendations?.coachMessage ? (
+            <p className="live-coach-message">{recommendations.coachMessage}</p>
+          ) : null}
         </div>
 
         {isOpening && typeof progress?.percent === "number" ? (
@@ -44,6 +47,14 @@ export function PlanFirstPanel({ selectedPlan, recommendations, loading, error }
             <span>{progress.percent}%</span>
           </div>
           <div className="live-progress-track"><div style={{ width: `${progress.percent}%` }} /></div>
+          {progress.impact ? <p className="live-status-impact">{progress.impact}</p> : null}
+        </div>
+      ) : null}
+
+      {recommendations?.strategicPlan ? (
+        <div className="live-strategy-strip">
+          <span>{recommendations.strategicPlan.goal}</span>
+          <strong>{recommendations.strategicPlan.nextObjective}</strong>
         </div>
       ) : null}
 
@@ -81,6 +92,10 @@ export function PlanFirstPanel({ selectedPlan, recommendations, loading, error }
 }
 
 function RecommendationCard({ item, primary }: { item: PlanRecommendation; primary?: boolean }) {
+  const hasMetrics =
+    typeof item.winRateEstimate === "number" ||
+    typeof item.humanAccuracyEstimate === "number";
+
   return (
     <article className={primary ? "live-move-card is-primary" : "live-move-card"}>
       <div className="live-move-head">
@@ -89,9 +104,28 @@ function RecommendationCard({ item, primary }: { item: PlanRecommendation; prima
             <i style={{ backgroundColor: item.arrowColor ?? "rgba(224,185,118,0.78)" }} aria-hidden="true" />
             {item.displayRole ?? "Coup recommande"}
           </span>
+          {item.moveComplexity ? <span>{item.moveComplexity}</span> : null}
         </div>
-        <strong>{item.beginnerLabel}</strong>
+        <div className="live-move-title">
+          <strong>{item.moveSan}</strong>
+          <span>{item.beginnerLabel}</span>
+        </div>
       </div>
+      {hasMetrics ? (
+        <div className="live-move-metrics" aria-label="Equilibre du coup">
+          {typeof item.winRateEstimate === "number" ? (
+            <span><strong>{item.winRateEstimate.toFixed(1)}%</strong> winrate</span>
+          ) : null}
+          {typeof item.humanAccuracyEstimate === "number" ? (
+            <span><strong>{item.humanAccuracyEstimate}%</strong> accuracy</span>
+          ) : null}
+        </div>
+      ) : null}
+      <div className="live-move-copy">
+        <p>{item.purpose}</p>
+        {item.planConnection ? <span>{item.planConnection}</span> : null}
+      </div>
+      {item.warning ? <div className="live-move-warning">{item.warning}</div> : null}
     </article>
   );
 }

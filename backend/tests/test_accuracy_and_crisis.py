@@ -30,28 +30,53 @@ def test_move_accuracy_drops_with_loss():
     small_loss = move_accuracy_percent(100, 50)
     big_loss = move_accuracy_percent(100, -200)
     assert perfect > small_loss > big_loss
+    assert small_loss > 80
+    assert 45 <= big_loss <= 75
+
+
+def test_move_accuracy_uses_wdl_when_available():
+    accurate = move_accuracy_percent(0, 0, wdl_best=[650, 300, 50], wdl_played=[620, 310, 70])
+    losing = move_accuracy_percent(0, 0, wdl_best=[650, 300, 50], wdl_played=[80, 240, 680])
+    assert accurate > 90
+    assert losing < 45
+
+
+def test_move_accuracy_handles_mate_swings_explicitly():
+    keeps_mate = move_accuracy_percent(None, None, mate_best=3, mate_played=4)
+    misses_mate = move_accuracy_percent(None, None, mate_best=3, mate_played=-3)
+    assert keeps_mate > 95
+    assert misses_mate < 20
 
 
 def test_accuracy_bands_target_descend_with_profile_quality():
     """
-    Cibles attendues : lambda ~70%, strong ~75-79%, veryStrong ~88%.
+    Cibles attendues : beginner ~72%, lambda ~79%, strong ~84%, veryStrong ~88%.
     Verifier l'ordre croissant des cibles "normal" entre profils.
     """
+    beginner_bands = accuracy_bands_for_profile("beginner", 800)
     lambda_bands = accuracy_bands_for_profile("lambda", 1500)
     strong_bands = accuracy_bands_for_profile("strong", 2000)
     very_strong_bands = accuracy_bands_for_profile("veryStrong", 3000)
+    assert beginner_bands["normal"]["target"] < lambda_bands["normal"]["target"]
     assert lambda_bands["normal"]["target"] < strong_bands["normal"]["target"]
     assert strong_bands["normal"]["target"] < very_strong_bands["normal"]["target"]
 
 
-def test_accuracy_bands_lambda_target_around_72():
+def test_accuracy_bands_beginner_is_low_but_not_blunder_friendly():
+    bands = accuracy_bands_for_profile("beginner", 800)
+    assert 70 <= bands["normal"]["target"] <= 74
+    assert bands["normal"]["min"] >= 64
+    assert bands["normal"]["max"] <= 80
+
+
+def test_accuracy_bands_lambda_target_around_79():
     bands = accuracy_bands_for_profile("lambda", 1500)
-    assert 68 <= bands["normal"]["target"] <= 76
-    assert bands["normal"]["max"] <= 82  # ne doit pas autoriser des coups trop precis
+    assert 77 <= bands["normal"]["target"] <= 81
+    assert bands["normal"]["max"] <= 86  # reste humain, mais plus competitif
 
 
 def test_survival_band_is_strict_for_all_profiles():
-    for profile in ("lambda", "strong", "veryStrong"):
+    for profile in ("beginner", "lambda", "strong", "veryStrong"):
         bands = accuracy_bands_for_profile(profile, 1500)
         assert bands["survival"]["target"] >= 97
         assert bands["survival"]["min"] >= 92

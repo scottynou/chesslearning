@@ -1,6 +1,6 @@
 import type { SkillLevel } from "./types";
 
-export const ELO_MIN = 1500;
+export const ELO_MIN = 800;
 export const ELO_MAX = 3000;
 export const ELO_STEP = 50;
 export const DEFAULT_BASE_ELO = 2000;
@@ -10,7 +10,7 @@ export const DEFAULT_HUMAN_PROFILE: CoachHumanProfile = "strong";
 
 export type EloQuality = "excellent" | "good" | "playable" | "inaccurate" | "mistake" | "blunder";
 export type AdaptivePressure = "stable" | "worse" | "critical" | "drawish";
-export type CoachHumanProfile = "lambda" | "strong" | "veryStrong";
+export type CoachHumanProfile = "beginner" | "lambda" | "strong" | "veryStrong";
 export type CoachStyle = "balanced" | "aggressive" | "solid" | "creative" | "educational";
 export const DEFAULT_COACH_STYLE: CoachStyle = "balanced";
 
@@ -67,6 +67,12 @@ export const HUMAN_PROFILE_SETTINGS: Record<
     description: string;
   }
 > = {
+  beginner: {
+    label: "Debutant 800",
+    shortLabel: "800",
+    baseElo: 800,
+    description: "Debutant applique : coups simples, pieces sorties, roque, sans grosses gaffes."
+  },
   lambda: {
     label: "Humain 1500",
     shortLabel: "1500",
@@ -124,7 +130,7 @@ export function normalizeBaseElo(value: number) {
 }
 
 export function normalizeHumanProfile(value: string | null | undefined): CoachHumanProfile {
-  if (value === "lambda" || value === "strong" || value === "veryStrong") return value;
+  if (value === "beginner" || value === "lambda" || value === "strong" || value === "veryStrong") return value;
   return DEFAULT_HUMAN_PROFILE;
 }
 
@@ -181,17 +187,21 @@ export function nextAdaptiveBoost(context: EloAdaptationContext) {
   const stronglyAdapted = context.phaseStatus === "adapted" || context.phaseStatus === "fallback";
 
   let targetBoost = currentBoost;
-  if (context.playerReviewQuality === "mistake" || context.playerReviewQuality === "blunder" || hasStrongDanger) {
-    targetBoost += 200;
+  if (context.playerReviewQuality === "blunder" || hasStrongDanger) {
+    targetBoost += 250;
+  } else if (context.playerReviewQuality === "mistake") {
+    targetBoost += 150;
   } else if (context.playerReviewQuality === "inaccurate" || stronglyAdapted || weakPrimary) {
-    targetBoost += 100;
+    targetBoost += 50;
+  } else if ((context.stablePlyCount ?? 0) >= 4) {
+    targetBoost -= 100;
   } else if ((context.stablePlyCount ?? 0) >= 2) {
     targetBoost -= 50;
   }
 
   targetBoost = normalizeAdaptiveBoost(targetBoost);
   const rawDelta = targetBoost - currentBoost;
-  const cappedDelta = rawDelta > 0 ? Math.min(200, rawDelta) : Math.max(-100, rawDelta);
+  const cappedDelta = rawDelta > 0 ? Math.min(250, rawDelta) : Math.max(-100, rawDelta);
   return normalizeAdaptiveBoost(currentBoost + cappedDelta);
 }
 
@@ -206,7 +216,7 @@ export function applyAdaptiveSignal({
   let baseDelta = normalizeAdaptiveDelta(suggestedBoostDelta);
   const cleanTrend = normalizeTrendState(trend);
 
-  if (lastMoveWasPlayer && baseDelta > 0 && !(pressure === "critical" && baseDelta >= 200)) {
+  if (lastMoveWasPlayer && baseDelta > 0 && pressure !== "critical") {
     baseDelta = 0;
   }
 
@@ -218,7 +228,7 @@ export function applyAdaptiveSignal({
       pressureStreak,
       stableStreak: 0
     };
-    const boostedDelta = pressureStreak >= 2 ? baseDelta + pressureStreakBonus(pressure) : baseDelta;
+    const boostedDelta = pressureStreak >= 3 ? baseDelta + pressureStreakBonus(pressure) : baseDelta;
     const nextDelta = Math.min(maxPositiveDeltaForPressure(pressure), boostedDelta);
     const nextBoost = normalizeAdaptiveBoost(current + nextDelta);
 
@@ -248,9 +258,11 @@ export function applyAdaptiveSignal({
   }
 
   const stableStreak = pressure === "stable" ? cleanTrend.stableStreak + 1 : 0;
+  const calmDelta = stableStreak >= 6 ? -100 : stableStreak >= 3 ? -50 : 0;
+  const nextBoost = normalizeAdaptiveBoost(current + calmDelta);
   return {
-    boost: current,
-    appliedDelta: 0,
+    boost: nextBoost,
+    appliedDelta: nextBoost - current,
     trend: {
       lastPressure: pressure,
       pressureStreak: pressure === "stable" ? 0 : cleanTrend.pressureStreak,
@@ -275,15 +287,15 @@ function normalizeTrendState(trend: EloTrendState | null | undefined): EloTrendS
 
 function pressureStreakBonus(pressure: AdaptivePressure) {
   if (pressure === "critical") return 100;
-  if (pressure === "drawish") return 100;
-  if (pressure === "worse") return 75;
+  if (pressure === "drawish") return 50;
+  if (pressure === "worse") return 50;
   return 0;
 }
 
 function maxPositiveDeltaForPressure(pressure: AdaptivePressure) {
   if (pressure === "critical") return 300;
-  if (pressure === "drawish") return 250;
-  if (pressure === "worse") return 200;
+  if (pressure === "drawish") return 100;
+  if (pressure === "worse") return 150;
   return 0;
 }
 
